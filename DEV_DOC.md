@@ -57,3 +57,49 @@ Run migration
 
 5) cmd/api/main.go → Gin server
 
+
+
+### Day 2 & 3 [services + test]
+
+ internal/domain/enums.go → package domain (was "domanin")
+ internal/services/marketdata.go → Removed unused imports
+ Deleted marketdata.gox (backup file)
+ go test ./... → PASS (0.002s)
+
+
+### Domain Layer ✅ Fixed
+internal/domain/
+├── candle.go (253B) ← Candle struct
+└── enums.go (1191B) ← TradeBias, TradeResult, Session, Emotion
+
+
+### Constants Layer ✅ Live
+internal/constants/
+└── forex.go (272B) ← EURUSD pip value, timeframes, risk guards
+
+
+---
+
+## 🎯 CURRENT STATUS (All Green)
+
+✅ SQLC layer (Day 2) → 5 generated files, type-safe
+✅ Services layer (Day 3) → marketdata.go + tests PASSING
+✅ Domain layer → enums + candle structs
+✅ Constants → EURUSD pip math
+✅ go test ./... → All packages compile + tests pass
+✅ Module: set-and-trend/backend (go1.23.4 toolchain)
+
+
+### File Structure
+backend/
+├── cmd/api/main.go ← Server entry (minimal)
+├── internal/
+│ ├── constants/forex.go  EURUSD pip value
+│ ├── db/  SQLC generated (5 files)
+│ ├── domain/  Candle + enums
+│ ├── services/marketdata.go  Indicators + tests ✅
+│ ├── repositories/ → Day 4
+│ └── handlers/ → Day 4
+├── migrations/schema.sql 3 tables ready
+└── sqlc.yaml  SQLC config
+
