@@ -9,116 +9,46 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createUser = `-- name: CreateUser :one
-INSERT INTO users (
-  id, email, username, password, timezone
-) VALUES (
-  $1, $2, $3, $4, $5
-)
-RETURNING id, email, username, timezone, created_at, updated_at
+INSERT INTO users (id) 
+VALUES ($1)
+RETURNING id, created_at
 `
 
-type CreateUserParams struct {
-	ID       uuid.UUID   `json:"id"`
-	Email    string      `json:"email"`
-	Username string      `json:"username"`
-	Password string      `json:"password"`
-	Timezone pgtype.Text `json:"timezone"`
-}
-
-type CreateUserRow struct {
-	ID        uuid.UUID          `json:"id"`
-	Email     string             `json:"email"`
-	Username  string             `json:"username"`
-	Timezone  pgtype.Text        `json:"timezone"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
-}
-
-func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error) {
-	row := q.db.QueryRow(ctx, createUser,
-		arg.ID,
-		arg.Email,
-		arg.Username,
-		arg.Password,
-		arg.Timezone,
-	)
-	var i CreateUserRow
-	err := row.Scan(
-		&i.ID,
-		&i.Email,
-		&i.Username,
-		&i.Timezone,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
+func (q *Queries) CreateUser(ctx context.Context, id uuid.UUID) (User, error) {
+	row := q.db.QueryRow(ctx, createUser, id)
+	var i User
+	err := row.Scan(&i.ID, &i.CreatedAt)
 	return i, err
 }
 
 const getUser = `-- name: GetUser :one
-SELECT id, email, username, timezone, created_at, updated_at
-FROM users
-WHERE id = $1
+SELECT id, created_at FROM users WHERE id = $1
 `
 
-type GetUserRow struct {
-	ID        uuid.UUID          `json:"id"`
-	Email     string             `json:"email"`
-	Username  string             `json:"username"`
-	Timezone  pgtype.Text        `json:"timezone"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
-}
-
-func (q *Queries) GetUser(ctx context.Context, id uuid.UUID) (GetUserRow, error) {
+func (q *Queries) GetUser(ctx context.Context, id uuid.UUID) (User, error) {
 	row := q.db.QueryRow(ctx, getUser, id)
-	var i GetUserRow
-	err := row.Scan(
-		&i.ID,
-		&i.Email,
-		&i.Username,
-		&i.Timezone,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
+	var i User
+	err := row.Scan(&i.ID, &i.CreatedAt)
 	return i, err
 }
 
 const listUsers = `-- name: ListUsers :many
-SELECT id, email, username, timezone, created_at, updated_at
-FROM users
-ORDER BY created_at DESC
+SELECT id, created_at FROM users ORDER BY created_at DESC
 `
 
-type ListUsersRow struct {
-	ID        uuid.UUID          `json:"id"`
-	Email     string             `json:"email"`
-	Username  string             `json:"username"`
-	Timezone  pgtype.Text        `json:"timezone"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
-}
-
-func (q *Queries) ListUsers(ctx context.Context) ([]ListUsersRow, error) {
+func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
 	rows, err := q.db.Query(ctx, listUsers)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListUsersRow
+	var items []User
 	for rows.Next() {
-		var i ListUsersRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Email,
-			&i.Username,
-			&i.Timezone,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
+		var i User
+		if err := rows.Scan(&i.ID, &i.CreatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

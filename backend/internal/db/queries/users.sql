@@ -1,17 +1,10 @@
--- name: GetUser :one
-SELECT id, email, username, timezone, created_at, updated_at
-FROM users
-WHERE id = $1;
-
 -- name: CreateUser :one
-INSERT INTO users (
-  id, email, username, password, timezone
-) VALUES (
-  $1, $2, $3, $4, $5
-)
-RETURNING id, email, username, timezone, created_at, updated_at;
+INSERT INTO users (id) 
+VALUES ($1)
+RETURNING id, created_at;
+
+-- name: GetUser :one
+SELECT id, created_at FROM users WHERE id = $1;
 
 -- name: ListUsers :many
-SELECT id, email, username, timezone, created_at, updated_at
-FROM users
-ORDER BY created_at DESC;
+SELECT id, created_at FROM users ORDER BY created_at DESC;

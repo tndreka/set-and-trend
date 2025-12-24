@@ -5,45 +5,424 @@
 package db
 
 import (
-	"time"
+	"database/sql/driver"
+	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type Account struct {
-	ID              uuid.UUID          `json:"id"`
-	UserID          uuid.UUID          `json:"user_id"`
-	BrokerName      string             `json:"broker_name"`
-	AccountType     string             `json:"account_type"`
-	Currency        pgtype.Text        `json:"currency"`
-	Balance         float64            `json:"balance"`
-	Leverage        pgtype.Text        `json:"leverage"`
-	MaxRiskPerTrade pgtype.Float8      `json:"max_risk_per_trade"`
-	MaxDailyRisk    pgtype.Float8      `json:"max_daily_risk"`
-	CreatedAt       pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+type AccountType string
+
+const (
+	AccountTypeDemo AccountType = "demo"
+	AccountTypeLive AccountType = "live"
+)
+
+func (e *AccountType) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = AccountType(s)
+	case string:
+		*e = AccountType(s)
+	default:
+		return fmt.Errorf("unsupported scan type for AccountType: %T", src)
+	}
+	return nil
 }
 
-type Candle struct {
-	ID        uuid.UUID          `json:"id"`
-	Symbol    string             `json:"symbol"`
-	Timeframe string             `json:"timeframe"`
-	Timestamp time.Time          `json:"timestamp"`
-	Open      float64            `json:"open"`
-	High      float64            `json:"high"`
-	Low       float64            `json:"low"`
-	Close     float64            `json:"close"`
-	Volume    pgtype.Int8        `json:"volume"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
+type NullAccountType struct {
+	AccountType AccountType `json:"account_type"`
+	Valid       bool        `json:"valid"` // Valid is true if AccountType is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullAccountType) Scan(value interface{}) error {
+	if value == nil {
+		ns.AccountType, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.AccountType.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullAccountType) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.AccountType), nil
+}
+
+type EmotionType string
+
+const (
+	EmotionTypeCalm    EmotionType = "calm"
+	EmotionTypeAnxious EmotionType = "anxious"
+	EmotionTypeFomo    EmotionType = "fomo"
+	EmotionTypeRevenge EmotionType = "revenge"
+	EmotionTypeOther   EmotionType = "other"
+)
+
+func (e *EmotionType) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = EmotionType(s)
+	case string:
+		*e = EmotionType(s)
+	default:
+		return fmt.Errorf("unsupported scan type for EmotionType: %T", src)
+	}
+	return nil
+}
+
+type NullEmotionType struct {
+	EmotionType EmotionType `json:"emotion_type"`
+	Valid       bool        `json:"valid"` // Valid is true if EmotionType is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullEmotionType) Scan(value interface{}) error {
+	if value == nil {
+		ns.EmotionType, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.EmotionType.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullEmotionType) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.EmotionType), nil
+}
+
+type RuleResultType string
+
+const (
+	RuleResultTypePASS RuleResultType = "PASS"
+	RuleResultTypeFAIL RuleResultType = "FAIL"
+)
+
+func (e *RuleResultType) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = RuleResultType(s)
+	case string:
+		*e = RuleResultType(s)
+	default:
+		return fmt.Errorf("unsupported scan type for RuleResultType: %T", src)
+	}
+	return nil
+}
+
+type NullRuleResultType struct {
+	RuleResultType RuleResultType `json:"rule_result_type"`
+	Valid          bool           `json:"valid"` // Valid is true if RuleResultType is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullRuleResultType) Scan(value interface{}) error {
+	if value == nil {
+		ns.RuleResultType, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.RuleResultType.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullRuleResultType) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.RuleResultType), nil
+}
+
+type RuleTimeframe string
+
+const (
+	RuleTimeframeW1 RuleTimeframe = "W1"
+)
+
+func (e *RuleTimeframe) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = RuleTimeframe(s)
+	case string:
+		*e = RuleTimeframe(s)
+	default:
+		return fmt.Errorf("unsupported scan type for RuleTimeframe: %T", src)
+	}
+	return nil
+}
+
+type NullRuleTimeframe struct {
+	RuleTimeframe RuleTimeframe `json:"rule_timeframe"`
+	Valid         bool          `json:"valid"` // Valid is true if RuleTimeframe is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullRuleTimeframe) Scan(value interface{}) error {
+	if value == nil {
+		ns.RuleTimeframe, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.RuleTimeframe.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullRuleTimeframe) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.RuleTimeframe), nil
+}
+
+type SessionType string
+
+const (
+	SessionTypeLondon  SessionType = "london"
+	SessionTypeNewYork SessionType = "new_york"
+	SessionTypeAsian   SessionType = "asian"
+	SessionTypeCustom  SessionType = "custom"
+)
+
+func (e *SessionType) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = SessionType(s)
+	case string:
+		*e = SessionType(s)
+	default:
+		return fmt.Errorf("unsupported scan type for SessionType: %T", src)
+	}
+	return nil
+}
+
+type NullSessionType struct {
+	SessionType SessionType `json:"session_type"`
+	Valid       bool        `json:"valid"` // Valid is true if SessionType is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullSessionType) Scan(value interface{}) error {
+	if value == nil {
+		ns.SessionType, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.SessionType.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullSessionType) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.SessionType), nil
+}
+
+type TradeBias string
+
+const (
+	TradeBiasLong  TradeBias = "long"
+	TradeBiasShort TradeBias = "short"
+)
+
+func (e *TradeBias) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = TradeBias(s)
+	case string:
+		*e = TradeBias(s)
+	default:
+		return fmt.Errorf("unsupported scan type for TradeBias: %T", src)
+	}
+	return nil
+}
+
+type NullTradeBias struct {
+	TradeBias TradeBias `json:"trade_bias"`
+	Valid     bool      `json:"valid"` // Valid is true if TradeBias is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullTradeBias) Scan(value interface{}) error {
+	if value == nil {
+		ns.TradeBias, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.TradeBias.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullTradeBias) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.TradeBias), nil
+}
+
+type TradeResult string
+
+const (
+	TradeResultWin       TradeResult = "win"
+	TradeResultLoss      TradeResult = "loss"
+	TradeResultBreakeven TradeResult = "breakeven"
+)
+
+func (e *TradeResult) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = TradeResult(s)
+	case string:
+		*e = TradeResult(s)
+	default:
+		return fmt.Errorf("unsupported scan type for TradeResult: %T", src)
+	}
+	return nil
+}
+
+type NullTradeResult struct {
+	TradeResult TradeResult `json:"trade_result"`
+	Valid       bool        `json:"valid"` // Valid is true if TradeResult is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullTradeResult) Scan(value interface{}) error {
+	if value == nil {
+		ns.TradeResult, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.TradeResult.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullTradeResult) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.TradeResult), nil
+}
+
+type Account struct {
+	ID                 uuid.UUID          `json:"id"`
+	UserID             uuid.UUID          `json:"user_id"`
+	Type               string             `json:"type"`
+	BrokerName         string             `json:"broker_name"`
+	Currency           string             `json:"currency"`
+	Balance            pgtype.Numeric     `json:"balance"`
+	Leverage           int32              `json:"leverage"`
+	MaxRiskPerTradePct pgtype.Numeric     `json:"max_risk_per_trade_pct"`
+	MaxDailyRiskPct    pgtype.Numeric     `json:"max_daily_risk_pct"`
+	Timezone           string             `json:"timezone"`
+	PreferredSession   string             `json:"preferred_session"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+}
+
+type CandlesWeekly struct {
+	ID           uuid.UUID          `json:"id"`
+	TimestampUtc pgtype.Timestamptz `json:"timestamp_utc"`
+	Open         pgtype.Numeric     `json:"open"`
+	High         pgtype.Numeric     `json:"high"`
+	Low          pgtype.Numeric     `json:"low"`
+	Close        pgtype.Numeric     `json:"close"`
+	Volume       pgtype.Int8        `json:"volume"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
+type IndicatorsWeekly struct {
+	ID                 uuid.UUID          `json:"id"`
+	CandleID           uuid.UUID          `json:"candle_id"`
+	Ema20              pgtype.Numeric     `json:"ema20"`
+	Ema50              pgtype.Numeric     `json:"ema50"`
+	Ema200             pgtype.Numeric     `json:"ema200"`
+	RangeSize          pgtype.Numeric     `json:"range_size"`
+	BodySize           pgtype.Numeric     `json:"body_size"`
+	UpperWick          pgtype.Numeric     `json:"upper_wick"`
+	LowerWick          pgtype.Numeric     `json:"lower_wick"`
+	MidPrice           pgtype.Numeric     `json:"mid_price"`
+	LastSwingHighPrice pgtype.Numeric     `json:"last_swing_high_price"`
+	LastSwingLowPrice  pgtype.Numeric     `json:"last_swing_low_price"`
+	ComputedAt         pgtype.Timestamptz `json:"computed_at"`
+}
+
+type Rule struct {
+	ID          uuid.UUID          `json:"id"`
+	Code        string             `json:"code"`
+	Name        string             `json:"name"`
+	Timeframe   RuleTimeframe      `json:"timeframe"`
+	Description string             `json:"description"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+type RuleResult struct {
+	ID              uuid.UUID          `json:"id"`
+	RuleID          uuid.UUID          `json:"rule_id"`
+	CandleID        uuid.UUID          `json:"candle_id"`
+	Result          RuleResultType     `json:"result"`
+	EvaluatedAt     pgtype.Timestamptz `json:"evaluated_at"`
+	ConfidenceScore pgtype.Numeric     `json:"confidence_score"`
+}
+
+type Trade struct {
+	ID                        uuid.UUID          `json:"id"`
+	UserID                    uuid.UUID          `json:"user_id"`
+	AccountID                 uuid.UUID          `json:"account_id"`
+	CandleID                  uuid.UUID          `json:"candle_id"`
+	Symbol                    string             `json:"symbol"`
+	Timeframe                 string             `json:"timeframe"`
+	SetupTimestampUtc         pgtype.Timestamptz `json:"setup_timestamp_utc"`
+	AccountBalanceAtSetup     pgtype.Numeric     `json:"account_balance_at_setup"`
+	LeverageAtSetup           int32              `json:"leverage_at_setup"`
+	MaxRiskPerTradePctAtSetup pgtype.Numeric     `json:"max_risk_per_trade_pct_at_setup"`
+	TimezoneAtSetup           string             `json:"timezone_at_setup"`
+	Bias                      string             `json:"bias"`
+	PlannedEntry              pgtype.Numeric     `json:"planned_entry"`
+	PlannedSl                 pgtype.Numeric     `json:"planned_sl"`
+	PlannedTp                 pgtype.Numeric     `json:"planned_tp"`
+	PlannedRr                 pgtype.Numeric     `json:"planned_rr"`
+	PlannedRiskPct            pgtype.Numeric     `json:"planned_risk_pct"`
+	PlannedRiskAmount         pgtype.Numeric     `json:"planned_risk_amount"`
+	PlannedPositionSize       pgtype.Numeric     `json:"planned_position_size"`
+	ReasonForTrade            string             `json:"reason_for_trade"`
+	ActualEntry               pgtype.Numeric     `json:"actual_entry"`
+	ActualSl                  pgtype.Numeric     `json:"actual_sl"`
+	ActualTp                  pgtype.Numeric     `json:"actual_tp"`
+	ActualRiskPct             pgtype.Numeric     `json:"actual_risk_pct"`
+	ActualRiskAmount          pgtype.Numeric     `json:"actual_risk_amount"`
+	ActualPositionSize        pgtype.Numeric     `json:"actual_position_size"`
+	ExecutionTimestampUtc     pgtype.Timestamptz `json:"execution_timestamp_utc"`
+	CloseTimestampUtc         pgtype.Timestamptz `json:"close_timestamp_utc"`
+	ClosePrice                pgtype.Numeric     `json:"close_price"`
+	Result                    NullTradeResult    `json:"result"`
+	PipsGained                pgtype.Numeric     `json:"pips_gained"`
+	MoneyGained               pgtype.Numeric     `json:"money_gained"`
+	RrRealized                pgtype.Numeric     `json:"rr_realized"`
+	DurationSeconds           pgtype.Int4        `json:"duration_seconds"`
+	Session                   NullSessionType    `json:"session"`
+	CreatedAt                 pgtype.Timestamptz `json:"created_at"`
+}
+
+type TradeFeedback struct {
+	ID             uuid.UUID          `json:"id"`
+	TradeID        uuid.UUID          `json:"trade_id"`
+	FollowedPlan   bool               `json:"followed_plan"`
+	EmotionBefore  EmotionType        `json:"emotion_before"`
+	EmotionDuring  EmotionType        `json:"emotion_during"`
+	EmotionAfter   EmotionType        `json:"emotion_after"`
+	BiggestMistake pgtype.Text        `json:"biggest_mistake"`
+	ScreenshotUrl  pgtype.Text        `json:"screenshot_url"`
+	FeedbackAt     pgtype.Timestamptz `json:"feedback_at"`
 }
 
 type User struct {
 	ID        uuid.UUID          `json:"id"`
-	Email     string             `json:"email"`
-	Username  string             `json:"username"`
-	Password  string             `json:"password"`
-	Timezone  pgtype.Text        `json:"timezone"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
