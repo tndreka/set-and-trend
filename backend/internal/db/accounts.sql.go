@@ -14,57 +14,62 @@ import (
 
 const createAccount = `-- name: CreateAccount :one
 INSERT INTO accounts (
-  id, user_id, broker_name, account_type, currency, balance, leverage, 
-  max_risk_per_trade, max_daily_risk
+  id, user_id, type, broker_name, currency, balance, leverage,
+  max_risk_per_trade_pct, max_daily_risk_pct, timezone, preferred_session
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8, $9
+  $1, $2, $3::account_type, $4, $5, $6, $7, $8, $9, $10, $11::session_type
 )
-RETURNING id, user_id, broker_name, account_type, currency, balance, leverage, max_risk_per_trade, max_daily_risk, created_at, updated_at
+RETURNING id, user_id, type, broker_name, currency, balance, leverage, max_risk_per_trade_pct, max_daily_risk_pct, timezone, preferred_session, updated_at
 `
 
 type CreateAccountParams struct {
-	ID              uuid.UUID     `json:"id"`
-	UserID          uuid.UUID     `json:"user_id"`
-	BrokerName      string        `json:"broker_name"`
-	AccountType     string        `json:"account_type"`
-	Currency        pgtype.Text   `json:"currency"`
-	Balance         float64       `json:"balance"`
-	Leverage        pgtype.Text   `json:"leverage"`
-	MaxRiskPerTrade pgtype.Float8 `json:"max_risk_per_trade"`
-	MaxDailyRisk    pgtype.Float8 `json:"max_daily_risk"`
+	ID                 uuid.UUID      `json:"id"`
+	UserID             uuid.UUID      `json:"user_id"`
+	Column3            string         `json:"column_3"`
+	BrokerName         string         `json:"broker_name"`
+	Currency           string         `json:"currency"`
+	Balance            pgtype.Numeric `json:"balance"`
+	Leverage           int32          `json:"leverage"`
+	MaxRiskPerTradePct pgtype.Numeric `json:"max_risk_per_trade_pct"`
+	MaxDailyRiskPct    pgtype.Numeric `json:"max_daily_risk_pct"`
+	Timezone           string         `json:"timezone"`
+	Column11           string         `json:"column_11"`
 }
 
 func (q *Queries) CreateAccount(ctx context.Context, arg CreateAccountParams) (Account, error) {
 	row := q.db.QueryRow(ctx, createAccount,
 		arg.ID,
 		arg.UserID,
+		arg.Column3,
 		arg.BrokerName,
-		arg.AccountType,
 		arg.Currency,
 		arg.Balance,
 		arg.Leverage,
-		arg.MaxRiskPerTrade,
-		arg.MaxDailyRisk,
+		arg.MaxRiskPerTradePct,
+		arg.MaxDailyRiskPct,
+		arg.Timezone,
+		arg.Column11,
 	)
 	var i Account
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
+		&i.Type,
 		&i.BrokerName,
-		&i.AccountType,
 		&i.Currency,
 		&i.Balance,
 		&i.Leverage,
-		&i.MaxRiskPerTrade,
-		&i.MaxDailyRisk,
-		&i.CreatedAt,
+		&i.MaxRiskPerTradePct,
+		&i.MaxDailyRiskPct,
+		&i.Timezone,
+		&i.PreferredSession,
 		&i.UpdatedAt,
 	)
 	return i, err
 }
 
 const getAccount = `-- name: GetAccount :one
-SELECT id, user_id, broker_name, account_type, currency, balance, leverage, max_risk_per_trade, max_daily_risk, created_at, updated_at FROM accounts WHERE id = $1
+SELECT id, user_id, type, broker_name, currency, balance, leverage, max_risk_per_trade_pct, max_daily_risk_pct, timezone, preferred_session, updated_at FROM accounts WHERE id = $1
 `
 
 func (q *Queries) GetAccount(ctx context.Context, id uuid.UUID) (Account, error) {
@@ -73,21 +78,22 @@ func (q *Queries) GetAccount(ctx context.Context, id uuid.UUID) (Account, error)
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
+		&i.Type,
 		&i.BrokerName,
-		&i.AccountType,
 		&i.Currency,
 		&i.Balance,
 		&i.Leverage,
-		&i.MaxRiskPerTrade,
-		&i.MaxDailyRisk,
-		&i.CreatedAt,
+		&i.MaxRiskPerTradePct,
+		&i.MaxDailyRiskPct,
+		&i.Timezone,
+		&i.PreferredSession,
 		&i.UpdatedAt,
 	)
 	return i, err
 }
 
 const listAccountsByUser = `-- name: ListAccountsByUser :many
-SELECT id, user_id, broker_name, account_type, currency, balance, leverage, max_risk_per_trade, max_daily_risk, created_at, updated_at FROM accounts WHERE user_id = $1 ORDER BY created_at DESC
+SELECT id, user_id, type, broker_name, currency, balance, leverage, max_risk_per_trade_pct, max_daily_risk_pct, timezone, preferred_session, updated_at FROM accounts WHERE user_id = $1 ORDER BY updated_at DESC
 `
 
 func (q *Queries) ListAccountsByUser(ctx context.Context, userID uuid.UUID) ([]Account, error) {
@@ -102,14 +108,15 @@ func (q *Queries) ListAccountsByUser(ctx context.Context, userID uuid.UUID) ([]A
 		if err := rows.Scan(
 			&i.ID,
 			&i.UserID,
+			&i.Type,
 			&i.BrokerName,
-			&i.AccountType,
 			&i.Currency,
 			&i.Balance,
 			&i.Leverage,
-			&i.MaxRiskPerTrade,
-			&i.MaxDailyRisk,
-			&i.CreatedAt,
+			&i.MaxRiskPerTradePct,
+			&i.MaxDailyRiskPct,
+			&i.Timezone,
+			&i.PreferredSession,
 			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
