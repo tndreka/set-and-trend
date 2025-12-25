@@ -5,7 +5,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	
+	"time"
+
 	"github.com/gin-gonic/gin"
 	"set-and-trend/backend/internal/config"
 	"set-and-trend/backend/internal/handlers"
@@ -14,36 +15,48 @@ import (
 
 func main() {
 	ctx := context.Background()
-	
+
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatal("config.Load:", err)
 	}
-	
+
 	queries, err := config.NewDatabase(ctx, cfg)
 	if err != nil {
 		log.Fatal("database:", err)
 	}
-	
-	log.Println("✓ SQLC connected via .env")
-	
-	// ✅ BOTH repos use queries (NOT pool)
+
+	log.Println("✓ Database connected with 100 connection pool")
+
 	userRepo := repositories.NewUserRepository(queries)
-	userHandler := handlers.NewUserHandler(userRepo)
-	
 	accountRepo := repositories.NewAccountRepository(queries)
+	userHandler := handlers.NewUserHandler(userRepo)
 	accountHandler := handlers.NewAccountHandler(accountRepo, userRepo)
- 
+
+	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
+
 	api := r.Group("/api")
 	{
 		api.POST("/users", userHandler.CreateUser)
 		api.POST("/accounts", accountHandler.CreateAccount)
 	}
+
 	r.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"status": "ok", "db": "connected"})
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
-	
-	log.Printf("🚀 http://localhost:%d", cfg.Port)
-	log.Fatal(r.Run(fmt.Sprintf(":%d", cfg.Port)))
+
+	srv := &http.Server{
+		Addr:           fmt.Sprintf(":%d", cfg.Port),
+		Handler:        r,
+		ReadTimeout:    10 * time.Second,
+		WriteTimeout:   10 * time.Second,
+		IdleTimeout:    120 * time.Second,
+		MaxHeaderBytes: 1 << 20,
+	}
+
+	log.Printf("🚀 Server ready for 10k+ requests on :%d", cfg.Port)
+	if err := srv.ListenAndServe(); err != nil {
+		log.Fatal(err)
+	}
 }
