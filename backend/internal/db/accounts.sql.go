@@ -9,38 +9,48 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/shopspring/decimal"
 )
 
 const createAccount = `-- name: CreateAccount :one
 INSERT INTO accounts (
-  id, user_id, type, broker_name, currency, balance, leverage,
-  max_risk_per_trade_pct, max_daily_risk_pct, timezone, preferred_session
+    id,
+    user_id,
+    type,
+    broker_name,
+    currency,
+    balance,
+    leverage,
+    max_risk_per_trade_pct,
+    max_daily_risk_pct,
+    timezone,
+    preferred_session,
+    updated_at
 ) VALUES (
-  $1, $2, $3::account_type, $4, $5, $6, $7, $8, $9, $10, $11::session_type
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW()
 )
 RETURNING id, user_id, type, broker_name, currency, balance, leverage, max_risk_per_trade_pct, max_daily_risk_pct, timezone, preferred_session, updated_at
 `
 
 type CreateAccountParams struct {
-	ID                 uuid.UUID      `json:"id"`
-	UserID             uuid.UUID      `json:"user_id"`
-	Column3            string         `json:"column_3"`
-	BrokerName         string         `json:"broker_name"`
-	Currency           string         `json:"currency"`
-	Balance            pgtype.Numeric `json:"balance"`
-	Leverage           int32          `json:"leverage"`
-	MaxRiskPerTradePct pgtype.Numeric `json:"max_risk_per_trade_pct"`
-	MaxDailyRiskPct    pgtype.Numeric `json:"max_daily_risk_pct"`
-	Timezone           string         `json:"timezone"`
-	Column11           string         `json:"column_11"`
+	ID                 uuid.UUID       `json:"id"`
+	UserID             uuid.UUID       `json:"user_id"`
+	Type               string          `json:"type"`
+	BrokerName         string          `json:"broker_name"`
+	Currency           string          `json:"currency"`
+	Balance            decimal.Decimal `json:"balance"`
+	Leverage           int32           `json:"leverage"`
+	MaxRiskPerTradePct decimal.Decimal `json:"max_risk_per_trade_pct"`
+	MaxDailyRiskPct    decimal.Decimal `json:"max_daily_risk_pct"`
+	Timezone           string          `json:"timezone"`
+	PreferredSession   string          `json:"preferred_session"`
 }
 
 func (q *Queries) CreateAccount(ctx context.Context, arg CreateAccountParams) (Account, error) {
 	row := q.db.QueryRow(ctx, createAccount,
 		arg.ID,
 		arg.UserID,
-		arg.Column3,
+		arg.Type,
 		arg.BrokerName,
 		arg.Currency,
 		arg.Balance,
@@ -48,7 +58,7 @@ func (q *Queries) CreateAccount(ctx context.Context, arg CreateAccountParams) (A
 		arg.MaxRiskPerTradePct,
 		arg.MaxDailyRiskPct,
 		arg.Timezone,
-		arg.Column11,
+		arg.PreferredSession,
 	)
 	var i Account
 	err := row.Scan(
@@ -68,12 +78,12 @@ func (q *Queries) CreateAccount(ctx context.Context, arg CreateAccountParams) (A
 	return i, err
 }
 
-const getAccount = `-- name: GetAccount :one
+const getAccountByID = `-- name: GetAccountByID :one
 SELECT id, user_id, type, broker_name, currency, balance, leverage, max_risk_per_trade_pct, max_daily_risk_pct, timezone, preferred_session, updated_at FROM accounts WHERE id = $1
 `
 
-func (q *Queries) GetAccount(ctx context.Context, id uuid.UUID) (Account, error) {
-	row := q.db.QueryRow(ctx, getAccount, id)
+func (q *Queries) GetAccountByID(ctx context.Context, id uuid.UUID) (Account, error) {
+	row := q.db.QueryRow(ctx, getAccountByID, id)
 	var i Account
 	err := row.Scan(
 		&i.ID,
@@ -92,12 +102,12 @@ func (q *Queries) GetAccount(ctx context.Context, id uuid.UUID) (Account, error)
 	return i, err
 }
 
-const listAccountsByUser = `-- name: ListAccountsByUser :many
-SELECT id, user_id, type, broker_name, currency, balance, leverage, max_risk_per_trade_pct, max_daily_risk_pct, timezone, preferred_session, updated_at FROM accounts WHERE user_id = $1 ORDER BY updated_at DESC
+const getAccountsByUserID = `-- name: GetAccountsByUserID :many
+SELECT id, user_id, type, broker_name, currency, balance, leverage, max_risk_per_trade_pct, max_daily_risk_pct, timezone, preferred_session, updated_at FROM accounts WHERE user_id = $1
 `
 
-func (q *Queries) ListAccountsByUser(ctx context.Context, userID uuid.UUID) ([]Account, error) {
-	rows, err := q.db.Query(ctx, listAccountsByUser, userID)
+func (q *Queries) GetAccountsByUserID(ctx context.Context, userID uuid.UUID) ([]Account, error) {
+	rows, err := q.db.Query(ctx, getAccountsByUserID, userID)
 	if err != nil {
 		return nil, err
 	}

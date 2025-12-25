@@ -12,13 +12,11 @@ import (
 
 type Querier interface {
 	CreateAccount(ctx context.Context, arg CreateAccountParams) (Account, error)
-	CreateCandle(ctx context.Context, arg CreateCandleParams) (CandlesWeekly, error)
 	CreateUser(ctx context.Context, id uuid.UUID) (User, error)
-	GetAccount(ctx context.Context, id uuid.UUID) (Account, error)
-	GetCandles(ctx context.Context, arg GetCandlesParams) ([]CandlesWeekly, error)
+	GetAccountByID(ctx context.Context, id uuid.UUID) (Account, error)
+	GetAccountsByUserID(ctx context.Context, userID uuid.UUID) ([]Account, error)
 	GetUser(ctx context.Context, id uuid.UUID) (User, error)
-	ListAccountsByUser(ctx context.Context, userID uuid.UUID) ([]Account, error)
-	ListUsers(ctx context.Context) ([]User, error)
+	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
 }
 
 var _ Querier = (*Queries)(nil)
