@@ -15,7 +15,6 @@ import (
 func main() {
 	ctx := context.Background()
 	
-	// Load .env → config.Load() reads DB_PASSWORD=lantidhe42@$
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatal("config.Load:", err)
@@ -28,13 +27,19 @@ func main() {
 	
 	log.Println("✓ SQLC connected via .env")
 	
+	// ✅ BOTH repos use queries (NOT pool)
 	userRepo := repositories.NewUserRepository(queries)
 	userHandler := handlers.NewUserHandler(userRepo)
 	
+	accountRepo := repositories.NewAccountRepository(queries)
+	accountHandler := handlers.NewAccountHandler(accountRepo, userRepo)
+ 
 	r := gin.Default()
 	api := r.Group("/api")
-	api.POST("/users", userHandler.CreateUser)
-	
+	{
+		api.POST("/users", userHandler.CreateUser)
+		api.POST("/accounts", accountHandler.CreateAccount)
+	}
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok", "db": "connected"})
 	})

@@ -1,32 +1,72 @@
 version: "2"
+
 sql:
   - engine: "postgresql"
-    queries: "internal/db/queries/"
     schema: "migrations/schema.sql"
+    queries: "internal/db/queries/"
     gen:
       go:
         package: "db"
         out: "internal/db"
         sql_package: "pgx/v5"
+
         emit_json_tags: true
         emit_prepared_queries: false
         emit_interface: true
         emit_exact_table_names: false
+
         overrides:
+          # UUID
           - db_type: "uuid"
-            nullable: true
-            go_type: "github.com/google/uuid.UUID"
-          - db_type: "uuid"
-            go_type: "github.com/google/uuid.UUID"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
+
+          # TIMESTAMPS
           - db_type: "timestamptz"
-            go_type: "time.Time"
+            go_type:
+              import: "time"
+              type: "Time"
+
           - db_type: "timestamp"
-            go_type: "time.Time"
+            go_type:
+              import: "time"
+              type: "Time"
+
+          # ENUMS (mapped to string intentionally)
           - db_type: "account_type"
             go_type: "string"
+
           - db_type: "session_type"
             go_type: "string"
+
           - db_type: "trade_bias"
             go_type: "string"
+
           - db_type: "trade_result"
             go_type: "string"
+
+          # NUMERIC / DECIMAL → decimal.Decimal
+          - db_type: "pg_catalog.numeric"
+            nullable: false
+            go_type:
+              import: "github.com/shopspring/decimal"
+              type: "Decimal"
+
+          - db_type: "pg_catalog.numeric"
+            nullable: true
+            go_type:
+              import: "github.com/shopspring/decimal"
+              type: "Decimal"
+
+          - db_type: "numeric"
+            nullable: false
+            go_type:
+              import: "github.com/shopspring/decimal"
+              type: "Decimal"
+
+          - db_type: "numeric"
+            nullable: true
+            go_type:
+              import: "github.com/shopspring/decimal"
+              type: "Decimal"

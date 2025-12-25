@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/shopspring/decimal"
 )
 
 type AccountType string
@@ -317,10 +318,10 @@ type Account struct {
 	Type               string             `json:"type"`
 	BrokerName         string             `json:"broker_name"`
 	Currency           string             `json:"currency"`
-	Balance            pgtype.Numeric     `json:"balance"`
+	Balance            decimal.Decimal    `json:"balance"`
 	Leverage           int32              `json:"leverage"`
-	MaxRiskPerTradePct pgtype.Numeric     `json:"max_risk_per_trade_pct"`
-	MaxDailyRiskPct    pgtype.Numeric     `json:"max_daily_risk_pct"`
+	MaxRiskPerTradePct decimal.Decimal    `json:"max_risk_per_trade_pct"`
+	MaxDailyRiskPct    decimal.Decimal    `json:"max_daily_risk_pct"`
 	Timezone           string             `json:"timezone"`
 	PreferredSession   string             `json:"preferred_session"`
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
@@ -329,10 +330,10 @@ type Account struct {
 type CandlesWeekly struct {
 	ID           uuid.UUID          `json:"id"`
 	TimestampUtc pgtype.Timestamptz `json:"timestamp_utc"`
-	Open         pgtype.Numeric     `json:"open"`
-	High         pgtype.Numeric     `json:"high"`
-	Low          pgtype.Numeric     `json:"low"`
-	Close        pgtype.Numeric     `json:"close"`
+	Open         decimal.Decimal    `json:"open"`
+	High         decimal.Decimal    `json:"high"`
+	Low          decimal.Decimal    `json:"low"`
+	Close        decimal.Decimal    `json:"close"`
 	Volume       pgtype.Int8        `json:"volume"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 }
@@ -340,16 +341,16 @@ type CandlesWeekly struct {
 type IndicatorsWeekly struct {
 	ID                 uuid.UUID          `json:"id"`
 	CandleID           uuid.UUID          `json:"candle_id"`
-	Ema20              pgtype.Numeric     `json:"ema20"`
-	Ema50              pgtype.Numeric     `json:"ema50"`
-	Ema200             pgtype.Numeric     `json:"ema200"`
-	RangeSize          pgtype.Numeric     `json:"range_size"`
-	BodySize           pgtype.Numeric     `json:"body_size"`
-	UpperWick          pgtype.Numeric     `json:"upper_wick"`
-	LowerWick          pgtype.Numeric     `json:"lower_wick"`
-	MidPrice           pgtype.Numeric     `json:"mid_price"`
-	LastSwingHighPrice pgtype.Numeric     `json:"last_swing_high_price"`
-	LastSwingLowPrice  pgtype.Numeric     `json:"last_swing_low_price"`
+	Ema20              decimal.Decimal    `json:"ema20"`
+	Ema50              decimal.Decimal    `json:"ema50"`
+	Ema200             decimal.Decimal    `json:"ema200"`
+	RangeSize          decimal.Decimal    `json:"range_size"`
+	BodySize           decimal.Decimal    `json:"body_size"`
+	UpperWick          decimal.Decimal    `json:"upper_wick"`
+	LowerWick          decimal.Decimal    `json:"lower_wick"`
+	MidPrice           decimal.Decimal    `json:"mid_price"`
+	LastSwingHighPrice decimal.Decimal    `json:"last_swing_high_price"`
+	LastSwingLowPrice  decimal.Decimal    `json:"last_swing_low_price"`
 	ComputedAt         pgtype.Timestamptz `json:"computed_at"`
 }
 
@@ -368,7 +369,7 @@ type RuleResult struct {
 	CandleID        uuid.UUID          `json:"candle_id"`
 	Result          RuleResultType     `json:"result"`
 	EvaluatedAt     pgtype.Timestamptz `json:"evaluated_at"`
-	ConfidenceScore pgtype.Numeric     `json:"confidence_score"`
+	ConfidenceScore decimal.Decimal    `json:"confidence_score"`
 }
 
 type Trade struct {
@@ -379,32 +380,32 @@ type Trade struct {
 	Symbol                    string             `json:"symbol"`
 	Timeframe                 string             `json:"timeframe"`
 	SetupTimestampUtc         pgtype.Timestamptz `json:"setup_timestamp_utc"`
-	AccountBalanceAtSetup     pgtype.Numeric     `json:"account_balance_at_setup"`
+	AccountBalanceAtSetup     decimal.Decimal    `json:"account_balance_at_setup"`
 	LeverageAtSetup           int32              `json:"leverage_at_setup"`
-	MaxRiskPerTradePctAtSetup pgtype.Numeric     `json:"max_risk_per_trade_pct_at_setup"`
+	MaxRiskPerTradePctAtSetup decimal.Decimal    `json:"max_risk_per_trade_pct_at_setup"`
 	TimezoneAtSetup           string             `json:"timezone_at_setup"`
 	Bias                      string             `json:"bias"`
-	PlannedEntry              pgtype.Numeric     `json:"planned_entry"`
-	PlannedSl                 pgtype.Numeric     `json:"planned_sl"`
-	PlannedTp                 pgtype.Numeric     `json:"planned_tp"`
-	PlannedRr                 pgtype.Numeric     `json:"planned_rr"`
-	PlannedRiskPct            pgtype.Numeric     `json:"planned_risk_pct"`
-	PlannedRiskAmount         pgtype.Numeric     `json:"planned_risk_amount"`
-	PlannedPositionSize       pgtype.Numeric     `json:"planned_position_size"`
+	PlannedEntry              decimal.Decimal    `json:"planned_entry"`
+	PlannedSl                 decimal.Decimal    `json:"planned_sl"`
+	PlannedTp                 decimal.Decimal    `json:"planned_tp"`
+	PlannedRr                 decimal.Decimal    `json:"planned_rr"`
+	PlannedRiskPct            decimal.Decimal    `json:"planned_risk_pct"`
+	PlannedRiskAmount         decimal.Decimal    `json:"planned_risk_amount"`
+	PlannedPositionSize       decimal.Decimal    `json:"planned_position_size"`
 	ReasonForTrade            string             `json:"reason_for_trade"`
-	ActualEntry               pgtype.Numeric     `json:"actual_entry"`
-	ActualSl                  pgtype.Numeric     `json:"actual_sl"`
-	ActualTp                  pgtype.Numeric     `json:"actual_tp"`
-	ActualRiskPct             pgtype.Numeric     `json:"actual_risk_pct"`
-	ActualRiskAmount          pgtype.Numeric     `json:"actual_risk_amount"`
-	ActualPositionSize        pgtype.Numeric     `json:"actual_position_size"`
+	ActualEntry               decimal.Decimal    `json:"actual_entry"`
+	ActualSl                  decimal.Decimal    `json:"actual_sl"`
+	ActualTp                  decimal.Decimal    `json:"actual_tp"`
+	ActualRiskPct             decimal.Decimal    `json:"actual_risk_pct"`
+	ActualRiskAmount          decimal.Decimal    `json:"actual_risk_amount"`
+	ActualPositionSize        decimal.Decimal    `json:"actual_position_size"`
 	ExecutionTimestampUtc     pgtype.Timestamptz `json:"execution_timestamp_utc"`
 	CloseTimestampUtc         pgtype.Timestamptz `json:"close_timestamp_utc"`
-	ClosePrice                pgtype.Numeric     `json:"close_price"`
+	ClosePrice                decimal.Decimal    `json:"close_price"`
 	Result                    NullTradeResult    `json:"result"`
-	PipsGained                pgtype.Numeric     `json:"pips_gained"`
-	MoneyGained               pgtype.Numeric     `json:"money_gained"`
-	RrRealized                pgtype.Numeric     `json:"rr_realized"`
+	PipsGained                decimal.Decimal    `json:"pips_gained"`
+	MoneyGained               decimal.Decimal    `json:"money_gained"`
+	RrRealized                decimal.Decimal    `json:"rr_realized"`
 	DurationSeconds           pgtype.Int4        `json:"duration_seconds"`
 	Session                   NullSessionType    `json:"session"`
 	CreatedAt                 pgtype.Timestamptz `json:"created_at"`
