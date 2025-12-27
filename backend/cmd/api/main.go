@@ -32,6 +32,8 @@ func main() {
 	accountRepo := repositories.NewAccountRepository(queries)
 	userHandler := handlers.NewUserHandler(userRepo)
 	accountHandler := handlers.NewAccountHandler(accountRepo, userRepo)
+	candleRepo := repositories.NewCandleRepository(queries)
+	candleHandler := handlers.NewCandleHandler(candleRepo)
 
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
@@ -40,6 +42,8 @@ func main() {
 	{
 		api.POST("/users", userHandler.CreateUser)
 		api.POST("/accounts", accountHandler.CreateAccount)
+		api.POST("/candles", candleHandler.CreateCandle)
+		api.GET("/candles/latest", candleHandler.GetLatestCandles)
 	}
 
 	r.GET("/health", func(c *gin.Context) {
