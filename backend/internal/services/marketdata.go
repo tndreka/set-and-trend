@@ -2,9 +2,6 @@ package services
 
 import (
 	"math"
-
-	//"set-and-trend/backend/internal/constants"
-	"set-and-trend/backend/internal/domain"
 )
 
 type WeeklyIndicators struct {
@@ -18,23 +15,26 @@ type WeeklyIndicators struct {
 	LowerWick float64
 	MidPrice  float64
 
-	LastSwingHigh *float64
-	LastSwingLow  *float64
+	LastSwingHighPrice *float64
+	LastSwingLowPrice  *float64
 }
 
-// ComputeIndicators computes deterministic weekly indicators.
-// NO DB. NO IO. PURE FUNCTION.
-func ComputeIndicators(
-	candles []domain.Candle,
-	index int,
-) WeeklyIndicators {
+// Candle represents a single OHLCV candle for computation
+type Candle struct {
+	Open   float64
+	High   float64
+	Low    float64
+	Close  float64
+	Volume *int64
+}
 
-	c := candles[index]
-
-	open := c.Open
-	close := c.Close
-	high := c.High
-	low := c.Low
+// ComputeBasicIndicators computes deterministic weekly indicators
+// NO EMA yet - that requires historical data
+func ComputeBasicIndicators(candle Candle) WeeklyIndicators {
+	open := candle.Open
+	close := candle.Close
+	high := candle.High
+	low := candle.Low
 
 	rangeSize := high - low
 	bodySize := math.Abs(close - open)
@@ -51,6 +51,13 @@ func ComputeIndicators(
 		LowerWick: lowerWick,
 		MidPrice:  midPrice,
 
-		// EMA + swings come next
+		// EMA values placeholder (need historical candles)
+		EMA20:  0,
+		EMA50:  0,
+		EMA200: 0,
+
+		// Swing points placeholder (need previous candles)
+		LastSwingHighPrice: nil,
+		LastSwingLowPrice:  nil,
 	}
 }
