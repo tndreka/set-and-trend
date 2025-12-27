@@ -14,13 +14,16 @@ import (
 type Querier interface {
 	CreateAccount(ctx context.Context, arg CreateAccountParams) (Account, error)
 	CreateCandle(ctx context.Context, arg CreateCandleParams) (CandlesWeekly, error)
+	CreateIndicator(ctx context.Context, arg CreateIndicatorParams) (IndicatorsWeekly, error)
 	CreateUser(ctx context.Context, id uuid.UUID) (User, error)
 	GetAccountByID(ctx context.Context, id uuid.UUID) (Account, error)
 	GetAccountsByUserID(ctx context.Context, userID uuid.UUID) ([]Account, error)
 	GetCandleByID(ctx context.Context, id uuid.UUID) (CandlesWeekly, error)
 	GetCandleByTimestamp(ctx context.Context, timestampUtc pgtype.Timestamptz) (CandlesWeekly, error)
 	GetCandlesInRange(ctx context.Context, arg GetCandlesInRangeParams) ([]CandlesWeekly, error)
+	GetIndicatorByCandleID(ctx context.Context, candleID uuid.UUID) (IndicatorsWeekly, error)
 	GetLatestCandles(ctx context.Context, limit int32) ([]CandlesWeekly, error)
+	GetLatestIndicators(ctx context.Context, limit int32) ([]GetLatestIndicatorsRow, error)
 	GetUser(ctx context.Context, id uuid.UUID) (User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
 }
