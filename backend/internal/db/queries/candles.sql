@@ -29,3 +29,15 @@ LIMIT $1;
 -- name: GetCandleByID :one
 SELECT * FROM candles_weekly 
 WHERE id = $1;
+
+-- name: GetAllCandlesOrdered :many
+SELECT * FROM candles_weekly 
+ORDER BY timestamp_utc ASC;
+
+-- name: UpdateIndicatorEMAs :exec
+UPDATE indicators_weekly 
+SET 
+    ema20 = $2,
+    ema50 = $3,
+    ema200 = $4
+WHERE id = $1;

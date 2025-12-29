@@ -62,6 +62,40 @@ func (q *Queries) CreateCandle(ctx context.Context, arg CreateCandleParams) (Can
 	return i, err
 }
 
+const getAllCandlesOrdered = `-- name: GetAllCandlesOrdered :many
+SELECT id, timestamp_utc, open, high, low, close, volume, created_at FROM candles_weekly 
+ORDER BY timestamp_utc ASC
+`
+
+func (q *Queries) GetAllCandlesOrdered(ctx context.Context) ([]CandlesWeekly, error) {
+	rows, err := q.db.Query(ctx, getAllCandlesOrdered)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CandlesWeekly
+	for rows.Next() {
+		var i CandlesWeekly
+		if err := rows.Scan(
+			&i.ID,
+			&i.TimestampUtc,
+			&i.Open,
+			&i.High,
+			&i.Low,
+			&i.Close,
+			&i.Volume,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getCandleByID = `-- name: GetCandleByID :one
 SELECT id, timestamp_utc, open, high, low, close, volume, created_at FROM candles_weekly 
 WHERE id = $1
@@ -177,4 +211,30 @@ func (q *Queries) GetLatestCandles(ctx context.Context, limit int32) ([]CandlesW
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateIndicatorEMAs = `-- name: UpdateIndicatorEMAs :exec
+UPDATE indicators_weekly 
+SET 
+    ema20 = $2,
+    ema50 = $3,
+    ema200 = $4
+WHERE id = $1
+`
+
+type UpdateIndicatorEMAsParams struct {
+	ID     uuid.UUID       `json:"id"`
+	Ema20  decimal.Decimal `json:"ema20"`
+	Ema50  decimal.Decimal `json:"ema50"`
+	Ema200 decimal.Decimal `json:"ema200"`
+}
+
+func (q *Queries) UpdateIndicatorEMAs(ctx context.Context, arg UpdateIndicatorEMAsParams) error {
+	_, err := q.db.Exec(ctx, updateIndicatorEMAs,
+		arg.ID,
+		arg.Ema20,
+		arg.Ema50,
+		arg.Ema200,
+	)
+	return err
 }
