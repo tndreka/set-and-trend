@@ -18,6 +18,7 @@ type Querier interface {
 	CreateUser(ctx context.Context, id uuid.UUID) (User, error)
 	GetAccountByID(ctx context.Context, id uuid.UUID) (Account, error)
 	GetAccountsByUserID(ctx context.Context, userID uuid.UUID) ([]Account, error)
+	GetAllCandlesOrdered(ctx context.Context) ([]CandlesWeekly, error)
 	GetCandleByID(ctx context.Context, id uuid.UUID) (CandlesWeekly, error)
 	GetCandleByTimestamp(ctx context.Context, timestampUtc pgtype.Timestamptz) (CandlesWeekly, error)
 	GetCandlesInRange(ctx context.Context, arg GetCandlesInRangeParams) ([]CandlesWeekly, error)
@@ -26,6 +27,7 @@ type Querier interface {
 	GetLatestIndicators(ctx context.Context, limit int32) ([]GetLatestIndicatorsRow, error)
 	GetUser(ctx context.Context, id uuid.UUID) (User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
+	UpdateIndicatorEMAs(ctx context.Context, arg UpdateIndicatorEMAsParams) error
 }
 
 var _ Querier = (*Queries)(nil)
