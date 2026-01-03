@@ -181,3 +181,64 @@ func (q *Queries) GetLatestIndicators(ctx context.Context, limit int32) ([]GetLa
 	}
 	return items, nil
 }
+
+const getPreviousIndicatorByTimestamp = `-- name: GetPreviousIndicatorByTimestamp :one
+SELECT i.id, candle_id, ema20, ema50, ema200, range_size, body_size, upper_wick, lower_wick, mid_price, last_swing_high_price, last_swing_low_price, computed_at, c.id, timestamp_utc, open, high, low, close, volume, created_at FROM indicators_weekly i
+JOIN candles_weekly c ON i.candle_id = c.id
+WHERE c.timestamp_utc < $1
+ORDER BY c.timestamp_utc DESC
+LIMIT 1
+`
+
+type GetPreviousIndicatorByTimestampRow struct {
+	ID                 uuid.UUID          `json:"id"`
+	CandleID           uuid.UUID          `json:"candle_id"`
+	Ema20              decimal.Decimal    `json:"ema20"`
+	Ema50              decimal.Decimal    `json:"ema50"`
+	Ema200             decimal.Decimal    `json:"ema200"`
+	RangeSize          decimal.Decimal    `json:"range_size"`
+	BodySize           decimal.Decimal    `json:"body_size"`
+	UpperWick          decimal.Decimal    `json:"upper_wick"`
+	LowerWick          decimal.Decimal    `json:"lower_wick"`
+	MidPrice           decimal.Decimal    `json:"mid_price"`
+	LastSwingHighPrice decimal.Decimal    `json:"last_swing_high_price"`
+	LastSwingLowPrice  decimal.Decimal    `json:"last_swing_low_price"`
+	ComputedAt         pgtype.Timestamptz `json:"computed_at"`
+	ID_2               uuid.UUID          `json:"id_2"`
+	TimestampUtc       pgtype.Timestamptz `json:"timestamp_utc"`
+	Open               decimal.Decimal    `json:"open"`
+	High               decimal.Decimal    `json:"high"`
+	Low                decimal.Decimal    `json:"low"`
+	Close              decimal.Decimal    `json:"close"`
+	Volume             pgtype.Int8        `json:"volume"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) GetPreviousIndicatorByTimestamp(ctx context.Context, timestampUtc pgtype.Timestamptz) (GetPreviousIndicatorByTimestampRow, error) {
+	row := q.db.QueryRow(ctx, getPreviousIndicatorByTimestamp, timestampUtc)
+	var i GetPreviousIndicatorByTimestampRow
+	err := row.Scan(
+		&i.ID,
+		&i.CandleID,
+		&i.Ema20,
+		&i.Ema50,
+		&i.Ema200,
+		&i.RangeSize,
+		&i.BodySize,
+		&i.UpperWick,
+		&i.LowerWick,
+		&i.MidPrice,
+		&i.LastSwingHighPrice,
+		&i.LastSwingLowPrice,
+		&i.ComputedAt,
+		&i.ID_2,
+		&i.TimestampUtc,
+		&i.Open,
+		&i.High,
+		&i.Low,
+		&i.Close,
+		&i.Volume,
+		&i.CreatedAt,
+	)
+	return i, err
+}

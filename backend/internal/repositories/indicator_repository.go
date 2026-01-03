@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 	"set-and-trend/backend/internal/db"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type IndicatorRepository struct {
@@ -117,6 +118,46 @@ func (r *IndicatorRepository) GetIndicatorByCandleID(ctx context.Context, candle
 	indicator, err := r.q.GetIndicatorByCandleID(ctx, candleID)
 	if err != nil {
 		return nil, err
+	}
+
+	var swingHighStr, swingLowStr *string
+	if indicator.LastSwingHighPrice.String() != "0" {
+		s := indicator.LastSwingHighPrice.String()
+		swingHighStr = &s
+	}
+	if indicator.LastSwingLowPrice.String() != "0" {
+		s := indicator.LastSwingLowPrice.String()
+		swingLowStr = &s
+	}
+
+	return &Indicator{
+		ID:                 indicator.ID,
+		CandleID:           indicator.CandleID,
+		EMA20:              indicator.Ema20.String(),
+		EMA50:              indicator.Ema50.String(),
+		EMA200:             indicator.Ema200.String(),
+		RangeSize:          indicator.RangeSize.String(),
+		BodySize:           indicator.BodySize.String(),
+		UpperWick:          indicator.UpperWick.String(),
+		LowerWick:          indicator.LowerWick.String(),
+		MidPrice:           indicator.MidPrice.String(),
+		LastSwingHighPrice: swingHighStr,
+		LastSwingLowPrice:  swingLowStr,
+		ComputedAt:         indicator.ComputedAt.Time,
+	}, nil
+}
+
+func (r *IndicatorRepository) GetPreviousIndicatorByTimestamp(
+	ctx context.Context,
+	timestamp time.Time,
+) (*Indicator, error) {
+	// Convert timestamp to pgtype.Timestamptz
+	var timestampPg pgtype.Timestamptz
+	timestampPg.Scan(timestamp)
+
+	indicator, err := r.q.GetPreviousIndicatorByTimestamp(ctx, timestampPg)
+	if err != nil {
+		return nil, err // No previous indicator (first candle)
 	}
 
 	var swingHighStr, swingLowStr *string

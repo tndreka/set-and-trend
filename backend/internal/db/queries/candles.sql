@@ -41,3 +41,4 @@ SET
     ema50 = $3,
     ema200 = $4
 WHERE id = $1;
+
