@@ -15,6 +15,7 @@ type Querier interface {
 	CreateAccount(ctx context.Context, arg CreateAccountParams) (Account, error)
 	CreateCandle(ctx context.Context, arg CreateCandleParams) (CandlesWeekly, error)
 	CreateIndicator(ctx context.Context, arg CreateIndicatorParams) (IndicatorsWeekly, error)
+	CreateRuleResult(ctx context.Context, arg CreateRuleResultParams) error
 	CreateUser(ctx context.Context, id uuid.UUID) (User, error)
 	GetAccountByID(ctx context.Context, id uuid.UUID) (Account, error)
 	GetAccountsByUserID(ctx context.Context, userID uuid.UUID) ([]Account, error)
@@ -25,8 +26,11 @@ type Querier interface {
 	GetIndicatorByCandleID(ctx context.Context, candleID uuid.UUID) (IndicatorsWeekly, error)
 	GetLatestCandles(ctx context.Context, limit int32) ([]CandlesWeekly, error)
 	GetLatestIndicators(ctx context.Context, limit int32) ([]GetLatestIndicatorsRow, error)
+	GetPreviousIndicatorByTimestamp(ctx context.Context, timestampUtc pgtype.Timestamptz) (GetPreviousIndicatorByTimestampRow, error)
+	GetRuleResultsByCandleID(ctx context.Context, candleID uuid.UUID) ([]GetRuleResultsByCandleIDRow, error)
 	GetUser(ctx context.Context, id uuid.UUID) (User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
+	TruncateRuleResults(ctx context.Context) error
 	UpdateIndicatorEMAs(ctx context.Context, arg UpdateIndicatorEMAsParams) error
 }
 

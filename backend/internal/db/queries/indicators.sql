@@ -33,3 +33,10 @@ FROM indicators_weekly i
 JOIN candles_weekly c ON i.candle_id = c.id
 ORDER BY c.timestamp_utc DESC
 LIMIT $1;
+
+-- name: GetPreviousIndicatorByTimestamp :one
+SELECT * FROM indicators_weekly i
+JOIN candles_weekly c ON i.candle_id = c.id
+WHERE c.timestamp_utc < $1
+ORDER BY c.timestamp_utc DESC
+LIMIT 1;

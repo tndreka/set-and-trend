@@ -127,3 +127,27 @@ func (r *CandleRepository) GetLatestCandles(ctx context.Context, limit int) ([]C
 	}
 	return candles, nil
 }
+
+func (r *CandleRepository) GetCandleByID(ctx context.Context, id uuid.UUID) (*Candle, error) {
+	dbCandle, err := r.q.GetCandleByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	var volume *int64
+	if dbCandle.Volume.Valid {
+		v := dbCandle.Volume.Int64
+		volume = &v
+	}
+
+	return &Candle{
+		ID:           dbCandle.ID,
+		TimestampUTC: dbCandle.TimestampUtc.Time,
+		Open:         dbCandle.Open.String(),
+		High:         dbCandle.High.String(),
+		Low:          dbCandle.Low.String(),
+		Close:        dbCandle.Close.String(),
+		Volume:       volume,
+		CreatedAt:    dbCandle.CreatedAt.Time,
+	}, nil
+}
