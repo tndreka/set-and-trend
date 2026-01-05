@@ -16,6 +16,7 @@ type Querier interface {
 	CreateCandle(ctx context.Context, arg CreateCandleParams) (CandlesWeekly, error)
 	CreateIndicator(ctx context.Context, arg CreateIndicatorParams) (IndicatorsWeekly, error)
 	CreateRuleResult(ctx context.Context, arg CreateRuleResultParams) error
+	CreateTrade(ctx context.Context, arg CreateTradeParams) (Trade, error)
 	CreateUser(ctx context.Context, id uuid.UUID) (User, error)
 	GetAccountByID(ctx context.Context, id uuid.UUID) (Account, error)
 	GetAccountsByUserID(ctx context.Context, userID uuid.UUID) ([]Account, error)
@@ -28,10 +29,14 @@ type Querier interface {
 	GetLatestIndicators(ctx context.Context, limit int32) ([]GetLatestIndicatorsRow, error)
 	GetPreviousIndicatorByTimestamp(ctx context.Context, timestampUtc pgtype.Timestamptz) (GetPreviousIndicatorByTimestampRow, error)
 	GetRuleResultsByCandleID(ctx context.Context, candleID uuid.UUID) ([]GetRuleResultsByCandleIDRow, error)
+	GetTradeByID(ctx context.Context, id uuid.UUID) (Trade, error)
+	GetTradesByUserID(ctx context.Context, arg GetTradesByUserIDParams) ([]Trade, error)
 	GetUser(ctx context.Context, id uuid.UUID) (User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
 	TruncateRuleResults(ctx context.Context) error
 	UpdateIndicatorEMAs(ctx context.Context, arg UpdateIndicatorEMAsParams) error
+	UpdateTradeClosure(ctx context.Context, arg UpdateTradeClosureParams) error
+	UpdateTradeExecution(ctx context.Context, arg UpdateTradeExecutionParams) error
 }
 
 var _ Querier = (*Queries)(nil)
