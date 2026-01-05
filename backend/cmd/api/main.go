@@ -36,6 +36,9 @@ func main() {
 	candleHandler := handlers.NewCandleHandler(candleRepo)
 	indicatorRepo := repositories.NewIndicatorRepository(queries)
 	indicatorHandler := handlers.NewIndicatorHandler(indicatorRepo, candleRepo)
+	tradeRepo := repositories.NewTradeRepository(queries)
+	tradeService := services.NewTradeService(tradeRepo, accountRepo, candleRepo)
+	tradeHandler := handlers.NewTradeHandler(tradeService)
 
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
@@ -47,6 +50,7 @@ func main() {
 		api.POST("/candles", candleHandler.CreateCandle)
 		api.GET("/candles/latest", candleHandler.GetLatestCandles)
 		api.POST("/indicators/compute", indicatorHandler.ComputeIndicator)
+		api.POST("/trades", tradeHandler.CreateTrade)
 	}
 
 	r.GET("/health", func(c *gin.Context) {
