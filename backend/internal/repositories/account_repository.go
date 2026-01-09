@@ -61,7 +61,7 @@ func (r *AccountRepository) CreateAccount(ctx context.Context, params AccountCre
 	account, err := r.q.CreateAccount(ctx, db.CreateAccountParams{
 		ID:                 params.ID,
 		UserID:             params.UserID,
-		Type:               params.Type, // ✅ Fixed from Column3
+		Type:               db.AccountType(params.Type),
 		BrokerName:         params.BrokerName,
 		Currency:           params.Currency,
 		Balance:            balanceDec, // ✅ Direct decimal.Decimal
@@ -69,7 +69,7 @@ func (r *AccountRepository) CreateAccount(ctx context.Context, params AccountCre
 		MaxRiskPerTradePct: riskTradeDec, // ✅ Direct decimal.Decimal
 		MaxDailyRiskPct:    riskDailyDec, // ✅ Direct decimal.Decimal
 		Timezone:           params.Timezone,
-		PreferredSession:   params.PreferredSession, // ✅ Fixed from Column11
+		PreferredSession:   db.SessionType(params.PreferredSession), // ✅ Fixed from Column11
 	})
 	if err != nil {
 		return nil, err
@@ -79,7 +79,7 @@ func (r *AccountRepository) CreateAccount(ctx context.Context, params AccountCre
 	return &Account{
 		ID:                 account.ID,
 		UserID:             account.UserID,
-		Type:               account.Type,
+		Type:               string(account.Type),
 		BrokerName:         account.BrokerName,
 		Currency:           account.Currency,
 		Balance:            account.Balance.String(),
@@ -87,7 +87,7 @@ func (r *AccountRepository) CreateAccount(ctx context.Context, params AccountCre
 		MaxRiskPerTradePct: account.MaxRiskPerTradePct.InexactFloat64(),
 		MaxDailyRiskPct:    account.MaxDailyRiskPct.InexactFloat64(),
 		Timezone:           account.Timezone,
-		PreferredSession:   account.PreferredSession,
+		PreferredSession:   string(account.PreferredSession),
 		UpdatedAt:          account.UpdatedAt.Time,
 	}, nil
 }
@@ -102,7 +102,7 @@ func (r *AccountRepository) GetAccountByID(ctx context.Context, id uuid.UUID) (*
 	return &Account{
 		ID:                 acc.ID,
 		UserID:             acc.UserID,
-		Type:               acc.Type,
+		Type:               string(acc.Type),
 		BrokerName:         acc.BrokerName,
 		Currency:           acc.Currency,
 		Balance:            acc.Balance.String(),
@@ -110,7 +110,7 @@ func (r *AccountRepository) GetAccountByID(ctx context.Context, id uuid.UUID) (*
 		MaxRiskPerTradePct: acc.MaxRiskPerTradePct.InexactFloat64(),
 		MaxDailyRiskPct:    acc.MaxDailyRiskPct.InexactFloat64(),
 		Timezone:           acc.Timezone,
-		PreferredSession:   acc.PreferredSession,
+		PreferredSession:   string(acc.PreferredSession),
 		UpdatedAt:          acc.UpdatedAt.Time,
 	}, nil
 }

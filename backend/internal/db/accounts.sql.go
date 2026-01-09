@@ -35,7 +35,7 @@ RETURNING id, user_id, type, broker_name, currency, balance, leverage, max_risk_
 type CreateAccountParams struct {
 	ID                 uuid.UUID       `json:"id"`
 	UserID             uuid.UUID       `json:"user_id"`
-	Type               string          `json:"type"`
+	Type               AccountType     `json:"type"`
 	BrokerName         string          `json:"broker_name"`
 	Currency           string          `json:"currency"`
 	Balance            decimal.Decimal `json:"balance"`
@@ -43,7 +43,7 @@ type CreateAccountParams struct {
 	MaxRiskPerTradePct decimal.Decimal `json:"max_risk_per_trade_pct"`
 	MaxDailyRiskPct    decimal.Decimal `json:"max_daily_risk_pct"`
 	Timezone           string          `json:"timezone"`
-	PreferredSession   string          `json:"preferred_session"`
+	PreferredSession   SessionType     `json:"preferred_session"`
 }
 
 func (q *Queries) CreateAccount(ctx context.Context, arg CreateAccountParams) (Account, error) {

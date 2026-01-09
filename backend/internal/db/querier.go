@@ -32,7 +32,6 @@ type Querier interface {
 	GetRuleResultsByCandleID(ctx context.Context, candleID uuid.UUID) ([]GetRuleResultsByCandleIDRow, error)
 	GetTradeByID(ctx context.Context, id uuid.UUID) (Trade, error)
 	GetTradeExecutions(ctx context.Context, tradeID uuid.UUID) ([]TradeExecution, error)
-	GetTradeWithLifecycle(ctx context.Context, id uuid.UUID) (GetTradeWithLifecycleRow, error)
 	GetTradesByAccountAndCandle(ctx context.Context, arg GetTradesByAccountAndCandleParams) ([]Trade, error)
 	GetTradesByUserID(ctx context.Context, arg GetTradesByUserIDParams) ([]Trade, error)
 	GetUser(ctx context.Context, id uuid.UUID) (User, error)
@@ -41,7 +40,6 @@ type Querier interface {
 	UpdateIndicatorEMAs(ctx context.Context, arg UpdateIndicatorEMAsParams) error
 	UpdateTradeClosure(ctx context.Context, arg UpdateTradeClosureParams) error
 	UpdateTradeExecution(ctx context.Context, arg UpdateTradeExecutionParams) error
-	UpdateTradeLifecycle(ctx context.Context, arg UpdateTradeLifecycleParams) error
 }
 
 var _ Querier = (*Queries)(nil)
