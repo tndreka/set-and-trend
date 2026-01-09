@@ -22,18 +22,38 @@ type ExecutionService struct {
 	intentRepo    *repositories. IntentRepository
 }
 
+type ExecuteTradeInput struct {
+    TradeID     uuid.UUID
+    ActualEntry float64
+    ExecutedAt  time.Time
+    Reason      *string
+}
+
+type CloseTradeInput struct {
+    TradeID    uuid.UUID
+    ClosePrice float64
+    ExecutedAt time.Time
+    Reason     *string
+}
+
+type CancelTradeInput struct {
+    TradeID    uuid.UUID
+    ExecutedAt time.Time
+    Reason     string
+}
+
 func NewExecutionService(
-	pool *pgxpool.Pool,
-	tradeRepo *repositories.TradeRepository,
-	executionRepo *repositories.ExecutionRepository,
-	intentRepo *repositories.IntentRepository,
+    tradeRepo *repositories.TradeRepository,
+    executionRepo *repositories.ExecutionRepository,
+    intentRepo *repositories.IntentRepository,
+    pool *pgxpool.Pool,
 ) *ExecutionService {
-	return &ExecutionService{
-		pool:          pool,
-		tradeRepo:     tradeRepo,
-		executionRepo: executionRepo,
-		intentRepo:    intentRepo,
-	}
+    return &ExecutionService{
+        tradeRepo:     tradeRepo,
+        executionRepo: executionRepo,
+        intentRepo:    intentRepo,
+        pool:          pool,
+    }
 }
 
 // RecordExecution records a market execution with SERIALIZABLE isolation
@@ -272,4 +292,86 @@ func parseDecimal(s string) (float64, error) {
 	var f float64
 	_, err := fmt.Sscanf(s, "%f", &f)
 	return f, err
+}
+
+// ExecuteTrade executes a trade entry
+func (s *ExecutionService) ExecuteTrade(ctx context.Context, input ExecuteTradeInput) error {
+	// Load trade to get planned position size
+	trade, err := s.tradeRepo.GetTradeByID(ctx, input.TradeID)
+	if err != nil {
+		return fmt.Errorf("get trade: %w", err)
+	}
+	
+	plannedSize, err := parseDecimal(trade.PlannedPositionSize)
+	if err != nil {
+		return fmt.Errorf("parse planned size: %w", err)
+	}
+	
+	reason := ""
+	if input.Reason != nil {
+		reason = *input.Reason
+	}
+	
+	_, err = s.RecordExecution(
+		ctx,
+		input.TradeID,
+		string(domain.EventEntry),
+		input.ActualEntry,
+		plannedSize,
+		reason,
+	)
+	return err
+}
+
+// CloseTrade closes a trade position
+func (s *ExecutionService) CloseTrade(ctx context.Context, input CloseTradeInput) error {
+	// Load executions to compute remaining position
+	executions, err := s.executionRepo.GetExecutionsByTradeID(ctx, input.TradeID)
+	if err != nil {
+		return fmt.Errorf("get executions: %w", err)
+	}
+	
+	// Load trade to get planned size
+	trade, err := s.tradeRepo.GetTradeByID(ctx, input.TradeID)
+	if err != nil {
+		return fmt.Errorf("get trade: %w", err)
+	}
+	
+	plannedSize, err := parseDecimal(trade.PlannedPositionSize)
+	if err != nil {
+		return fmt.Errorf("parse planned size: %w", err)
+	}
+	
+	// Compute remaining position
+	tradeExecs := mapToTradeExecutions(executions)
+	remainingSize, err := ComputeRemainingPosition(plannedSize, tradeExecs)
+	if err != nil {
+		return fmt.Errorf("compute remaining: %w", err)
+	}
+	
+	reason := ""
+	if input.Reason != nil {
+		reason = *input.Reason
+	}
+	
+	_, err = s.RecordExecution(
+		ctx,
+		input.TradeID,
+		string(domain.EventManualClose),
+		input.ClosePrice,
+		remainingSize,
+		reason,
+	)
+	return err
+}
+
+// CancelTrade cancels a planned trade
+func (s *ExecutionService) CancelTrade(ctx context.Context, input CancelTradeInput) error {
+	_, err := s.RecordIntent(
+		ctx,
+		input.TradeID,
+		string(domain.IntentCancel),
+		input.Reason,
+	)
+	return err
 }
