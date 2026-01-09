@@ -2,6 +2,7 @@ package services
 
 import (
 	"errors"
+	"fmt"
 	"math"
 )
 
@@ -136,4 +137,77 @@ func ValidateTradeGeometry(entry, sl, tp float64, bias string) error {
 	}
 	
 	return nil
+}
+
+// ComputeMaxPositionSize calculates maximum position size based on leverage
+// contractSize: units per lot (e.g., 100,000 for EURUSD standard lot)
+func ComputeMaxPositionSize(balance float64, leverage int, contractSize float64) (float64, error) {
+	if balance <= 0 {
+		return 0, errors.New("balance must be positive")
+	}
+	if leverage <= 0 {
+		return 0, errors.New("leverage must be positive")
+	}
+	if contractSize <= 0 {
+		return 0, errors.New("contract size must be positive")
+	}
+
+	maxPositionSize := balance * float64(leverage) / contractSize
+	return maxPositionSize, nil
+}
+
+// ValidateEntryPrice checks if actual entry is within tolerance of planned
+func ValidateEntryPrice(
+	plannedEntry float64,
+	actualEntry float64,
+	pipValue float64,
+	maxSlippagePips float64,
+) error {
+	if plannedEntry <= 0 || actualEntry <= 0 {
+		return errors.New("prices must be positive")
+	}
+	
+	slippagePips := math.Abs(actualEntry-plannedEntry) / pipValue
+	
+	if slippagePips > maxSlippagePips {
+		return fmt.Errorf(
+			"entry slippage %.2f pips exceeds max %.2f pips",
+			slippagePips,
+			maxSlippagePips,
+		)
+	}
+	
+	return nil
+}
+
+// ComputeExecutionPnL calculates PnL for an execution event
+func ComputeExecutionPnL(
+	bias string,
+	entryPrice float64,
+	exitPrice float64,
+	positionSize float64,
+	pipValue float64,
+) (pnlMoney float64, pnlPips float64, err error) {
+	
+	if entryPrice <= 0 || exitPrice <= 0 {
+		return 0, 0, errors.New("prices must be positive")
+	}
+	
+	var priceMove float64
+	if bias == "long" {
+		priceMove = exitPrice - entryPrice
+	} else if bias == "short" {
+		priceMove = entryPrice - exitPrice
+	} else {
+		return 0, 0, errors.New("bias must be long or short")
+	}
+	
+	// Pips gained/lost
+	pnlPips = priceMove / pipValue
+	
+	// Money gained/lost (for standard lot: 1 pip = $10)
+	const pipValuePerLot = 10.0
+	pnlMoney = pnlPips * positionSize * pipValuePerLot
+	
+	return pnlMoney, pnlPips, nil
 }
