@@ -279,7 +279,7 @@ echo ""
 echo -e "${BLUE}📋 Step 11: Verifying final execution count...${NC}"
 
 FINAL_EXECS=$(curl -s "$BASE_URL/trades/$TRADE_ID/executions")
-FINAL_COUNT=$(echo "$FINAL_EXECS" | jq -r '. count')
+FINAL_COUNT=$(echo "$FINAL_EXECS" | jq -r '.count')
 EXECUTIONS=$(echo "$FINAL_EXECS" | jq -r '.executions')
 
 if [ "$FINAL_COUNT" != "2" ]; then
@@ -385,7 +385,7 @@ echo ""
 # ============================================
 echo -e "${BLUE}📋 Step 15: Verifying PnL calculation...${NC}"
 
-PNL=$(echo "$FINAL_EXECS" | jq -r '. executions[] | select(.event_type == "tp_hit") | .pnl')
+PNL=$(echo "$FINAL_EXECS" | jq -r '.executions[] | select(.event_type == "tp_hit") | .pnl')
 PNL_PIPS=$(echo "$FINAL_EXECS" | jq -r '.executions[] | select(.event_type == "tp_hit") | .pnl_pips')
 
 if [ "$PNL" != "null" ] && [ "$PNL_PIPS" != "null" ]; then
