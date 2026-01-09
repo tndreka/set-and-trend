@@ -1,188 +1,733 @@
--- Set The Trend MVP — PostgreSQL Schema
+--
+-- PostgreSQL database dump
+--
 
--- Enums (domain layer)
-CREATE TYPE trade_bias AS ENUM ('long', 'short');
-CREATE TYPE trade_result AS ENUM ('win', 'loss', 'breakeven');
-CREATE TYPE account_type AS ENUM ('demo', 'live');
-CREATE TYPE session_type AS ENUM ('london', 'new_york', 'asian', 'custom');
-CREATE TYPE emotion_type AS ENUM ('calm', 'anxious', 'fomo', 'revenge', 'other');
-CREATE TYPE rule_result_type AS ENUM ('PASS', 'FAIL');
-CREATE TYPE rule_timeframe AS ENUM ('W1');
-CREATE TYPE trade_lifecycle_status AS ENUM ('cancelled', 'invalidated');
-CREATE TYPE execution_event_type AS ENUM ('entry', 'tp_hit', 'sl_hit', 'partial_close', 'manual_close');
 
--- Core tables
+-- Dumped from database version 16.11 (Ubuntu 16.11-0ubuntu0.24.04.1)
+-- Dumped by pg_dump version 16.11 (Ubuntu 16.11-0ubuntu0.24.04.1)
 
-CREATE TABLE users (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+SET statement_timeout = 0;
+SET lock_timeout = 0;
+SET idle_in_transaction_session_timeout = 0;
+SET client_encoding = 'UTF8';
+SET standard_conforming_strings = on;
+SELECT pg_catalog.set_config('search_path', '', false);
+SET check_function_bodies = false;
+SET xmloption = content;
+SET client_min_messages = warning;
+SET row_security = off;
+
+--
+-- Name: account_type; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.account_type AS ENUM (
+    'demo',
+    'live'
 );
 
-CREATE TABLE accounts (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    type account_type NOT NULL,
-    broker_name TEXT NOT NULL,
-    currency CHAR(3) NOT NULL CHECK (currency ~ '^[A-Z]{3}$'),
-    balance DECIMAL(15,2) NOT NULL CHECK (balance >= 0),
-    leverage INTEGER NOT NULL CHECK (leverage > 0),
-    max_risk_per_trade_pct DECIMAL(5,2) NOT NULL CHECK (max_risk_per_trade_pct BETWEEN 0 AND 100),
-    max_daily_risk_pct DECIMAL(5,2) NOT NULL CHECK (max_daily_risk_pct BETWEEN 0 AND 100),
-    timezone TEXT NOT NULL CHECK (timezone ~ '^[^/]+(/[A-Za-z_/-]+)*$'), -- IANA TZ
-    preferred_session session_type NOT NULL DEFAULT 'london',
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+
+--
+-- Name: emotion_type; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.emotion_type AS ENUM (
+    'calm',
+    'anxious',
+    'fomo',
+    'revenge',
+    'other'
 );
 
-CREATE TABLE candles_weekly (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    timestamp_utc TIMESTAMP WITH TIME ZONE NOT NULL UNIQUE,
-    open DECIMAL(12,5) NOT NULL,
-    high DECIMAL(12,5) NOT NULL,
-    low DECIMAL(12,5) NOT NULL CHECK (low <= high),
-    close DECIMAL(12,5) NOT NULL,
-    volume BIGINT, -- optional
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+
+--
+-- Name: execution_event_type; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.execution_event_type AS ENUM (
+    'entry',
+    'partial_close',
+    'tp_hit',
+    'sl_hit',
+    'manual_close'
 );
 
-CREATE TABLE indicators_weekly (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    candle_id UUID NOT NULL UNIQUE REFERENCES candles_weekly(id) ON DELETE CASCADE,
-    ema20 DECIMAL(12,5) NOT NULL,
-    ema50 DECIMAL(12,5) NOT NULL,
-    ema200 DECIMAL(12,5) NOT NULL,
-    range_size DECIMAL(12,5) NOT NULL,
-    body_size DECIMAL(12,5) NOT NULL,
-    upper_wick DECIMAL(12,5) NOT NULL,
-    lower_wick DECIMAL(12,5) NOT NULL,
-    mid_price DECIMAL(12,5) NOT NULL,
-    last_swing_high_price DECIMAL(12,5),
-    last_swing_low_price DECIMAL(12,5),
-    computed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+
+--
+-- Name: rule_result_type; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.rule_result_type AS ENUM (
+    'PASS',
+    'FAIL'
 );
 
-CREATE TABLE rules (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    code TEXT NOT NULL UNIQUE, -- "W1_TREND_BULLISH"
-    name TEXT NOT NULL,
-    timeframe rule_timeframe NOT NULL DEFAULT 'W1',
-    description TEXT NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+
+--
+-- Name: rule_timeframe; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.rule_timeframe AS ENUM (
+    'W1'
 );
 
-CREATE TABLE rule_results (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    rule_id UUID NOT NULL REFERENCES rules(id),
-    candle_id UUID NOT NULL REFERENCES candles_weekly(id) ON DELETE CASCADE,
-    result rule_result_type NOT NULL,
-    evaluated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    confidence_score DECIMAL(3,2), -- 0.0 to 1.0 optional
-    UNIQUE(rule_id, candle_id) -- One result per rule per candle
+
+--
+-- Name: session_type; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.session_type AS ENUM (
+    'london',
+    'new_york',
+    'asian',
+    'custom'
 );
 
-CREATE TABLE trades (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    account_id UUID NOT NULL REFERENCES accounts(id),
-    candle_id UUID NOT NULL REFERENCES candles_weekly(id),
-    symbol TEXT NOT NULL DEFAULT 'EURUSD' CHECK (symbol = 'EURUSD'),
-    timeframe TEXT NOT NULL DEFAULT 'W1' CHECK (timeframe = 'W1'),
-    setup_timestamp_utc TIMESTAMP WITH TIME ZONE NOT NULL,
-    
-    -- ACCOUNT SNAPSHOTS (immutable)
-    account_balance_at_setup DECIMAL(15,2) NOT NULL,
-    leverage_at_setup INTEGER NOT NULL,
-    max_risk_per_trade_pct_at_setup DECIMAL(5,2) NOT NULL,
-    timezone_at_setup TEXT NOT NULL,
-    
-    -- PLANNED
-    bias trade_bias NOT NULL,
-    planned_entry DECIMAL(12,5) NOT NULL,
-    planned_sl DECIMAL(12,5) NOT NULL,
-    planned_tp DECIMAL(12,5) NOT NULL,
-    planned_rr DECIMAL(5,2) NOT NULL CHECK (planned_rr > 0),
-    planned_risk_pct DECIMAL(5,2) NOT NULL,
-    planned_risk_amount DECIMAL(15,2) NOT NULL,
-    planned_position_size DECIMAL(10,5) NOT NULL,
-    reason_for_trade TEXT NOT NULL,
-    
-    -- ACTUAL
-    actual_entry DECIMAL(12,5),
-    actual_sl DECIMAL(12,5),
-    actual_tp DECIMAL(12,5),
-    actual_risk_pct DECIMAL(5,2),
-    actual_risk_amount DECIMAL(15,2),
-    actual_position_size DECIMAL(10,5),
-    execution_timestamp_utc TIMESTAMP WITH TIME ZONE,
-    close_timestamp_utc TIMESTAMP WITH TIME ZONE,
-    close_price DECIMAL(12,5),
-    result trade_result,
-    pips_gained DECIMAL(8,2),
-    money_gained DECIMAL(15,2),
-    rr_realized DECIMAL(5,2),
-    duration_seconds INTEGER,
-    session session_type,
-    
-    -- LIFECYCLE (from migration 005)
-    lifecycle_status trade_lifecycle_status,
-    lifecycle_changed_at TIMESTAMP WITH TIME ZONE,
-    lifecycle_reason TEXT,
-    
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+
+--
+-- Name: trade_bias; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.trade_bias AS ENUM (
+    'long',
+    'short'
 );
 
-CREATE TABLE trade_feedback (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    trade_id UUID NOT NULL UNIQUE REFERENCES trades(id) ON DELETE CASCADE,
-    followed_plan BOOLEAN NOT NULL,
-    emotion_before emotion_type NOT NULL,
-    emotion_during emotion_type NOT NULL,
-    emotion_after emotion_type NOT NULL,
-    biggest_mistake TEXT,
-    screenshot_url TEXT,
-    feedback_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+
+--
+-- Name: trade_result; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.trade_result AS ENUM (
+    'win',
+    'loss',
+    'breakeven'
 );
 
--- Trade Executions Table (from migration 004)
-CREATE TABLE trade_executions (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    trade_id UUID NOT NULL REFERENCES trades(id) ON DELETE CASCADE,
-    event_type execution_event_type NOT NULL,
-    price DECIMAL(12, 5) NOT NULL CHECK (price > 0),
-    position_size DECIMAL(12, 8) NOT NULL CHECK (position_size > 0),
-    pnl DECIMAL(12, 2) NOT NULL DEFAULT 0,
-    pnl_pips DECIMAL(12, 2) DEFAULT 0,
-    executed_at TIMESTAMPTZ NOT NULL,
-    session session_type,
-    notes TEXT,
-    created_at TIMESTAMPTZ DEFAULT NOW()
+
+--
+-- Name: prevent_duplicate_entry(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.prevent_duplicate_entry() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    IF NEW.event_type = 'entry' THEN
+        IF EXISTS (
+            SELECT 1 FROM trade_executions
+            WHERE trade_id = NEW.trade_id
+            AND event_type = 'entry'
+        ) THEN
+            RAISE EXCEPTION 'Cannot enter: trade % already has entry', NEW.trade_id;
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: prevent_execution_after_close(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.prevent_execution_after_close() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    -- Check if trade is already closed
+    IF EXISTS (
+        SELECT 1 FROM trade_executions
+        WHERE trade_id = NEW.trade_id
+        AND event_type IN ('tp_hit', 'sl_hit', 'manual_close')
+    ) THEN
+        RAISE EXCEPTION 'Cannot execute:  trade % is already closed', NEW.trade_id;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: prevent_intent_after_execution(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.prevent_intent_after_execution() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    -- Check if trade has any executions
+    IF EXISTS (
+        SELECT 1 FROM trade_executions
+        WHERE trade_id = NEW.trade_id
+    ) THEN
+        RAISE EXCEPTION 'Cannot set intent: trade % has already been executed', NEW.trade_id;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+
+SET default_tablespace = '';
+
+SET default_table_access_method = heap;
+
+--
+-- Name: accounts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.accounts (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    type public.account_type NOT NULL,
+    broker_name text NOT NULL,
+    currency character(3) NOT NULL,
+    balance numeric(15,2) NOT NULL,
+    leverage integer NOT NULL,
+    max_risk_per_trade_pct numeric(5,2) NOT NULL,
+    max_daily_risk_pct numeric(5,2) NOT NULL,
+    timezone text NOT NULL,
+    preferred_session public.session_type DEFAULT 'london'::public.session_type NOT NULL,
+    updated_at timestamp with time zone DEFAULT now(),
+    CONSTRAINT accounts_balance_check CHECK ((balance >= (0)::numeric)),
+    CONSTRAINT accounts_currency_check CHECK ((currency ~ '^[A-Z]{3}$'::text)),
+    CONSTRAINT accounts_leverage_check CHECK ((leverage > 0)),
+    CONSTRAINT accounts_max_daily_risk_pct_check CHECK (((max_daily_risk_pct >= (0)::numeric) AND (max_daily_risk_pct <= (100)::numeric))),
+    CONSTRAINT accounts_max_risk_per_trade_pct_check CHECK (((max_risk_per_trade_pct >= (0)::numeric) AND (max_risk_per_trade_pct <= (100)::numeric))),
+    CONSTRAINT accounts_timezone_check CHECK ((timezone ~ '^[^/]+(/[A-Za-z_/-]+)*$'::text))
 );
 
--- Indexes for analytics (critical performance)
-CREATE INDEX idx_candles_timestamp ON candles_weekly(timestamp_utc);
-CREATE INDEX idx_trades_user_id ON trades(user_id);
-CREATE INDEX idx_trades_candle_id ON trades(candle_id);
-CREATE INDEX idx_trades_result ON trades(result);
-CREATE INDEX idx_trades_bias ON trades(bias);
-CREATE INDEX idx_trades_session ON trades(session);
-CREATE INDEX idx_rule_results_candle_id ON rule_results(candle_id);
-CREATE INDEX idx_rule_results_rule_id ON rule_results(rule_id);
-CREATE INDEX idx_trade_feedback_trade_id ON trade_feedback(trade_id);
--- Trade executions indexes (from migration 004)
-CREATE INDEX idx_trade_executions_trade_id ON trade_executions(trade_id);
-CREATE INDEX idx_trade_executions_executed_at ON trade_executions(executed_at);
-CREATE INDEX idx_trade_executions_event_type ON trade_executions(event_type);
-CREATE UNIQUE INDEX idx_trade_executions_unique_entry ON trade_executions(trade_id, event_type) WHERE event_type = 'entry';
 
--- Lifecycle index (from migration 005)
-CREATE INDEX idx_trades_lifecycle_status ON trades(lifecycle_status) WHERE lifecycle_status IS NOT NULL;
+--
+-- Name: candles_weekly; Type: TABLE; Schema: public; Owner: -
+--
 
--- Idempotency constraint (from migration 007)
-CREATE UNIQUE INDEX uniq_trade_account_candle_bias ON trades (account_id, candle_id, bias);
+CREATE TABLE public.candles_weekly (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    timestamp_utc timestamp with time zone NOT NULL,
+    open numeric(12,5) NOT NULL,
+    high numeric(12,5) NOT NULL,
+    low numeric(12,5) NOT NULL,
+    close numeric(12,5) NOT NULL,
+    volume bigint,
+    created_at timestamp with time zone DEFAULT now(),
+    CONSTRAINT candles_weekly_check CHECK ((low <= high))
+);
 
--- Sample data (for testing)
-INSERT INTO users (id) VALUES (gen_random_uuid()) ON CONFLICT DO NOTHING;
-INSERT INTO rules (code, name, timeframe, description) VALUES
-    ('W1_TREND_BULLISH', 'Weekly Trend Bullish', 'W1', 'EMA50 > EMA200 AND Close > EMA50'),
-    ('W1_TREND_BEARISH', 'Weekly Trend Bearish', 'W1', 'EMA50 < EMA200 AND Close < EMA50'),
-    ('W1_TOUCH_EMA20', 'Weekly EMA20 Touch', 'W1', 'Price touches EMA20 with proximity filter')
-ON CONFLICT DO NOTHING;
+
+--
+-- Name: indicators_weekly; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.indicators_weekly (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    candle_id uuid NOT NULL,
+    ema20 numeric(12,5) NOT NULL,
+    ema50 numeric(12,5) NOT NULL,
+    ema200 numeric(12,5) NOT NULL,
+    range_size numeric(12,5) NOT NULL,
+    body_size numeric(12,5) NOT NULL,
+    upper_wick numeric(12,5) NOT NULL,
+    lower_wick numeric(12,5) NOT NULL,
+    mid_price numeric(12,5) NOT NULL,
+    last_swing_high_price numeric(12,5),
+    last_swing_low_price numeric(12,5),
+    computed_at timestamp with time zone DEFAULT now()
+);
+
+
+--
+-- Name: rule_results; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.rule_results (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    rule_id uuid NOT NULL,
+    candle_id uuid NOT NULL,
+    result public.rule_result_type NOT NULL,
+    evaluated_at timestamp with time zone DEFAULT now(),
+    confidence_score numeric(3,2)
+);
+
+
+--
+-- Name: rules; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.rules (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    code text NOT NULL,
+    name text NOT NULL,
+    timeframe public.rule_timeframe DEFAULT 'W1'::public.rule_timeframe NOT NULL,
+    description text NOT NULL,
+    created_at timestamp with time zone DEFAULT now()
+);
+
+
+--
+-- Name: trade_executions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.trade_executions (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    trade_id uuid NOT NULL,
+    event_type public.execution_event_type NOT NULL,
+    price numeric(12,5) NOT NULL,
+    position_size numeric(12,8) NOT NULL,
+    executed_at timestamp with time zone NOT NULL,
+    session public.session_type,
+    reason text,
+    slippage_pips numeric(8,2),
+    pnl numeric(12,2),
+    pnl_pips numeric(12,2),
+    created_at timestamp with time zone DEFAULT now(),
+    CONSTRAINT valid_execution_data CHECK (((price > (0)::numeric) AND (position_size > (0)::numeric)))
+);
+
+
+--
+-- Name: TABLE trade_executions; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.trade_executions IS 'Append-only execution event log.  Contains MARKET INTERACTIONS only.  State is computed via:  SELECT event_type FROM trade_executions WHERE trade_id = ?  ORDER BY executed_at';
+
+
+--
+-- Name: trade_feedback; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.trade_feedback (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    trade_id uuid NOT NULL,
+    followed_plan boolean NOT NULL,
+    emotion_before public.emotion_type NOT NULL,
+    emotion_during public.emotion_type NOT NULL,
+    emotion_after public.emotion_type NOT NULL,
+    biggest_mistake text,
+    screenshot_url text,
+    feedback_at timestamp with time zone DEFAULT now()
+);
+
+
+--
+-- Name: trade_intents; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.trade_intents (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    trade_id uuid NOT NULL,
+    intent_type character varying(20) NOT NULL,
+    reason text NOT NULL,
+    created_at timestamp with time zone DEFAULT now(),
+    CONSTRAINT trade_intents_intent_type_check CHECK (((intent_type)::text = ANY ((ARRAY['cancel'::character varying, 'invalidate'::character varying])::text[])))
+);
+
+
+--
+-- Name: TABLE trade_intents; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.trade_intents IS 'Records user/system intent to cancel or invalidate trades. Separate from executions because these are NOT market interactions. ';
+
+
+--
+-- Name: trades; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.trades (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    account_id uuid NOT NULL,
+    candle_id uuid NOT NULL,
+    symbol text DEFAULT 'EURUSD'::text NOT NULL,
+    timeframe text DEFAULT 'W1'::text NOT NULL,
+    setup_timestamp_utc timestamp with time zone NOT NULL,
+    account_balance_at_setup numeric(15,2) NOT NULL,
+    leverage_at_setup integer NOT NULL,
+    max_risk_per_trade_pct_at_setup numeric(5,2) NOT NULL,
+    timezone_at_setup text NOT NULL,
+    bias public.trade_bias NOT NULL,
+    planned_entry numeric(12,5) NOT NULL,
+    planned_sl numeric(12,5) NOT NULL,
+    planned_tp numeric(12,5) NOT NULL,
+    planned_rr numeric(5,2) NOT NULL,
+    planned_risk_pct numeric(5,2) NOT NULL,
+    planned_risk_amount numeric(15,2) NOT NULL,
+    planned_position_size numeric(10,5) NOT NULL,
+    reason_for_trade text NOT NULL,
+    actual_entry numeric(12,5),
+    actual_sl numeric(12,5),
+    actual_tp numeric(12,5),
+    actual_risk_pct numeric(5,2),
+    actual_risk_amount numeric(15,2),
+    actual_position_size numeric(10,5),
+    execution_timestamp_utc timestamp with time zone,
+    close_timestamp_utc timestamp with time zone,
+    close_price numeric(12,5),
+    result public.trade_result,
+    pips_gained numeric(8,2),
+    money_gained numeric(15,2),
+    rr_realized numeric(5,2),
+    duration_seconds integer,
+    session public.session_type,
+    created_at timestamp with time zone DEFAULT now(),
+    CONSTRAINT trades_planned_rr_check CHECK ((planned_rr > (0)::numeric)),
+    CONSTRAINT trades_symbol_check CHECK ((symbol = 'EURUSD'::text)),
+    CONSTRAINT trades_timeframe_check CHECK ((timeframe = 'W1'::text))
+);
+
+
+--
+-- Name: TABLE trades; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.trades IS 'Trade state derived from trade_executions and trade_intents. ';
+
+
+--
+-- Name: users; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.users (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    created_at timestamp with time zone DEFAULT now()
+);
+
+
+--
+-- Name: accounts accounts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.accounts
+    ADD CONSTRAINT accounts_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: candles_weekly candles_weekly_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.candles_weekly
+    ADD CONSTRAINT candles_weekly_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: candles_weekly candles_weekly_timestamp_utc_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.candles_weekly
+    ADD CONSTRAINT candles_weekly_timestamp_utc_key UNIQUE (timestamp_utc);
+
+
+--
+-- Name: indicators_weekly indicators_weekly_candle_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.indicators_weekly
+    ADD CONSTRAINT indicators_weekly_candle_id_key UNIQUE (candle_id);
+
+
+--
+-- Name: indicators_weekly indicators_weekly_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.indicators_weekly
+    ADD CONSTRAINT indicators_weekly_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: rule_results rule_results_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.rule_results
+    ADD CONSTRAINT rule_results_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: rule_results rule_results_rule_id_candle_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.rule_results
+    ADD CONSTRAINT rule_results_rule_id_candle_id_key UNIQUE (rule_id, candle_id);
+
+
+--
+-- Name: rules rules_code_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.rules
+    ADD CONSTRAINT rules_code_key UNIQUE (code);
+
+
+--
+-- Name: rules rules_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.rules
+    ADD CONSTRAINT rules_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: trade_executions trade_executions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.trade_executions
+    ADD CONSTRAINT trade_executions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: trade_feedback trade_feedback_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.trade_feedback
+    ADD CONSTRAINT trade_feedback_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: trade_feedback trade_feedback_trade_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.trade_feedback
+    ADD CONSTRAINT trade_feedback_trade_id_key UNIQUE (trade_id);
+
+
+--
+-- Name: trade_intents trade_intents_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.trade_intents
+    ADD CONSTRAINT trade_intents_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: trades trades_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.trades
+    ADD CONSTRAINT trades_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: users users_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.users
+    ADD CONSTRAINT users_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: idx_candles_timestamp; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_candles_timestamp ON public.candles_weekly USING btree (timestamp_utc);
+
+
+--
+-- Name: idx_executions_trade_time; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_executions_trade_time ON public.trade_executions USING btree (trade_id, executed_at);
+
+
+--
+-- Name: idx_rule_results_candle_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_rule_results_candle_id ON public.rule_results USING btree (candle_id);
+
+
+--
+-- Name: idx_rule_results_rule_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_rule_results_rule_id ON public.rule_results USING btree (rule_id);
+
+
+--
+-- Name: idx_trade_executions_event_type; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_trade_executions_event_type ON public.trade_executions USING btree (event_type);
+
+
+--
+-- Name: idx_trade_executions_executed_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_trade_executions_executed_at ON public.trade_executions USING btree (executed_at);
+
+
+--
+-- Name: idx_trade_executions_trade_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_trade_executions_trade_id ON public.trade_executions USING btree (trade_id);
+
+
+--
+-- Name: idx_trade_executions_unique_entry; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_trade_executions_unique_entry ON public.trade_executions USING btree (trade_id, event_type) WHERE (event_type = 'entry'::public.execution_event_type);
+
+
+--
+-- Name: idx_trade_feedback_trade_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_trade_feedback_trade_id ON public.trade_feedback USING btree (trade_id);
+
+
+--
+-- Name: idx_trade_intents_unique; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_trade_intents_unique ON public.trade_intents USING btree (trade_id);
+
+
+--
+-- Name: idx_trades_bias; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_trades_bias ON public.trades USING btree (bias);
+
+
+--
+-- Name: idx_trades_candle_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_trades_candle_id ON public.trades USING btree (candle_id);
+
+
+--
+-- Name: idx_trades_result; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_trades_result ON public.trades USING btree (result);
+
+
+--
+-- Name: idx_trades_session; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_trades_session ON public.trades USING btree (session);
+
+
+--
+-- Name: idx_trades_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_trades_user_id ON public.trades USING btree (user_id);
+
+
+--
+-- Name: uniq_trade_account_candle_bias; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX uniq_trade_account_candle_bias ON public.trades USING btree (account_id, candle_id, bias);
+
+
+--
+-- Name: trade_executions trg_prevent_duplicate_entry; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_prevent_duplicate_entry BEFORE INSERT ON public.trade_executions FOR EACH ROW EXECUTE FUNCTION public.prevent_duplicate_entry();
+
+
+--
+-- Name: trade_executions trg_prevent_execution_after_close; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_prevent_execution_after_close BEFORE INSERT ON public.trade_executions FOR EACH ROW EXECUTE FUNCTION public.prevent_execution_after_close();
+
+
+--
+-- Name: trade_intents trg_prevent_intent_after_execution; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_prevent_intent_after_execution BEFORE INSERT ON public.trade_intents FOR EACH ROW EXECUTE FUNCTION public.prevent_intent_after_execution();
+
+
+--
+-- Name: accounts accounts_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.accounts
+    ADD CONSTRAINT accounts_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: indicators_weekly indicators_weekly_candle_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.indicators_weekly
+    ADD CONSTRAINT indicators_weekly_candle_id_fkey FOREIGN KEY (candle_id) REFERENCES public.candles_weekly(id) ON DELETE CASCADE;
+
+
+--
+-- Name: rule_results rule_results_candle_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.rule_results
+    ADD CONSTRAINT rule_results_candle_id_fkey FOREIGN KEY (candle_id) REFERENCES public.candles_weekly(id) ON DELETE CASCADE;
+
+
+--
+-- Name: rule_results rule_results_rule_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.rule_results
+    ADD CONSTRAINT rule_results_rule_id_fkey FOREIGN KEY (rule_id) REFERENCES public.rules(id);
+
+
+--
+-- Name: trade_executions trade_executions_trade_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.trade_executions
+    ADD CONSTRAINT trade_executions_trade_id_fkey FOREIGN KEY (trade_id) REFERENCES public.trades(id) ON DELETE CASCADE;
+
+
+--
+-- Name: trade_feedback trade_feedback_trade_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.trade_feedback
+    ADD CONSTRAINT trade_feedback_trade_id_fkey FOREIGN KEY (trade_id) REFERENCES public.trades(id) ON DELETE CASCADE;
+
+
+--
+-- Name: trade_intents trade_intents_trade_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.trade_intents
+    ADD CONSTRAINT trade_intents_trade_id_fkey FOREIGN KEY (trade_id) REFERENCES public.trades(id) ON DELETE CASCADE;
+
+
+--
+-- Name: trades trades_account_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.trades
+    ADD CONSTRAINT trades_account_id_fkey FOREIGN KEY (account_id) REFERENCES public.accounts(id);
+
+
+--
+-- Name: trades trades_candle_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.trades
+    ADD CONSTRAINT trades_candle_id_fkey FOREIGN KEY (candle_id) REFERENCES public.candles_weekly(id);
+
+
+--
+-- Name: trades trades_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.trades
+    ADD CONSTRAINT trades_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- PostgreSQL database dump complete
+--
+

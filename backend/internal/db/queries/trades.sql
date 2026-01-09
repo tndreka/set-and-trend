@@ -81,25 +81,10 @@ INSERT INTO trade_executions (
     pnl_pips,
     executed_at,
     session,
-    notes
+    reason
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
 )
 RETURNING *;
 
--- name: GetTradeWithLifecycle :one
-SELECT 
-    id,
-    lifecycle_status,
-    lifecycle_changed_at,
-    lifecycle_reason
-FROM trades
-WHERE id = $1;
 
--- name: UpdateTradeLifecycle :exec
-UPDATE trades
-SET
-    lifecycle_status = $2,
-    lifecycle_changed_at = $3,
-    lifecycle_reason = $4
-WHERE id = $1;

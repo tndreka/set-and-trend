@@ -22,13 +22,15 @@ func main() {
 		log.Fatal("config.Load:", err)
 	}
 
-	queries, err := config.NewDatabase(ctx, cfg)
+	queries, pool, err := config.NewDatabase(ctx, cfg)
 	if err != nil {
 		log.Fatal("database:", err)
 	}
 
 	log.Println("✓ Database connected with 100 connection pool")
-
+	// Extract the pool for repositories that need direct access
+	// Note: queries is *db. Queries which wraps the pool
+	// We'll need to modify config. NewDatabase to return the pool as well
 	userRepo := repositories.NewUserRepository(queries)
 	accountRepo := repositories.NewAccountRepository(queries)
 	userHandler := handlers.NewUserHandler(userRepo)
@@ -40,6 +42,10 @@ func main() {
 	tradeRepo := repositories.NewTradeRepository(queries)
 	tradeService := services.NewTradeService(tradeRepo, accountRepo, candleRepo)
 	tradeHandler := handlers.NewTradeHandler(tradeService)
+	execRepo := repositories.NewExecutionRepository(pool)
+	intentRepo := repositories.NewIntentRepository(pool)
+	executionService := services.NewExecutionService(tradeRepo, execRepo, intentRepo, pool)
+	executionHandler := handlers.NewExecutionHandler(executionService, execRepo)
 
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
@@ -52,6 +58,11 @@ func main() {
 		api.GET("/candles/latest", candleHandler.GetLatestCandles)
 		api.POST("/indicators/compute", indicatorHandler.ComputeIndicator)
 		api.POST("/trades", tradeHandler.CreateTrade)
+		api.POST("/trades/:id/execute", executionHandler. ExecuteTrade)
+		api.POST("/trades/:id/close", executionHandler.CloseTrade)
+		api.POST("/trades/:id/cancel", executionHandler.CancelTrade)
+		api.GET("/trades/:id/state", executionHandler.GetTradeState)
+		api.GET("/trades/:id/executions", executionHandler.GetTradeExecutions)
 	}
 
 	r.GET("/health", func(c *gin.Context) {

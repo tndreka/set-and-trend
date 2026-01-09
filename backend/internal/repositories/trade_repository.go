@@ -3,9 +3,11 @@ package repositories
 import (
 	"context"
 	"time"
+	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5"
 	"github.com/shopspring/decimal"
 	"set-and-trend/backend/internal/db"
 )
@@ -96,7 +98,7 @@ func (r *TradeRepository) CreateTrade(ctx context.Context, params TradeCreatePar
 		LeverageAtSetup:           params.LeverageAtSetup,
 		MaxRiskPerTradePctAtSetup: riskPctDec,
 		TimezoneAtSetup:           params.TimezoneAtSetup,
-		Bias:                      params.Bias,
+		Bias:                      db.TradeBias(params.Bias),
 		PlannedEntry:              entryDec,
 		PlannedSl:                 slDec,
 		PlannedTp:                 tpDec,
@@ -122,7 +124,7 @@ func (r *TradeRepository) CreateTrade(ctx context.Context, params TradeCreatePar
 		LeverageAtSetup:           trade.LeverageAtSetup,
 		MaxRiskPerTradePctAtSetup: trade.MaxRiskPerTradePctAtSetup.String(),
 		TimezoneAtSetup:           trade.TimezoneAtSetup,
-		Bias:                      trade.Bias,
+		Bias:                      string(trade.Bias),
 		PlannedEntry:              trade.PlannedEntry.String(),
 		PlannedSL:                 trade.PlannedSl.String(),
 		PlannedTP:                 trade.PlannedTp.String(),
@@ -154,7 +156,7 @@ func (r *TradeRepository) GetTradeByID(ctx context.Context, id uuid.UUID) (*Trad
 		LeverageAtSetup:           trade.LeverageAtSetup,
 		MaxRiskPerTradePctAtSetup: trade.MaxRiskPerTradePctAtSetup.String(),
 		TimezoneAtSetup:           trade.TimezoneAtSetup,
-		Bias:                      trade.Bias,
+		Bias:                      string(trade.Bias),
 		PlannedEntry:              trade.PlannedEntry.String(),
 		PlannedSL:                 trade.PlannedSl.String(),
 		PlannedTP:                 trade.PlannedTp.String(),
@@ -195,7 +197,7 @@ func (r *TradeRepository) GetTradesByAccountAndCandle(
 			LeverageAtSetup:           t.LeverageAtSetup,
 			MaxRiskPerTradePctAtSetup: t.MaxRiskPerTradePctAtSetup.String(),
 			TimezoneAtSetup:           t.TimezoneAtSetup,
-			Bias:                      t.Bias,
+			Bias:                      string(t.Bias),
 			PlannedEntry:              t.PlannedEntry.String(),
 			PlannedSL:                 t.PlannedSl.String(),
 			PlannedTP:                 t.PlannedTp.String(),
@@ -209,3 +211,48 @@ func (r *TradeRepository) GetTradesByAccountAndCandle(
 	}
 	return trades, nil
 }
+
+
+func (r *TradeRepository) GetTradeTx(ctx context.Context, tx pgx.Tx, tradeID uuid.UUID) (*Trade, error) {
+	var trade Trade
+	
+	err := tx. QueryRow(ctx, `
+		SELECT id, user_id, account_id, candle_id, symbol, timeframe,
+			setup_timestamp_utc, account_balance_at_setup, leverage_at_setup,
+			max_risk_per_trade_pct_at_setup, timezone_at_setup, bias,
+			planned_entry, planned_sl, planned_tp, planned_rr,
+			planned_risk_pct, planned_risk_amount, planned_position_size,
+			reason_for_trade, created_at
+		FROM trades
+		WHERE id = $1
+	    `, tradeID).Scan(
+		&trade.ID,
+		&trade.UserID,
+		&trade.AccountID,
+		&trade.CandleID,
+		&trade.Symbol,
+		&trade. Timeframe,
+		&trade.SetupTimestampUTC,
+		&trade.AccountBalanceAtSetup,
+		&trade.LeverageAtSetup,
+		&trade.MaxRiskPerTradePctAtSetup,
+		&trade.TimezoneAtSetup,
+		&trade. Bias,
+		&trade. PlannedEntry,
+		&trade.PlannedSL,
+		&trade.PlannedTP,
+		&trade.PlannedRR,
+		&trade.PlannedRiskPct,
+		&trade.PlannedRiskAmount,
+		&trade.PlannedPositionSize,
+		&trade.ReasonForTrade,
+		&trade.CreatedAt,
+	)
+	
+	if err != nil {
+		return nil, fmt.Errorf("get trade (tx): %w", err)
+	}
+	
+	return &trade, nil
+}
+

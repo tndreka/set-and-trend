@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sort"
 	"time"
+	
+//	"set-and-trend/backend/internal/domain"
 )
 
 // TradeState represents the current state of a trade
@@ -29,18 +31,27 @@ type TradeExecution struct {
 	PnLPips      float64
 }
 
-// DeriveTradeState determines current state from ordered execution history
+// TradeIntent represents a user decision
+type TradeIntent struct {
+	IntentType string
+	Reason     string
+	CreatedAt  time.Time
+}
+
+// DeriveTradeState determines current state from executions + intents
 func DeriveTradeState(
-	lifecycleStatus *string,
 	executions []TradeExecution,
+	intent *TradeIntent,
 ) (TradeState, error) {
-	// Terminal non-execution states
-	if lifecycleStatus != nil {
-		switch *lifecycleStatus {
-		case "cancelled":
+	// Check intent first (takes precedence)
+	if intent != nil {
+		switch intent.IntentType {
+		case "cancel":
 			return StateCancelled, nil
-		case "invalidated":
+		case "invalidate":
 			return StateInvalidated, nil
+		default:
+			return "", fmt.Errorf("unknown intent type: %s", intent. IntentType)
 		}
 	}
 	
@@ -69,15 +80,15 @@ func DeriveTradeState(
 		}
 		
 		// Apply transition
-		switch exec.EventType {
+		switch exec. EventType {
 		case "entry":
 			currentState = StateOpen
-		case "partial_close":
+		case "partial_close": 
 			if currentState == StateOpen {
 				currentState = StatePartial
 			}
 			// If already partial, stays partial
-		case "tp_hit", "sl_hit", "manual_close":
+		case "tp_hit", "sl_hit", "manual_close": 
 			currentState = StateClosed
 		}
 	}
@@ -89,9 +100,7 @@ func DeriveTradeState(
 func CanTransition(currentState TradeState, eventType string) error {
 	validTransitions := map[TradeState][]string{
 		StatePlanned: {
-			"entry",      // → open
-			"cancel",     // → cancelled
-			"invalidate", // → invalidated
+			"entry", // → open
 		},
 		StateOpen: {
 			"partial_close", // → partial
@@ -117,14 +126,59 @@ func CanTransition(currentState TradeState, eventType string) error {
 		}
 	}
 	
-	return fmt.Errorf(
+	return fmt. Errorf(
 		"invalid transition: cannot %s from %s state",
 		eventType,
 		currentState,
 	)
 }
 
-// ComputeRemainingPosition calculates position size remaining after executions
+// GetActualEntryPrice extracts the ACTUAL entry price from executions
+// This is CRITICAL for correct PnL calculation (not planned entry)
+func GetActualEntryPrice(executions []TradeExecution) (float64, error) {
+	for _, exec := range executions {
+		if exec.EventType == "entry" {
+			if exec.Price <= 0 {
+				return 0, errors.New("entry price must be positive")
+			}
+			return exec.Price, nil
+		}
+	}
+	return 0, errors.New("no entry execution found")
+}
+
+// ComputePnL calculates profit/loss using ACTUAL entry price (not planned)
+func ComputePnL(
+	bias string,
+	executions []TradeExecution,
+	closePrice float64,
+	positionSize float64,
+	pipValue float64,
+) (pnlMoney float64, pnlPips float64, err error) {
+	// Get ACTUAL entry price (critical fix)
+	entryPrice, err := GetActualEntryPrice(executions)
+	if err != nil {
+		return 0, 0, fmt.Errorf("get entry price:  %w", err)
+	}
+	
+	// Calculate pip difference
+	var pipDiff float64
+	if bias == "long" {
+		pipDiff = (closePrice - entryPrice) / pipValue
+	} else if bias == "short" {
+		pipDiff = (entryPrice - closePrice) / pipValue
+	} else {
+		return 0, 0, fmt.Errorf("invalid bias: %s", bias)
+	}
+	
+	// Calculate money gained/lost
+	pnlPips = pipDiff
+	pnlMoney = pipDiff * pipValue * positionSize * 100000 // Standard lot conversion
+	
+	return pnlMoney, pnlPips, nil
+}
+
+// ComputeRemainingPosition calculates how much position is still open
 func ComputeRemainingPosition(
 	plannedPositionSize float64,
 	executions []TradeExecution,
@@ -148,30 +202,30 @@ func ComputeRemainingPosition(
 		case "entry":
 			entryFilled = true
 			
-		case "partial_close":
+		case "partial_close": 
 			if !entryFilled {
 				return 0, errors.New("partial close before entry")
 			}
-			if exec.PositionSize <= 0 {
+			if exec. PositionSize <= 0 {
 				return 0, errors.New("partial close size must be positive")
 			}
 			if exec.PositionSize >= remaining {
 				return 0, fmt.Errorf(
-					"partial close %.4f exceeds remaining %.4f",
+					"partial close %. 4f exceeds remaining %.4f",
 					exec.PositionSize,
 					remaining,
 				)
 			}
-			remaining -= exec.PositionSize
+			remaining -= exec. PositionSize
 			
-		case "tp_hit", "sl_hit", "manual_close":
+		case "tp_hit", "sl_hit", "manual_close": 
 			if !entryFilled {
-				return 0, errors.New("close event before entry")
+				return 0, errors. New("close event before entry")
 			}
 			if exec.PositionSize != remaining {
 				return 0, fmt.Errorf(
-					"close size %.4f does not match remaining %.4f",
-					exec.PositionSize,
+					"close size %.4f does not match remaining %. 4f",
+					exec. PositionSize,
 					remaining,
 				)
 			}
@@ -191,20 +245,20 @@ func ValidateExecutionSize(
 ) error {
 	remaining, err := ComputeRemainingPosition(plannedSize, existingExecutions)
 	if err != nil {
-		return fmt.Errorf("compute remaining: %w", err)
+		return fmt. Errorf("compute remaining:  %w", err)
 	}
 	
 	switch eventType {
 	case "entry":
 		if executionSize != plannedSize {
-			return fmt.Errorf(
-				"entry size %.4f must match planned %.4f",
+			return fmt. Errorf(
+				"entry size %.4f must match planned %. 4f",
 				executionSize,
 				plannedSize,
 			)
 		}
 		
-	case "partial_close":
+	case "partial_close": 
 		if executionSize <= 0 {
 			return errors.New("partial close size must be positive")
 		}
@@ -231,19 +285,19 @@ func ValidateExecutionSize(
 
 // ValidateTradeExecutable checks if trade can accept execution events
 func ValidateTradeExecutable(
-	lifecycleStatus *string,
 	executions []TradeExecution,
+	intent *TradeIntent,
 ) error {
-	// Cannot execute if lifecycle status is terminal
-	if lifecycleStatus != nil {
+	// Cannot execute if trade has intent (cancelled/invalidated)
+	if intent != nil {
 		return fmt.Errorf(
-			"cannot execute: trade is %s",
-			*lifecycleStatus,
+			"cannot execute:  trade is %s",
+			intent.IntentType,
 		)
 	}
 	
 	// Derive current state from executions
-	state, err := DeriveTradeState(lifecycleStatus, executions)
+	state, err := DeriveTradeState(executions, nil)
 	if err != nil {
 		return fmt.Errorf("derive state: %w", err)
 	}
