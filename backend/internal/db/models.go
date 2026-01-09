@@ -7,6 +7,7 @@ package db
 import (
 	"database/sql/driver"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -98,6 +99,51 @@ func (ns NullEmotionType) Value() (driver.Value, error) {
 		return nil, nil
 	}
 	return string(ns.EmotionType), nil
+}
+
+type ExecutionEventType string
+
+const (
+	ExecutionEventTypeEntry        ExecutionEventType = "entry"
+	ExecutionEventTypeTpHit        ExecutionEventType = "tp_hit"
+	ExecutionEventTypeSlHit        ExecutionEventType = "sl_hit"
+	ExecutionEventTypePartialClose ExecutionEventType = "partial_close"
+	ExecutionEventTypeManualClose  ExecutionEventType = "manual_close"
+)
+
+func (e *ExecutionEventType) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = ExecutionEventType(s)
+	case string:
+		*e = ExecutionEventType(s)
+	default:
+		return fmt.Errorf("unsupported scan type for ExecutionEventType: %T", src)
+	}
+	return nil
+}
+
+type NullExecutionEventType struct {
+	ExecutionEventType ExecutionEventType `json:"execution_event_type"`
+	Valid              bool               `json:"valid"` // Valid is true if ExecutionEventType is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullExecutionEventType) Scan(value interface{}) error {
+	if value == nil {
+		ns.ExecutionEventType, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.ExecutionEventType.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullExecutionEventType) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.ExecutionEventType), nil
 }
 
 type RuleResultType string
@@ -269,6 +315,48 @@ func (ns NullTradeBias) Value() (driver.Value, error) {
 	return string(ns.TradeBias), nil
 }
 
+type TradeLifecycleStatus string
+
+const (
+	TradeLifecycleStatusCancelled   TradeLifecycleStatus = "cancelled"
+	TradeLifecycleStatusInvalidated TradeLifecycleStatus = "invalidated"
+)
+
+func (e *TradeLifecycleStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = TradeLifecycleStatus(s)
+	case string:
+		*e = TradeLifecycleStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for TradeLifecycleStatus: %T", src)
+	}
+	return nil
+}
+
+type NullTradeLifecycleStatus struct {
+	TradeLifecycleStatus TradeLifecycleStatus `json:"trade_lifecycle_status"`
+	Valid                bool                 `json:"valid"` // Valid is true if TradeLifecycleStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullTradeLifecycleStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.TradeLifecycleStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.TradeLifecycleStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullTradeLifecycleStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.TradeLifecycleStatus), nil
+}
+
 type TradeResult string
 
 const (
@@ -373,42 +461,59 @@ type RuleResult struct {
 }
 
 type Trade struct {
-	ID                        uuid.UUID          `json:"id"`
-	UserID                    uuid.UUID          `json:"user_id"`
-	AccountID                 uuid.UUID          `json:"account_id"`
-	CandleID                  uuid.UUID          `json:"candle_id"`
-	Symbol                    string             `json:"symbol"`
-	Timeframe                 string             `json:"timeframe"`
-	SetupTimestampUtc         pgtype.Timestamptz `json:"setup_timestamp_utc"`
-	AccountBalanceAtSetup     decimal.Decimal    `json:"account_balance_at_setup"`
-	LeverageAtSetup           int32              `json:"leverage_at_setup"`
-	MaxRiskPerTradePctAtSetup decimal.Decimal    `json:"max_risk_per_trade_pct_at_setup"`
-	TimezoneAtSetup           string             `json:"timezone_at_setup"`
-	Bias                      string             `json:"bias"`
-	PlannedEntry              decimal.Decimal    `json:"planned_entry"`
-	PlannedSl                 decimal.Decimal    `json:"planned_sl"`
-	PlannedTp                 decimal.Decimal    `json:"planned_tp"`
-	PlannedRr                 decimal.Decimal    `json:"planned_rr"`
-	PlannedRiskPct            decimal.Decimal    `json:"planned_risk_pct"`
-	PlannedRiskAmount         decimal.Decimal    `json:"planned_risk_amount"`
-	PlannedPositionSize       decimal.Decimal    `json:"planned_position_size"`
-	ReasonForTrade            string             `json:"reason_for_trade"`
-	ActualEntry               decimal.Decimal    `json:"actual_entry"`
-	ActualSl                  decimal.Decimal    `json:"actual_sl"`
-	ActualTp                  decimal.Decimal    `json:"actual_tp"`
-	ActualRiskPct             decimal.Decimal    `json:"actual_risk_pct"`
-	ActualRiskAmount          decimal.Decimal    `json:"actual_risk_amount"`
-	ActualPositionSize        decimal.Decimal    `json:"actual_position_size"`
-	ExecutionTimestampUtc     pgtype.Timestamptz `json:"execution_timestamp_utc"`
-	CloseTimestampUtc         pgtype.Timestamptz `json:"close_timestamp_utc"`
-	ClosePrice                decimal.Decimal    `json:"close_price"`
-	Result                    NullTradeResult    `json:"result"`
-	PipsGained                decimal.Decimal    `json:"pips_gained"`
-	MoneyGained               decimal.Decimal    `json:"money_gained"`
-	RrRealized                decimal.Decimal    `json:"rr_realized"`
-	DurationSeconds           pgtype.Int4        `json:"duration_seconds"`
-	Session                   NullSessionType    `json:"session"`
-	CreatedAt                 pgtype.Timestamptz `json:"created_at"`
+	ID                        uuid.UUID                `json:"id"`
+	UserID                    uuid.UUID                `json:"user_id"`
+	AccountID                 uuid.UUID                `json:"account_id"`
+	CandleID                  uuid.UUID                `json:"candle_id"`
+	Symbol                    string                   `json:"symbol"`
+	Timeframe                 string                   `json:"timeframe"`
+	SetupTimestampUtc         pgtype.Timestamptz       `json:"setup_timestamp_utc"`
+	AccountBalanceAtSetup     decimal.Decimal          `json:"account_balance_at_setup"`
+	LeverageAtSetup           int32                    `json:"leverage_at_setup"`
+	MaxRiskPerTradePctAtSetup decimal.Decimal          `json:"max_risk_per_trade_pct_at_setup"`
+	TimezoneAtSetup           string                   `json:"timezone_at_setup"`
+	Bias                      string                   `json:"bias"`
+	PlannedEntry              decimal.Decimal          `json:"planned_entry"`
+	PlannedSl                 decimal.Decimal          `json:"planned_sl"`
+	PlannedTp                 decimal.Decimal          `json:"planned_tp"`
+	PlannedRr                 decimal.Decimal          `json:"planned_rr"`
+	PlannedRiskPct            decimal.Decimal          `json:"planned_risk_pct"`
+	PlannedRiskAmount         decimal.Decimal          `json:"planned_risk_amount"`
+	PlannedPositionSize       decimal.Decimal          `json:"planned_position_size"`
+	ReasonForTrade            string                   `json:"reason_for_trade"`
+	ActualEntry               decimal.Decimal          `json:"actual_entry"`
+	ActualSl                  decimal.Decimal          `json:"actual_sl"`
+	ActualTp                  decimal.Decimal          `json:"actual_tp"`
+	ActualRiskPct             decimal.Decimal          `json:"actual_risk_pct"`
+	ActualRiskAmount          decimal.Decimal          `json:"actual_risk_amount"`
+	ActualPositionSize        decimal.Decimal          `json:"actual_position_size"`
+	ExecutionTimestampUtc     pgtype.Timestamptz       `json:"execution_timestamp_utc"`
+	CloseTimestampUtc         pgtype.Timestamptz       `json:"close_timestamp_utc"`
+	ClosePrice                decimal.Decimal          `json:"close_price"`
+	Result                    NullTradeResult          `json:"result"`
+	PipsGained                decimal.Decimal          `json:"pips_gained"`
+	MoneyGained               decimal.Decimal          `json:"money_gained"`
+	RrRealized                decimal.Decimal          `json:"rr_realized"`
+	DurationSeconds           pgtype.Int4              `json:"duration_seconds"`
+	Session                   NullSessionType          `json:"session"`
+	LifecycleStatus           NullTradeLifecycleStatus `json:"lifecycle_status"`
+	LifecycleChangedAt        pgtype.Timestamptz       `json:"lifecycle_changed_at"`
+	LifecycleReason           pgtype.Text              `json:"lifecycle_reason"`
+	CreatedAt                 pgtype.Timestamptz       `json:"created_at"`
+}
+
+type TradeExecution struct {
+	ID           uuid.UUID          `json:"id"`
+	TradeID      uuid.UUID          `json:"trade_id"`
+	EventType    string             `json:"event_type"`
+	Price        decimal.Decimal    `json:"price"`
+	PositionSize decimal.Decimal    `json:"position_size"`
+	Pnl          decimal.Decimal    `json:"pnl"`
+	PnlPips      decimal.Decimal    `json:"pnl_pips"`
+	ExecutedAt   time.Time          `json:"executed_at"`
+	Session      NullSessionType    `json:"session"`
+	Notes        pgtype.Text        `json:"notes"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 }
 
 type TradeFeedback struct {
