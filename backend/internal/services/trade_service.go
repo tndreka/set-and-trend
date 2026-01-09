@@ -12,15 +12,15 @@ import (
 )
 
 type TradeService struct {
-	tradeRepo   *repositories.TradeRepository
-	accountRepo *repositories.AccountRepository
-	candleRepo  *repositories.CandleRepository
+	tradeRepo   TradeRepo
+	accountRepo AccountRepo
+	candleRepo  CandleRepo
 }
 
 func NewTradeService(
-	tradeRepo *repositories.TradeRepository,
-	accountRepo *repositories.AccountRepository,
-	candleRepo *repositories.CandleRepository,
+	tradeRepo TradeRepo,
+	accountRepo AccountRepo,
+	candleRepo CandleRepo,
 ) *TradeService {
 	return &TradeService{
 		tradeRepo:   tradeRepo,
@@ -48,10 +48,9 @@ func (s *TradeService) CreateTrade(ctx context.Context, input CreateTradeInput) 
 	if err != nil {
 		return nil, fmt.Errorf("account not found: %w", err)
 	}
-
-	// 2. Load candle
-	candle, err := s.candleRepo.GetCandleByID(ctx, input.CandleID)
-	if err != nil {
+	
+	// 2. Verify candle exists (anchor only, no OHLC validation yet)
+	if _, err := s.candleRepo.GetCandleByID(ctx, input.CandleID); err != nil {
 		return nil, fmt.Errorf("candle not found: %w", err)
 	}
 
@@ -100,6 +99,33 @@ func (s *TradeService) CreateTrade(ctx context.Context, input CreateTradeInput) 
 		return nil, fmt.Errorf("RR calculation: %w", err)
 	}
 
+	// 5.5. Check for duplicate trade (idempotency - friendly error before DB constraint)
+	existingTrades, err := s.tradeRepo.GetTradesByAccountAndCandle(ctx, input.AccountID, input.CandleID)
+	if err != nil {
+		return nil, fmt.Errorf("duplicate check failed: %w", err)
+	}
+
+	for _, existing := range existingTrades {
+		if existing.Bias == input.Bias {
+			return nil, fmt.Errorf("duplicate trade: account %s already has %s trade on candle %s",
+				input.AccountID, input.Bias, input.CandleID)
+		}
+	}
+
+	// 5.6. Enforce minimum RR
+	if rr < constants.MinimumRR {
+		return nil, fmt.Errorf("trade rejected: RR %.2f is below minimum %.2f", rr, constants.MinimumRR)
+	}
+
+	// 5.7. Validate position size against leverage
+	maxPositionSize, err := ComputeMaxPositionSize(balance, account.Leverage, constants.ContractSizeEURUSD)
+	if err != nil {
+		return nil, fmt.Errorf("leverage check: %w", err)
+	}
+	if positionSize > maxPositionSize {
+		return nil, fmt.Errorf("position size %.2f lots exceeds max %.2f lots (leverage: %dx)",
+			positionSize, maxPositionSize, account.Leverage)
+	}
 	// 6. Create trade with immutable snapshots
 	trade, err := s.tradeRepo.CreateTrade(ctx, repositories.TradeCreateParams{
 		ID:                        uuid.New(),
