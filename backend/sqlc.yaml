@@ -70,3 +70,11 @@ sql:
             go_type:
               import: "github.com/shopspring/decimal"
               type: "Decimal"
+
+          # Trade execution event types
+          - db_type: "execution_event_type"
+            go_type: "string"
+
+          # Trade lifecycle status
+          - db_type: "trade_lifecycle_status"
+            go_type: "string"

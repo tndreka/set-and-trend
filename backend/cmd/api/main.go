@@ -11,6 +11,7 @@ import (
 	"set-and-trend/backend/internal/config"
 	"set-and-trend/backend/internal/handlers"
 	"set-and-trend/backend/internal/repositories"
+	"set-and-trend/backend/internal/services"
 )
 
 func main() {
