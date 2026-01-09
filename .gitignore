@@ -1,1 +1,15 @@
 /backend/.env
+
+# Backend build artifacts
+backend/api
+backend/api.log
+backend/*. exe
+backend/*.test
+backend/*.out
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
