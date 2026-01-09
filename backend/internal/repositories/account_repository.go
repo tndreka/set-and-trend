@@ -91,3 +91,26 @@ func (r *AccountRepository) CreateAccount(ctx context.Context, params AccountCre
 		UpdatedAt:          account.UpdatedAt.Time,
 	}, nil
 }
+
+// GetAccountByID retrieves an account by ID
+func (r *AccountRepository) GetAccountByID(ctx context.Context, id uuid.UUID) (*Account, error) {
+	acc, err := r.q.GetAccountByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Account{
+		ID:                 acc.ID,
+		UserID:             acc.UserID,
+		Type:               acc.Type,
+		BrokerName:         acc.BrokerName,
+		Currency:           acc.Currency,
+		Balance:            acc.Balance.String(),
+		Leverage:           int(acc.Leverage),
+		MaxRiskPerTradePct: acc.MaxRiskPerTradePct.InexactFloat64(),
+		MaxDailyRiskPct:    acc.MaxDailyRiskPct.InexactFloat64(),
+		Timezone:           acc.Timezone,
+		PreferredSession:   acc.PreferredSession,
+		UpdatedAt:          acc.UpdatedAt.Time,
+	}, nil
+}
