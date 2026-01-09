@@ -166,3 +166,46 @@ func (r *TradeRepository) GetTradeByID(ctx context.Context, id uuid.UUID) (*Trad
 		CreatedAt:                 trade.CreatedAt.Time,
 	}, nil
 }
+
+// GetTradesByAccountAndCandle retrieves all trades for a specific account and candle
+func (r *TradeRepository) GetTradesByAccountAndCandle(
+	ctx context.Context,
+	accountID uuid.UUID,
+	candleID uuid.UUID,
+) ([]*Trade, error) {
+	dbTrades, err := r.q.GetTradesByAccountAndCandle(ctx, db.GetTradesByAccountAndCandleParams{
+		AccountID: accountID,
+		CandleID:  candleID,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	trades := make([]*Trade, len(dbTrades))
+	for i, t := range dbTrades {
+		trades[i] = &Trade{
+			ID:                        t.ID,
+			UserID:                    t.UserID,
+			AccountID:                 t.AccountID,
+			CandleID:                  t.CandleID,
+			Symbol:                    t.Symbol,
+			Timeframe:                 t.Timeframe,
+			SetupTimestampUTC:         t.SetupTimestampUtc.Time,
+			AccountBalanceAtSetup:     t.AccountBalanceAtSetup.String(),
+			LeverageAtSetup:           t.LeverageAtSetup,
+			MaxRiskPerTradePctAtSetup: t.MaxRiskPerTradePctAtSetup.String(),
+			TimezoneAtSetup:           t.TimezoneAtSetup,
+			Bias:                      t.Bias,
+			PlannedEntry:              t.PlannedEntry.String(),
+			PlannedSL:                 t.PlannedSl.String(),
+			PlannedTP:                 t.PlannedTp.String(),
+			PlannedRR:                 t.PlannedRr.String(),
+			PlannedRiskPct:            t.PlannedRiskPct.String(),
+			PlannedRiskAmount:         t.PlannedRiskAmount.String(),
+			PlannedPositionSize:       t.PlannedPositionSize.String(),
+			ReasonForTrade:            t.ReasonForTrade,
+			CreatedAt:                 t.CreatedAt.Time,
+		}
+	}
+	return trades, nil
+}
