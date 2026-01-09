@@ -25,7 +25,7 @@ func main() {
 	}
 
 	// Connect to database
-	queries, err := config.NewDatabase(ctx, cfg)
+	queries, _, err := config.NewDatabase(ctx, cfg)
 	if err != nil {
 		log.Fatal("database:", err)
 	}
