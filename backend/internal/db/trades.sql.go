@@ -7,6 +7,7 @@ package db
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -39,7 +40,7 @@ INSERT INTO trades (
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, NOW()
 )
-RETURNING id, user_id, account_id, candle_id, symbol, timeframe, setup_timestamp_utc, account_balance_at_setup, leverage_at_setup, max_risk_per_trade_pct_at_setup, timezone_at_setup, bias, planned_entry, planned_sl, planned_tp, planned_rr, planned_risk_pct, planned_risk_amount, planned_position_size, reason_for_trade, actual_entry, actual_sl, actual_tp, actual_risk_pct, actual_risk_amount, actual_position_size, execution_timestamp_utc, close_timestamp_utc, close_price, result, pips_gained, money_gained, rr_realized, duration_seconds, session, created_at
+RETURNING id, user_id, account_id, candle_id, symbol, timeframe, setup_timestamp_utc, account_balance_at_setup, leverage_at_setup, max_risk_per_trade_pct_at_setup, timezone_at_setup, bias, planned_entry, planned_sl, planned_tp, planned_rr, planned_risk_pct, planned_risk_amount, planned_position_size, reason_for_trade, actual_entry, actual_sl, actual_tp, actual_risk_pct, actual_risk_amount, actual_position_size, execution_timestamp_utc, close_timestamp_utc, close_price, result, pips_gained, money_gained, rr_realized, duration_seconds, session, lifecycle_status, lifecycle_changed_at, lifecycle_reason, created_at
 `
 
 type CreateTradeParams struct {
@@ -125,13 +126,77 @@ func (q *Queries) CreateTrade(ctx context.Context, arg CreateTradeParams) (Trade
 		&i.RrRealized,
 		&i.DurationSeconds,
 		&i.Session,
+		&i.LifecycleStatus,
+		&i.LifecycleChangedAt,
+		&i.LifecycleReason,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createTradeExecution = `-- name: CreateTradeExecution :one
+INSERT INTO trade_executions (
+    id,
+    trade_id,
+    event_type,
+    price,
+    position_size,
+    pnl,
+    pnl_pips,
+    executed_at,
+    session,
+    notes
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+)
+RETURNING id, trade_id, event_type, price, position_size, pnl, pnl_pips, executed_at, session, notes, created_at
+`
+
+type CreateTradeExecutionParams struct {
+	ID           uuid.UUID       `json:"id"`
+	TradeID      uuid.UUID       `json:"trade_id"`
+	EventType    string          `json:"event_type"`
+	Price        decimal.Decimal `json:"price"`
+	PositionSize decimal.Decimal `json:"position_size"`
+	Pnl          decimal.Decimal `json:"pnl"`
+	PnlPips      decimal.Decimal `json:"pnl_pips"`
+	ExecutedAt   time.Time       `json:"executed_at"`
+	Session      NullSessionType `json:"session"`
+	Notes        pgtype.Text     `json:"notes"`
+}
+
+func (q *Queries) CreateTradeExecution(ctx context.Context, arg CreateTradeExecutionParams) (TradeExecution, error) {
+	row := q.db.QueryRow(ctx, createTradeExecution,
+		arg.ID,
+		arg.TradeID,
+		arg.EventType,
+		arg.Price,
+		arg.PositionSize,
+		arg.Pnl,
+		arg.PnlPips,
+		arg.ExecutedAt,
+		arg.Session,
+		arg.Notes,
+	)
+	var i TradeExecution
+	err := row.Scan(
+		&i.ID,
+		&i.TradeID,
+		&i.EventType,
+		&i.Price,
+		&i.PositionSize,
+		&i.Pnl,
+		&i.PnlPips,
+		&i.ExecutedAt,
+		&i.Session,
+		&i.Notes,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const getTradeByID = `-- name: GetTradeByID :one
-SELECT id, user_id, account_id, candle_id, symbol, timeframe, setup_timestamp_utc, account_balance_at_setup, leverage_at_setup, max_risk_per_trade_pct_at_setup, timezone_at_setup, bias, planned_entry, planned_sl, planned_tp, planned_rr, planned_risk_pct, planned_risk_amount, planned_position_size, reason_for_trade, actual_entry, actual_sl, actual_tp, actual_risk_pct, actual_risk_amount, actual_position_size, execution_timestamp_utc, close_timestamp_utc, close_price, result, pips_gained, money_gained, rr_realized, duration_seconds, session, created_at FROM trades WHERE id = $1
+SELECT id, user_id, account_id, candle_id, symbol, timeframe, setup_timestamp_utc, account_balance_at_setup, leverage_at_setup, max_risk_per_trade_pct_at_setup, timezone_at_setup, bias, planned_entry, planned_sl, planned_tp, planned_rr, planned_risk_pct, planned_risk_amount, planned_position_size, reason_for_trade, actual_entry, actual_sl, actual_tp, actual_risk_pct, actual_risk_amount, actual_position_size, execution_timestamp_utc, close_timestamp_utc, close_price, result, pips_gained, money_gained, rr_realized, duration_seconds, session, lifecycle_status, lifecycle_changed_at, lifecycle_reason, created_at FROM trades WHERE id = $1
 `
 
 func (q *Queries) GetTradeByID(ctx context.Context, id uuid.UUID) (Trade, error) {
@@ -173,13 +238,154 @@ func (q *Queries) GetTradeByID(ctx context.Context, id uuid.UUID) (Trade, error)
 		&i.RrRealized,
 		&i.DurationSeconds,
 		&i.Session,
+		&i.LifecycleStatus,
+		&i.LifecycleChangedAt,
+		&i.LifecycleReason,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
+const getTradeExecutions = `-- name: GetTradeExecutions :many
+SELECT id, trade_id, event_type, price, position_size, pnl, pnl_pips, executed_at, session, notes, created_at FROM trade_executions
+WHERE trade_id = $1
+ORDER BY executed_at ASC
+`
+
+func (q *Queries) GetTradeExecutions(ctx context.Context, tradeID uuid.UUID) ([]TradeExecution, error) {
+	rows, err := q.db.Query(ctx, getTradeExecutions, tradeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TradeExecution
+	for rows.Next() {
+		var i TradeExecution
+		if err := rows.Scan(
+			&i.ID,
+			&i.TradeID,
+			&i.EventType,
+			&i.Price,
+			&i.PositionSize,
+			&i.Pnl,
+			&i.PnlPips,
+			&i.ExecutedAt,
+			&i.Session,
+			&i.Notes,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getTradeWithLifecycle = `-- name: GetTradeWithLifecycle :one
+SELECT 
+    id,
+    lifecycle_status,
+    lifecycle_changed_at,
+    lifecycle_reason
+FROM trades
+WHERE id = $1
+`
+
+type GetTradeWithLifecycleRow struct {
+	ID                 uuid.UUID                `json:"id"`
+	LifecycleStatus    NullTradeLifecycleStatus `json:"lifecycle_status"`
+	LifecycleChangedAt pgtype.Timestamptz       `json:"lifecycle_changed_at"`
+	LifecycleReason    pgtype.Text              `json:"lifecycle_reason"`
+}
+
+func (q *Queries) GetTradeWithLifecycle(ctx context.Context, id uuid.UUID) (GetTradeWithLifecycleRow, error) {
+	row := q.db.QueryRow(ctx, getTradeWithLifecycle, id)
+	var i GetTradeWithLifecycleRow
+	err := row.Scan(
+		&i.ID,
+		&i.LifecycleStatus,
+		&i.LifecycleChangedAt,
+		&i.LifecycleReason,
+	)
+	return i, err
+}
+
+const getTradesByAccountAndCandle = `-- name: GetTradesByAccountAndCandle :many
+SELECT id, user_id, account_id, candle_id, symbol, timeframe, setup_timestamp_utc, account_balance_at_setup, leverage_at_setup, max_risk_per_trade_pct_at_setup, timezone_at_setup, bias, planned_entry, planned_sl, planned_tp, planned_rr, planned_risk_pct, planned_risk_amount, planned_position_size, reason_for_trade, actual_entry, actual_sl, actual_tp, actual_risk_pct, actual_risk_amount, actual_position_size, execution_timestamp_utc, close_timestamp_utc, close_price, result, pips_gained, money_gained, rr_realized, duration_seconds, session, lifecycle_status, lifecycle_changed_at, lifecycle_reason, created_at FROM trades
+WHERE account_id = $1 AND candle_id = $2
+ORDER BY created_at DESC
+`
+
+type GetTradesByAccountAndCandleParams struct {
+	AccountID uuid.UUID `json:"account_id"`
+	CandleID  uuid.UUID `json:"candle_id"`
+}
+
+func (q *Queries) GetTradesByAccountAndCandle(ctx context.Context, arg GetTradesByAccountAndCandleParams) ([]Trade, error) {
+	rows, err := q.db.Query(ctx, getTradesByAccountAndCandle, arg.AccountID, arg.CandleID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Trade
+	for rows.Next() {
+		var i Trade
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.AccountID,
+			&i.CandleID,
+			&i.Symbol,
+			&i.Timeframe,
+			&i.SetupTimestampUtc,
+			&i.AccountBalanceAtSetup,
+			&i.LeverageAtSetup,
+			&i.MaxRiskPerTradePctAtSetup,
+			&i.TimezoneAtSetup,
+			&i.Bias,
+			&i.PlannedEntry,
+			&i.PlannedSl,
+			&i.PlannedTp,
+			&i.PlannedRr,
+			&i.PlannedRiskPct,
+			&i.PlannedRiskAmount,
+			&i.PlannedPositionSize,
+			&i.ReasonForTrade,
+			&i.ActualEntry,
+			&i.ActualSl,
+			&i.ActualTp,
+			&i.ActualRiskPct,
+			&i.ActualRiskAmount,
+			&i.ActualPositionSize,
+			&i.ExecutionTimestampUtc,
+			&i.CloseTimestampUtc,
+			&i.ClosePrice,
+			&i.Result,
+			&i.PipsGained,
+			&i.MoneyGained,
+			&i.RrRealized,
+			&i.DurationSeconds,
+			&i.Session,
+			&i.LifecycleStatus,
+			&i.LifecycleChangedAt,
+			&i.LifecycleReason,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getTradesByUserID = `-- name: GetTradesByUserID :many
-SELECT id, user_id, account_id, candle_id, symbol, timeframe, setup_timestamp_utc, account_balance_at_setup, leverage_at_setup, max_risk_per_trade_pct_at_setup, timezone_at_setup, bias, planned_entry, planned_sl, planned_tp, planned_rr, planned_risk_pct, planned_risk_amount, planned_position_size, reason_for_trade, actual_entry, actual_sl, actual_tp, actual_risk_pct, actual_risk_amount, actual_position_size, execution_timestamp_utc, close_timestamp_utc, close_price, result, pips_gained, money_gained, rr_realized, duration_seconds, session, created_at FROM trades 
+SELECT id, user_id, account_id, candle_id, symbol, timeframe, setup_timestamp_utc, account_balance_at_setup, leverage_at_setup, max_risk_per_trade_pct_at_setup, timezone_at_setup, bias, planned_entry, planned_sl, planned_tp, planned_rr, planned_risk_pct, planned_risk_amount, planned_position_size, reason_for_trade, actual_entry, actual_sl, actual_tp, actual_risk_pct, actual_risk_amount, actual_position_size, execution_timestamp_utc, close_timestamp_utc, close_price, result, pips_gained, money_gained, rr_realized, duration_seconds, session, lifecycle_status, lifecycle_changed_at, lifecycle_reason, created_at FROM trades 
 WHERE user_id = $1
 ORDER BY created_at DESC
 LIMIT $2
@@ -235,6 +441,9 @@ func (q *Queries) GetTradesByUserID(ctx context.Context, arg GetTradesByUserIDPa
 			&i.RrRealized,
 			&i.DurationSeconds,
 			&i.Session,
+			&i.LifecycleStatus,
+			&i.LifecycleChangedAt,
+			&i.LifecycleReason,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -322,6 +531,32 @@ func (q *Queries) UpdateTradeExecution(ctx context.Context, arg UpdateTradeExecu
 		arg.ActualRiskAmount,
 		arg.ActualPositionSize,
 		arg.ExecutionTimestampUtc,
+	)
+	return err
+}
+
+const updateTradeLifecycle = `-- name: UpdateTradeLifecycle :exec
+UPDATE trades
+SET
+    lifecycle_status = $2,
+    lifecycle_changed_at = $3,
+    lifecycle_reason = $4
+WHERE id = $1
+`
+
+type UpdateTradeLifecycleParams struct {
+	ID                 uuid.UUID                `json:"id"`
+	LifecycleStatus    NullTradeLifecycleStatus `json:"lifecycle_status"`
+	LifecycleChangedAt pgtype.Timestamptz       `json:"lifecycle_changed_at"`
+	LifecycleReason    pgtype.Text              `json:"lifecycle_reason"`
+}
+
+func (q *Queries) UpdateTradeLifecycle(ctx context.Context, arg UpdateTradeLifecycleParams) error {
+	_, err := q.db.Exec(ctx, updateTradeLifecycle,
+		arg.ID,
+		arg.LifecycleStatus,
+		arg.LifecycleChangedAt,
+		arg.LifecycleReason,
 	)
 	return err
 }
