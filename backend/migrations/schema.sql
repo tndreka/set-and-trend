@@ -8,6 +8,8 @@ CREATE TYPE session_type AS ENUM ('london', 'new_york', 'asian', 'custom');
 CREATE TYPE emotion_type AS ENUM ('calm', 'anxious', 'fomo', 'revenge', 'other');
 CREATE TYPE rule_result_type AS ENUM ('PASS', 'FAIL');
 CREATE TYPE rule_timeframe AS ENUM ('W1');
+CREATE TYPE trade_lifecycle_status AS ENUM ('cancelled', 'invalidated');
+CREATE TYPE execution_event_type AS ENUM ('entry', 'tp_hit', 'sl_hit', 'partial_close', 'manual_close');
 
 -- Core tables
 
@@ -120,6 +122,11 @@ CREATE TABLE trades (
     duration_seconds INTEGER,
     session session_type,
     
+    -- LIFECYCLE (from migration 005)
+    lifecycle_status trade_lifecycle_status,
+    lifecycle_changed_at TIMESTAMP WITH TIME ZONE,
+    lifecycle_reason TEXT,
+    
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -135,6 +142,21 @@ CREATE TABLE trade_feedback (
     feedback_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Trade Executions Table (from migration 004)
+CREATE TABLE trade_executions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    trade_id UUID NOT NULL REFERENCES trades(id) ON DELETE CASCADE,
+    event_type execution_event_type NOT NULL,
+    price DECIMAL(12, 5) NOT NULL CHECK (price > 0),
+    position_size DECIMAL(12, 8) NOT NULL CHECK (position_size > 0),
+    pnl DECIMAL(12, 2) NOT NULL DEFAULT 0,
+    pnl_pips DECIMAL(12, 2) DEFAULT 0,
+    executed_at TIMESTAMPTZ NOT NULL,
+    session session_type,
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Indexes for analytics (critical performance)
 CREATE INDEX idx_candles_timestamp ON candles_weekly(timestamp_utc);
 CREATE INDEX idx_trades_user_id ON trades(user_id);
@@ -145,6 +167,17 @@ CREATE INDEX idx_trades_session ON trades(session);
 CREATE INDEX idx_rule_results_candle_id ON rule_results(candle_id);
 CREATE INDEX idx_rule_results_rule_id ON rule_results(rule_id);
 CREATE INDEX idx_trade_feedback_trade_id ON trade_feedback(trade_id);
+-- Trade executions indexes (from migration 004)
+CREATE INDEX idx_trade_executions_trade_id ON trade_executions(trade_id);
+CREATE INDEX idx_trade_executions_executed_at ON trade_executions(executed_at);
+CREATE INDEX idx_trade_executions_event_type ON trade_executions(event_type);
+CREATE UNIQUE INDEX idx_trade_executions_unique_entry ON trade_executions(trade_id, event_type) WHERE event_type = 'entry';
+
+-- Lifecycle index (from migration 005)
+CREATE INDEX idx_trades_lifecycle_status ON trades(lifecycle_status) WHERE lifecycle_status IS NOT NULL;
+
+-- Idempotency constraint (from migration 007)
+CREATE UNIQUE INDEX uniq_trade_account_candle_bias ON trades (account_id, candle_id, bias);
 
 -- Sample data (for testing)
 INSERT INTO users (id) VALUES (gen_random_uuid()) ON CONFLICT DO NOTHING;
