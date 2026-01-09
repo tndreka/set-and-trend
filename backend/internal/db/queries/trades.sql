@@ -24,13 +24,24 @@ INSERT INTO trades (
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, NOW()
 )
-RETURNING *;
+RETURNING id, user_id, account_id, candle_id, symbol, timeframe, setup_timestamp_utc,
+    account_balance_at_setup, leverage_at_setup, max_risk_per_trade_pct_at_setup,
+    timezone_at_setup, bias, planned_entry, planned_sl, planned_tp, planned_rr,
+    planned_risk_pct, planned_risk_amount, planned_position_size, reason_for_trade, created_at;
 
 -- name: GetTradeByID :one
-SELECT * FROM trades WHERE id = $1;
+SELECT id, user_id, account_id, candle_id, symbol, timeframe, setup_timestamp_utc,
+    account_balance_at_setup, leverage_at_setup, max_risk_per_trade_pct_at_setup,
+    timezone_at_setup, bias, planned_entry, planned_sl, planned_tp, planned_rr,
+    planned_risk_pct, planned_risk_amount, planned_position_size, reason_for_trade, created_at
+FROM trades WHERE id = $1;
 
 -- name: GetTradesByUserID :many
-SELECT * FROM trades 
+SELECT id, user_id, account_id, candle_id, symbol, timeframe, setup_timestamp_utc,
+    account_balance_at_setup, leverage_at_setup, max_risk_per_trade_pct_at_setup,
+    timezone_at_setup, bias, planned_entry, planned_sl, planned_tp, planned_rr,
+    planned_risk_pct, planned_risk_amount, planned_position_size, reason_for_trade, created_at
+FROM trades 
 WHERE user_id = $1
 ORDER BY created_at DESC
 LIMIT $2;
@@ -61,7 +72,11 @@ SET
 WHERE id = $1;
 
 -- name: GetTradesByAccountAndCandle :many
-SELECT * FROM trades
+SELECT id, user_id, account_id, candle_id, symbol, timeframe, setup_timestamp_utc,
+    account_balance_at_setup, leverage_at_setup, max_risk_per_trade_pct_at_setup,
+    timezone_at_setup, bias, planned_entry, planned_sl, planned_tp, planned_rr,
+    planned_risk_pct, planned_risk_amount, planned_position_size, reason_for_trade, created_at 
+FROM trades
 WHERE account_id = $1 AND candle_id = $2
 ORDER BY created_at DESC;
 
