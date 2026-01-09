@@ -59,3 +59,47 @@ SET
     duration_seconds = $8,
     session = $9
 WHERE id = $1;
+
+-- name: GetTradesByAccountAndCandle :many
+SELECT * FROM trades
+WHERE account_id = $1 AND candle_id = $2
+ORDER BY created_at DESC;
+
+-- name: GetTradeExecutions :many
+SELECT * FROM trade_executions
+WHERE trade_id = $1
+ORDER BY executed_at ASC;
+
+-- name: CreateTradeExecution :one
+INSERT INTO trade_executions (
+    id,
+    trade_id,
+    event_type,
+    price,
+    position_size,
+    pnl,
+    pnl_pips,
+    executed_at,
+    session,
+    notes
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+)
+RETURNING *;
+
+-- name: GetTradeWithLifecycle :one
+SELECT 
+    id,
+    lifecycle_status,
+    lifecycle_changed_at,
+    lifecycle_reason
+FROM trades
+WHERE id = $1;
+
+-- name: UpdateTradeLifecycle :exec
+UPDATE trades
+SET
+    lifecycle_status = $2,
+    lifecycle_changed_at = $3,
+    lifecycle_reason = $4
+WHERE id = $1;
