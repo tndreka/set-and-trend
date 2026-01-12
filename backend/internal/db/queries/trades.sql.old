@@ -1,0 +1,55 @@
+-- name: CreateTrade :one
+INSERT INTO trades (
+    id,
+    symbol,
+    timeframe,
+    direction,
+    planned_entry,
+    stop_loss,
+    take_profit,
+    risk_percent,
+    created_at
+) VALUES (
+    gen_random_uuid(),
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6,
+    $7,
+    NOW()
+)
+RETURNING *;
+
+-- name: GetTradeByID :one
+SELECT * FROM trades
+WHERE id = $1;
+
+-- name: GetTradesByUserID :many
+SELECT * FROM trades
+ORDER BY created_at DESC
+LIMIT $1;
+
+-- name: GetTradeExecutions :many
+SELECT * FROM trade_executions
+WHERE trade_id = $1
+ORDER BY executed_at ASC;
+
+-- name: CreateTradeExecution :one
+INSERT INTO trade_executions (
+    id,
+    trade_id,
+    execution_type,
+    price,
+    quantity,
+    executed_at
+) VALUES (
+    gen_random_uuid(),
+    $1,
+    $2,
+    $3,
+    $4,
+    $5
+)
+RETURNING *;

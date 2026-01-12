@@ -417,7 +417,6 @@ type RuleResult struct {
 	ConfidenceScore decimal.Decimal    `json:"confidence_score"`
 }
 
-// Trade state derived from trade_executions and trade_intents.
 type Trade struct {
 	ID                        uuid.UUID          `json:"id"`
 	UserID                    uuid.UUID          `json:"user_id"`
@@ -457,7 +456,6 @@ type Trade struct {
 	CreatedAt                 pgtype.Timestamptz `json:"created_at"`
 }
 
-// Append-only execution event log.  Contains MARKET INTERACTIONS only.  State is computed via:  SELECT event_type FROM trade_executions WHERE trade_id = ?  ORDER BY executed_at
 type TradeExecution struct {
 	ID           uuid.UUID          `json:"id"`
 	TradeID      uuid.UUID          `json:"trade_id"`
@@ -485,7 +483,6 @@ type TradeFeedback struct {
 	FeedbackAt     pgtype.Timestamptz `json:"feedback_at"`
 }
 
-// Records user/system intent to cancel or invalidate trades. Separate from executions because these are NOT market interactions.
 type TradeIntent struct {
 	ID         uuid.UUID          `json:"id"`
 	TradeID    uuid.UUID          `json:"trade_id"`
