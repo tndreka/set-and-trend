@@ -211,21 +211,21 @@ func ComputeRemainingPosition(
 			}
 			if exec.PositionSize >= remaining {
 				return 0, fmt.Errorf(
-					"partial close %. 4f exceeds remaining %.4f",
+					"partial close %.4f exceeds remaining %.4f",
 					exec.PositionSize,
 					remaining,
 				)
 			}
-			remaining -= exec. PositionSize
+			remaining -= exec.PositionSize
 			
 		case "tp_hit", "sl_hit", "manual_close": 
 			if !entryFilled {
-				return 0, errors. New("close event before entry")
+				return 0, errors.New("close event before entry")
 			}
 			if exec.PositionSize != remaining {
 				return 0, fmt.Errorf(
-					"close size %.4f does not match remaining %. 4f",
-					exec. PositionSize,
+					"close size %.4f does not match remaining %.4f",
+					exec.PositionSize,
 					remaining,
 				)
 			}
@@ -251,8 +251,8 @@ func ValidateExecutionSize(
 	switch eventType {
 	case "entry":
 		if executionSize != plannedSize {
-			return fmt. Errorf(
-				"entry size %.4f must match planned %. 4f",
+			return fmt.Errorf(
+				"entry size %.4f must match planned %.4f",
 				executionSize,
 				plannedSize,
 			)
