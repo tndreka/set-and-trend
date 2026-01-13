@@ -2,13 +2,8 @@ package repositories
 
 import (
 	"context"
-	"time"
-	"fmt"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/jackc/pgx/v5"
-	"github.com/shopspring/decimal"
 	"set-and-trend/backend/internal/db"
 )
 
@@ -20,239 +15,64 @@ func NewTradeRepository(q *db.Queries) *TradeRepository {
 	return &TradeRepository{q: q}
 }
 
-// Trade represents a trade (for API responses)
-type Trade struct {
-	ID                        uuid.UUID  `json:"id"`
-	UserID                    uuid.UUID  `json:"user_id"`
-	AccountID                 uuid.UUID  `json:"account_id"`
-	CandleID                  uuid.UUID  `json:"candle_id"`
-	Symbol                    string     `json:"symbol"`
-	Timeframe                 string     `json:"timeframe"`
-	SetupTimestampUTC         time.Time  `json:"setup_timestamp_utc"`
-	AccountBalanceAtSetup     string     `json:"account_balance_at_setup"`
-	LeverageAtSetup           int32      `json:"leverage_at_setup"`
-	MaxRiskPerTradePctAtSetup string     `json:"max_risk_per_trade_pct_at_setup"`
-	TimezoneAtSetup           string     `json:"timezone_at_setup"`
-	Bias                      string     `json:"bias"`
-	PlannedEntry              string     `json:"planned_entry"`
-	PlannedSL                 string     `json:"planned_sl"`
-	PlannedTP                 string     `json:"planned_tp"`
-	PlannedRR                 string     `json:"planned_rr"`
-	PlannedRiskPct            string     `json:"planned_risk_pct"`
-	PlannedRiskAmount         string     `json:"planned_risk_amount"`
-	PlannedPositionSize       string     `json:"planned_position_size"`
-	ReasonForTrade            string     `json:"reason_for_trade"`
-	CreatedAt                 time.Time  `json:"created_at"`
+//
+// CREATE
+//
+
+func (r *TradeRepository) CreateTrade(
+	ctx context.Context,
+	params db.CreateTradeParams,
+) (db.Trade, error) {
+	return r.q.CreateTrade(ctx, params)
 }
 
-// TradeCreateParams contains parameters for creating a trade
-type TradeCreateParams struct {
-	ID                        uuid.UUID
-	UserID                    uuid.UUID
-	AccountID                 uuid.UUID
-	CandleID                  uuid.UUID
-	Symbol                    string
-	Timeframe                 string
-	SetupTimestampUTC         time.Time
-	AccountBalanceAtSetup     string
-	LeverageAtSetup           int32
-	MaxRiskPerTradePctAtSetup string
-	TimezoneAtSetup           string
-	Bias                      string
-	PlannedEntry              string
-	PlannedSL                 string
-	PlannedTP                 string
-	PlannedRR                 string
-	PlannedRiskPct            string
-	PlannedRiskAmount         string
-	PlannedPositionSize       string
-	ReasonForTrade            string
+//
+// READ
+//
+
+func (r *TradeRepository) GetTradeByID(
+	ctx context.Context,
+	tradeID uuid.UUID,
+) (db.Trade, error) {
+	return r.q.GetTradeByID(ctx, tradeID)
 }
 
-// CreateTrade inserts a new planned trade
-func (r *TradeRepository) CreateTrade(ctx context.Context, params TradeCreateParams) (*Trade, error) {
-	// Convert string values to decimal
-	balanceDec, _ := decimal.NewFromString(params.AccountBalanceAtSetup)
-	riskPctDec, _ := decimal.NewFromString(params.MaxRiskPerTradePctAtSetup)
-	entryDec, _ := decimal.NewFromString(params.PlannedEntry)
-	slDec, _ := decimal.NewFromString(params.PlannedSL)
-	tpDec, _ := decimal.NewFromString(params.PlannedTP)
-	rrDec, _ := decimal.NewFromString(params.PlannedRR)
-	plannedRiskPctDec, _ := decimal.NewFromString(params.PlannedRiskPct)
-	plannedRiskAmtDec, _ := decimal.NewFromString(params.PlannedRiskAmount)
-	plannedPosSizeDec, _ := decimal.NewFromString(params.PlannedPositionSize)
-
-	// Convert timestamp
-	var timestampPg pgtype.Timestamptz
-	timestampPg.Scan(params.SetupTimestampUTC)
-
-	trade, err := r.q.CreateTrade(ctx, db.CreateTradeParams{
-		ID:                        params.ID,
-		UserID:                    params.UserID,
-		AccountID:                 params.AccountID,
-		CandleID:                  params.CandleID,
-		Symbol:                    params.Symbol,
-		Timeframe:                 params.Timeframe,
-		SetupTimestampUtc:         timestampPg,
-		AccountBalanceAtSetup:     balanceDec,
-		LeverageAtSetup:           params.LeverageAtSetup,
-		MaxRiskPerTradePctAtSetup: riskPctDec,
-		TimezoneAtSetup:           params.TimezoneAtSetup,
-		Bias:                      db.TradeBias(params.Bias),
-		PlannedEntry:              entryDec,
-		PlannedSl:                 slDec,
-		PlannedTp:                 tpDec,
-		PlannedRr:                 rrDec,
-		PlannedRiskPct:            plannedRiskPctDec,
-		PlannedRiskAmount:         plannedRiskAmtDec,
-		PlannedPositionSize:       plannedPosSizeDec,
-		ReasonForTrade:            params.ReasonForTrade,
+func (r *TradeRepository) GetTradesByUserID(
+	ctx context.Context,
+	userID uuid.UUID,
+	limit int32,
+) ([]db.Trade, error) {
+	return r.q.GetTradesByUserID(ctx, db.GetTradesByUserIDParams{
+		UserID: userID,
+		Limit:  limit,
 	})
-	if err != nil {
-		return nil, err
-	}
-
-	return &Trade{
-		ID:                        trade.ID,
-		UserID:                    trade.UserID,
-		AccountID:                 trade.AccountID,
-		CandleID:                  trade.CandleID,
-		Symbol:                    trade.Symbol,
-		Timeframe:                 trade.Timeframe,
-		SetupTimestampUTC:         trade.SetupTimestampUtc.Time,
-		AccountBalanceAtSetup:     trade.AccountBalanceAtSetup.String(),
-		LeverageAtSetup:           trade.LeverageAtSetup,
-		MaxRiskPerTradePctAtSetup: trade.MaxRiskPerTradePctAtSetup.String(),
-		TimezoneAtSetup:           trade.TimezoneAtSetup,
-		Bias:                      string(trade.Bias),
-		PlannedEntry:              trade.PlannedEntry.String(),
-		PlannedSL:                 trade.PlannedSl.String(),
-		PlannedTP:                 trade.PlannedTp.String(),
-		PlannedRR:                 trade.PlannedRr.String(),
-		PlannedRiskPct:            trade.PlannedRiskPct.String(),
-		PlannedRiskAmount:         trade.PlannedRiskAmount.String(),
-		PlannedPositionSize:       trade.PlannedPositionSize.String(),
-		ReasonForTrade:            trade.ReasonForTrade,
-		CreatedAt:                 trade.CreatedAt.Time,
-	}, nil
 }
 
-// GetTradeByID retrieves a trade by ID
-func (r *TradeRepository) GetTradeByID(ctx context.Context, id uuid.UUID) (*Trade, error) {
-	trade, err := r.q.GetTradeByID(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-
-	return &Trade{
-		ID:                        trade.ID,
-		UserID:                    trade.UserID,
-		AccountID:                 trade.AccountID,
-		CandleID:                  trade.CandleID,
-		Symbol:                    trade.Symbol,
-		Timeframe:                 trade.Timeframe,
-		SetupTimestampUTC:         trade.SetupTimestampUtc.Time,
-		AccountBalanceAtSetup:     trade.AccountBalanceAtSetup.String(),
-		LeverageAtSetup:           trade.LeverageAtSetup,
-		MaxRiskPerTradePctAtSetup: trade.MaxRiskPerTradePctAtSetup.String(),
-		TimezoneAtSetup:           trade.TimezoneAtSetup,
-		Bias:                      string(trade.Bias),
-		PlannedEntry:              trade.PlannedEntry.String(),
-		PlannedSL:                 trade.PlannedSl.String(),
-		PlannedTP:                 trade.PlannedTp.String(),
-		PlannedRR:                 trade.PlannedRr.String(),
-		PlannedRiskPct:            trade.PlannedRiskPct.String(),
-		PlannedRiskAmount:         trade.PlannedRiskAmount.String(),
-		PlannedPositionSize:       trade.PlannedPositionSize.String(),
-		ReasonForTrade:            trade.ReasonForTrade,
-		CreatedAt:                 trade.CreatedAt.Time,
-	}, nil
-}
-
-// GetTradesByAccountAndCandle retrieves all trades for a specific account and candle
 func (r *TradeRepository) GetTradesByAccountAndCandle(
 	ctx context.Context,
 	accountID uuid.UUID,
 	candleID uuid.UUID,
-) ([]*Trade, error) {
-	dbTrades, err := r.q.GetTradesByAccountAndCandle(ctx, db.GetTradesByAccountAndCandleParams{
+) ([]db.Trade, error) {
+	return r.q.GetTradesByAccountAndCandle(ctx, db.GetTradesByAccountAndCandleParams{
 		AccountID: accountID,
 		CandleID:  candleID,
 	})
-	if err != nil {
-		return nil, err
-	}
-
-	trades := make([]*Trade, len(dbTrades))
-	for i, t := range dbTrades {
-		trades[i] = &Trade{
-			ID:                        t.ID,
-			UserID:                    t.UserID,
-			AccountID:                 t.AccountID,
-			CandleID:                  t.CandleID,
-			Symbol:                    t.Symbol,
-			Timeframe:                 t.Timeframe,
-			SetupTimestampUTC:         t.SetupTimestampUtc.Time,
-			AccountBalanceAtSetup:     t.AccountBalanceAtSetup.String(),
-			LeverageAtSetup:           t.LeverageAtSetup,
-			MaxRiskPerTradePctAtSetup: t.MaxRiskPerTradePctAtSetup.String(),
-			TimezoneAtSetup:           t.TimezoneAtSetup,
-			Bias:                      string(t.Bias),
-			PlannedEntry:              t.PlannedEntry.String(),
-			PlannedSL:                 t.PlannedSl.String(),
-			PlannedTP:                 t.PlannedTp.String(),
-			PlannedRR:                 t.PlannedRr.String(),
-			PlannedRiskPct:            t.PlannedRiskPct.String(),
-			PlannedRiskAmount:         t.PlannedRiskAmount.String(),
-			PlannedPositionSize:       t.PlannedPositionSize.String(),
-			ReasonForTrade:            t.ReasonForTrade,
-			CreatedAt:                 t.CreatedAt.Time,
-		}
-	}
-	return trades, nil
 }
 
+//
+// EXECUTION EVENTS
+//
 
-func (r *TradeRepository) GetTradeTx(ctx context.Context, tx pgx.Tx, tradeID uuid.UUID) (*Trade, error) {
-	var trade Trade
-	
-	err := tx. QueryRow(ctx, `
-		SELECT id, user_id, account_id, candle_id, symbol, timeframe,
-			setup_timestamp_utc, account_balance_at_setup, leverage_at_setup,
-			max_risk_per_trade_pct_at_setup, timezone_at_setup, bias,
-			planned_entry, planned_sl, planned_tp, planned_rr,
-			planned_risk_pct, planned_risk_amount, planned_position_size,
-			reason_for_trade, created_at
-		FROM trades
-		WHERE id = $1
-	    `, tradeID).Scan(
-		&trade.ID,
-		&trade.UserID,
-		&trade.AccountID,
-		&trade.CandleID,
-		&trade.Symbol,
-		&trade. Timeframe,
-		&trade.SetupTimestampUTC,
-		&trade.AccountBalanceAtSetup,
-		&trade.LeverageAtSetup,
-		&trade.MaxRiskPerTradePctAtSetup,
-		&trade.TimezoneAtSetup,
-		&trade. Bias,
-		&trade. PlannedEntry,
-		&trade.PlannedSL,
-		&trade.PlannedTP,
-		&trade.PlannedRR,
-		&trade.PlannedRiskPct,
-		&trade.PlannedRiskAmount,
-		&trade.PlannedPositionSize,
-		&trade.ReasonForTrade,
-		&trade.CreatedAt,
-	)
-	
-	if err != nil {
-		return nil, fmt.Errorf("get trade (tx): %w", err)
-	}
-	
-	return &trade, nil
+func (r *TradeRepository) CreateTradeExecution(
+	ctx context.Context,
+	params db.CreateTradeExecutionParams,
+) (db.TradeExecution, error) {
+	return r.q.CreateTradeExecution(ctx, params)
 }
 
+func (r *TradeRepository) GetTradeExecutions(
+	ctx context.Context,
+	tradeID uuid.UUID,
+) ([]db.TradeExecution, error) {
+	return r.q.GetTradeExecutions(ctx, tradeID)
+}
