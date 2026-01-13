@@ -2,7 +2,7 @@ version: "2"
 
 sql:
   - engine: "postgresql"
-    schema: "migrations/schema.sql"
+    schema: "migrations/000001_init_schema.up.sql"
     queries: "internal/db/queries/"
     gen:
       go:

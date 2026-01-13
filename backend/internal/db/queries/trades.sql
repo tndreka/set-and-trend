@@ -1,103 +1,49 @@
 -- name: CreateTrade :one
 INSERT INTO trades (
-    id,
     user_id,
     account_id,
     candle_id,
     symbol,
     timeframe,
-    setup_timestamp_utc,
-    account_balance_at_setup,
-    leverage_at_setup,
-    max_risk_per_trade_pct_at_setup,
-    timezone_at_setup,
-    bias,
+    direction,
     planned_entry,
-    planned_sl,
-    planned_tp,
-    planned_rr,
-    planned_risk_pct,
-    planned_risk_amount,
-    planned_position_size,
-    reason_for_trade,
-    created_at
+    stop_loss,
+    take_profit,
+    risk_percent
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, NOW()
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
 )
-RETURNING id, user_id, account_id, candle_id, symbol, timeframe, setup_timestamp_utc,
-    account_balance_at_setup, leverage_at_setup, max_risk_per_trade_pct_at_setup,
-    timezone_at_setup, bias, planned_entry, planned_sl, planned_tp, planned_rr,
-    planned_risk_pct, planned_risk_amount, planned_position_size, reason_for_trade, created_at;
+RETURNING *;
 
 -- name: GetTradeByID :one
-SELECT id, user_id, account_id, candle_id, symbol, timeframe, setup_timestamp_utc,
-    account_balance_at_setup, leverage_at_setup, max_risk_per_trade_pct_at_setup,
-    timezone_at_setup, bias, planned_entry, planned_sl, planned_tp, planned_rr,
-    planned_risk_pct, planned_risk_amount, planned_position_size, reason_for_trade, created_at
-FROM trades WHERE id = $1;
+SELECT * FROM trades
+WHERE id = $1;
 
 -- name: GetTradesByUserID :many
-SELECT id, user_id, account_id, candle_id, symbol, timeframe, setup_timestamp_utc,
-    account_balance_at_setup, leverage_at_setup, max_risk_per_trade_pct_at_setup,
-    timezone_at_setup, bias, planned_entry, planned_sl, planned_tp, planned_rr,
-    planned_risk_pct, planned_risk_amount, planned_position_size, reason_for_trade, created_at
-FROM trades 
+SELECT * FROM trades
 WHERE user_id = $1
 ORDER BY created_at DESC
 LIMIT $2;
 
--- name: UpdateTradeExecution :exec
-UPDATE trades
-SET
-    actual_entry = $2,
-    actual_sl = $3,
-    actual_tp = $4,
-    actual_risk_pct = $5,
-    actual_risk_amount = $6,
-    actual_position_size = $7,
-    execution_timestamp_utc = $8
-WHERE id = $1;
-
--- name: UpdateTradeClosure :exec
-UPDATE trades
-SET
-    close_timestamp_utc = $2,
-    close_price = $3,
-    result = $4,
-    pips_gained = $5,
-    money_gained = $6,
-    rr_realized = $7,
-    duration_seconds = $8,
-    session = $9
-WHERE id = $1;
-
 -- name: GetTradesByAccountAndCandle :many
-SELECT id, user_id, account_id, candle_id, symbol, timeframe, setup_timestamp_utc,
-    account_balance_at_setup, leverage_at_setup, max_risk_per_trade_pct_at_setup,
-    timezone_at_setup, bias, planned_entry, planned_sl, planned_tp, planned_rr,
-    planned_risk_pct, planned_risk_amount, planned_position_size, reason_for_trade, created_at 
-FROM trades
-WHERE account_id = $1 AND candle_id = $2
+SELECT * FROM trades
+WHERE account_id = $1
+  AND candle_id = $2
 ORDER BY created_at DESC;
+
+-- name: CreateTradeExecution :one
+INSERT INTO trade_executions (
+    trade_id,
+    execution_type,
+    price,
+    quantity,
+    executed_at
+) VALUES (
+    $1, $2, $3, $4, $5
+)
+RETURNING *;
 
 -- name: GetTradeExecutions :many
 SELECT * FROM trade_executions
 WHERE trade_id = $1
 ORDER BY executed_at ASC;
-
--- name: CreateTradeExecution :one
-INSERT INTO trade_executions (
-    id,
-    trade_id,
-    event_type,
-    price,
-    position_size,
-    pnl,
-    pnl_pips,
-    executed_at,
-    session,
-    reason
-) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
-)
-RETURNING *;

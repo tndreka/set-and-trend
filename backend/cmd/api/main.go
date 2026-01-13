@@ -40,15 +40,17 @@ func main() {
 
 	tradeService := services.NewTradeService(tradeRepo, accountRepo, candleRepo)
 	executionService := services.NewExecutionService(tradeRepo, executionRepo, intentRepo, pool)
-
+	signalService := services.NewSignalScannerService(candleRepo, indicatorRepo, ruleResultRepo)
+	
 	userHandler := handlers.NewUserHandler(userRepo)
 	accountHandler := handlers.NewAccountHandler(accountRepo, userRepo)
 	candleHandler := handlers.NewCandleHandler(candleRepo)
 	indicatorHandler := handlers.NewIndicatorHandler(indicatorRepo, candleRepo)
 	tradeHandler := handlers.NewTradeHandler(tradeService)
 	executionHandler := handlers.NewExecutionHandler(executionService, executionRepo)
-
-	gin.SetMode(gin.ReleaseMode)
+	signalHandler := handlers.NewSignalHandler(signalService)
+	
+gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
 
 	api := r.Group("/api")
@@ -58,6 +60,7 @@ func main() {
 		api.POST("/candles", candleHandler.CreateCandle)
 		api.GET("/candles/latest", candleHandler.GetLatestCandles)
 		api.POST("/indicators/compute", indicatorHandler.ComputeIndicator)
+		api.GET("/signals/latest", signalHandler.GetLatestSignal)
 		api.POST("/trades", tradeHandler.CreateTrade)
 		api.POST("/trades/:id/execute", executionHandler.ExecuteTrade)
 		api.POST("/trades/:id/close", executionHandler.CloseTrade)

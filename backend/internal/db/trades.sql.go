@@ -15,107 +15,49 @@ import (
 
 const createTrade = `-- name: CreateTrade :one
 INSERT INTO trades (
-    id,
     user_id,
     account_id,
     candle_id,
     symbol,
     timeframe,
-    setup_timestamp_utc,
-    account_balance_at_setup,
-    leverage_at_setup,
-    max_risk_per_trade_pct_at_setup,
-    timezone_at_setup,
-    bias,
+    direction,
     planned_entry,
-    planned_sl,
-    planned_tp,
-    planned_rr,
-    planned_risk_pct,
-    planned_risk_amount,
-    planned_position_size,
-    reason_for_trade,
-    created_at
+    stop_loss,
+    take_profit,
+    risk_percent
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, NOW()
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
 )
-RETURNING id, user_id, account_id, candle_id, symbol, timeframe, setup_timestamp_utc,
-    account_balance_at_setup, leverage_at_setup, max_risk_per_trade_pct_at_setup,
-    timezone_at_setup, bias, planned_entry, planned_sl, planned_tp, planned_rr,
-    planned_risk_pct, planned_risk_amount, planned_position_size, reason_for_trade, created_at
+RETURNING id, user_id, account_id, candle_id, symbol, timeframe, direction, planned_entry, stop_loss, take_profit, risk_percent, created_at
 `
 
 type CreateTradeParams struct {
-	ID                        uuid.UUID          `json:"id"`
-	UserID                    uuid.UUID          `json:"user_id"`
-	AccountID                 uuid.UUID          `json:"account_id"`
-	CandleID                  uuid.UUID          `json:"candle_id"`
-	Symbol                    string             `json:"symbol"`
-	Timeframe                 string             `json:"timeframe"`
-	SetupTimestampUtc         pgtype.Timestamptz `json:"setup_timestamp_utc"`
-	AccountBalanceAtSetup     decimal.Decimal    `json:"account_balance_at_setup"`
-	LeverageAtSetup           int32              `json:"leverage_at_setup"`
-	MaxRiskPerTradePctAtSetup decimal.Decimal    `json:"max_risk_per_trade_pct_at_setup"`
-	TimezoneAtSetup           string             `json:"timezone_at_setup"`
-	Bias                      TradeBias          `json:"bias"`
-	PlannedEntry              decimal.Decimal    `json:"planned_entry"`
-	PlannedSl                 decimal.Decimal    `json:"planned_sl"`
-	PlannedTp                 decimal.Decimal    `json:"planned_tp"`
-	PlannedRr                 decimal.Decimal    `json:"planned_rr"`
-	PlannedRiskPct            decimal.Decimal    `json:"planned_risk_pct"`
-	PlannedRiskAmount         decimal.Decimal    `json:"planned_risk_amount"`
-	PlannedPositionSize       decimal.Decimal    `json:"planned_position_size"`
-	ReasonForTrade            string             `json:"reason_for_trade"`
+	UserID       uuid.UUID       `json:"user_id"`
+	AccountID    uuid.UUID       `json:"account_id"`
+	CandleID     uuid.UUID       `json:"candle_id"`
+	Symbol       string          `json:"symbol"`
+	Timeframe    string          `json:"timeframe"`
+	Direction    TradeDirection  `json:"direction"`
+	PlannedEntry decimal.Decimal `json:"planned_entry"`
+	StopLoss     decimal.Decimal `json:"stop_loss"`
+	TakeProfit   decimal.Decimal `json:"take_profit"`
+	RiskPercent  decimal.Decimal `json:"risk_percent"`
 }
 
-type CreateTradeRow struct {
-	ID                        uuid.UUID          `json:"id"`
-	UserID                    uuid.UUID          `json:"user_id"`
-	AccountID                 uuid.UUID          `json:"account_id"`
-	CandleID                  uuid.UUID          `json:"candle_id"`
-	Symbol                    string             `json:"symbol"`
-	Timeframe                 string             `json:"timeframe"`
-	SetupTimestampUtc         pgtype.Timestamptz `json:"setup_timestamp_utc"`
-	AccountBalanceAtSetup     decimal.Decimal    `json:"account_balance_at_setup"`
-	LeverageAtSetup           int32              `json:"leverage_at_setup"`
-	MaxRiskPerTradePctAtSetup decimal.Decimal    `json:"max_risk_per_trade_pct_at_setup"`
-	TimezoneAtSetup           string             `json:"timezone_at_setup"`
-	Bias                      TradeBias          `json:"bias"`
-	PlannedEntry              decimal.Decimal    `json:"planned_entry"`
-	PlannedSl                 decimal.Decimal    `json:"planned_sl"`
-	PlannedTp                 decimal.Decimal    `json:"planned_tp"`
-	PlannedRr                 decimal.Decimal    `json:"planned_rr"`
-	PlannedRiskPct            decimal.Decimal    `json:"planned_risk_pct"`
-	PlannedRiskAmount         decimal.Decimal    `json:"planned_risk_amount"`
-	PlannedPositionSize       decimal.Decimal    `json:"planned_position_size"`
-	ReasonForTrade            string             `json:"reason_for_trade"`
-	CreatedAt                 pgtype.Timestamptz `json:"created_at"`
-}
-
-func (q *Queries) CreateTrade(ctx context.Context, arg CreateTradeParams) (CreateTradeRow, error) {
+func (q *Queries) CreateTrade(ctx context.Context, arg CreateTradeParams) (Trade, error) {
 	row := q.db.QueryRow(ctx, createTrade,
-		arg.ID,
 		arg.UserID,
 		arg.AccountID,
 		arg.CandleID,
 		arg.Symbol,
 		arg.Timeframe,
-		arg.SetupTimestampUtc,
-		arg.AccountBalanceAtSetup,
-		arg.LeverageAtSetup,
-		arg.MaxRiskPerTradePctAtSetup,
-		arg.TimezoneAtSetup,
-		arg.Bias,
+		arg.Direction,
 		arg.PlannedEntry,
-		arg.PlannedSl,
-		arg.PlannedTp,
-		arg.PlannedRr,
-		arg.PlannedRiskPct,
-		arg.PlannedRiskAmount,
-		arg.PlannedPositionSize,
-		arg.ReasonForTrade,
+		arg.StopLoss,
+		arg.TakeProfit,
+		arg.RiskPercent,
 	)
-	var i CreateTradeRow
+	var i Trade
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
@@ -123,20 +65,11 @@ func (q *Queries) CreateTrade(ctx context.Context, arg CreateTradeParams) (Creat
 		&i.CandleID,
 		&i.Symbol,
 		&i.Timeframe,
-		&i.SetupTimestampUtc,
-		&i.AccountBalanceAtSetup,
-		&i.LeverageAtSetup,
-		&i.MaxRiskPerTradePctAtSetup,
-		&i.TimezoneAtSetup,
-		&i.Bias,
+		&i.Direction,
 		&i.PlannedEntry,
-		&i.PlannedSl,
-		&i.PlannedTp,
-		&i.PlannedRr,
-		&i.PlannedRiskPct,
-		&i.PlannedRiskAmount,
-		&i.PlannedPositionSize,
-		&i.ReasonForTrade,
+		&i.StopLoss,
+		&i.TakeProfit,
+		&i.RiskPercent,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -144,101 +77,53 @@ func (q *Queries) CreateTrade(ctx context.Context, arg CreateTradeParams) (Creat
 
 const createTradeExecution = `-- name: CreateTradeExecution :one
 INSERT INTO trade_executions (
-    id,
     trade_id,
-    event_type,
+    execution_type,
     price,
-    position_size,
-    pnl,
-    pnl_pips,
-    executed_at,
-    session,
-    reason
+    quantity,
+    executed_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+    $1, $2, $3, $4, $5
 )
-RETURNING id, trade_id, event_type, price, position_size, executed_at, session, reason, slippage_pips, pnl, pnl_pips, created_at
+RETURNING id, trade_id, execution_type, price, quantity, executed_at
 `
 
 type CreateTradeExecutionParams struct {
-	ID           uuid.UUID          `json:"id"`
-	TradeID      uuid.UUID          `json:"trade_id"`
-	EventType    ExecutionEventType `json:"event_type"`
-	Price        decimal.Decimal    `json:"price"`
-	PositionSize decimal.Decimal    `json:"position_size"`
-	Pnl          decimal.Decimal    `json:"pnl"`
-	PnlPips      decimal.Decimal    `json:"pnl_pips"`
-	ExecutedAt   pgtype.Timestamptz `json:"executed_at"`
-	Session      NullSessionType    `json:"session"`
-	Reason       pgtype.Text        `json:"reason"`
+	TradeID       uuid.UUID          `json:"trade_id"`
+	ExecutionType ExecutionType      `json:"execution_type"`
+	Price         decimal.Decimal    `json:"price"`
+	Quantity      decimal.Decimal    `json:"quantity"`
+	ExecutedAt    pgtype.Timestamptz `json:"executed_at"`
 }
 
 func (q *Queries) CreateTradeExecution(ctx context.Context, arg CreateTradeExecutionParams) (TradeExecution, error) {
 	row := q.db.QueryRow(ctx, createTradeExecution,
-		arg.ID,
 		arg.TradeID,
-		arg.EventType,
+		arg.ExecutionType,
 		arg.Price,
-		arg.PositionSize,
-		arg.Pnl,
-		arg.PnlPips,
+		arg.Quantity,
 		arg.ExecutedAt,
-		arg.Session,
-		arg.Reason,
 	)
 	var i TradeExecution
 	err := row.Scan(
 		&i.ID,
 		&i.TradeID,
-		&i.EventType,
+		&i.ExecutionType,
 		&i.Price,
-		&i.PositionSize,
+		&i.Quantity,
 		&i.ExecutedAt,
-		&i.Session,
-		&i.Reason,
-		&i.SlippagePips,
-		&i.Pnl,
-		&i.PnlPips,
-		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const getTradeByID = `-- name: GetTradeByID :one
-SELECT id, user_id, account_id, candle_id, symbol, timeframe, setup_timestamp_utc,
-    account_balance_at_setup, leverage_at_setup, max_risk_per_trade_pct_at_setup,
-    timezone_at_setup, bias, planned_entry, planned_sl, planned_tp, planned_rr,
-    planned_risk_pct, planned_risk_amount, planned_position_size, reason_for_trade, created_at
-FROM trades WHERE id = $1
+SELECT id, user_id, account_id, candle_id, symbol, timeframe, direction, planned_entry, stop_loss, take_profit, risk_percent, created_at FROM trades
+WHERE id = $1
 `
 
-type GetTradeByIDRow struct {
-	ID                        uuid.UUID          `json:"id"`
-	UserID                    uuid.UUID          `json:"user_id"`
-	AccountID                 uuid.UUID          `json:"account_id"`
-	CandleID                  uuid.UUID          `json:"candle_id"`
-	Symbol                    string             `json:"symbol"`
-	Timeframe                 string             `json:"timeframe"`
-	SetupTimestampUtc         pgtype.Timestamptz `json:"setup_timestamp_utc"`
-	AccountBalanceAtSetup     decimal.Decimal    `json:"account_balance_at_setup"`
-	LeverageAtSetup           int32              `json:"leverage_at_setup"`
-	MaxRiskPerTradePctAtSetup decimal.Decimal    `json:"max_risk_per_trade_pct_at_setup"`
-	TimezoneAtSetup           string             `json:"timezone_at_setup"`
-	Bias                      TradeBias          `json:"bias"`
-	PlannedEntry              decimal.Decimal    `json:"planned_entry"`
-	PlannedSl                 decimal.Decimal    `json:"planned_sl"`
-	PlannedTp                 decimal.Decimal    `json:"planned_tp"`
-	PlannedRr                 decimal.Decimal    `json:"planned_rr"`
-	PlannedRiskPct            decimal.Decimal    `json:"planned_risk_pct"`
-	PlannedRiskAmount         decimal.Decimal    `json:"planned_risk_amount"`
-	PlannedPositionSize       decimal.Decimal    `json:"planned_position_size"`
-	ReasonForTrade            string             `json:"reason_for_trade"`
-	CreatedAt                 pgtype.Timestamptz `json:"created_at"`
-}
-
-func (q *Queries) GetTradeByID(ctx context.Context, id uuid.UUID) (GetTradeByIDRow, error) {
+func (q *Queries) GetTradeByID(ctx context.Context, id uuid.UUID) (Trade, error) {
 	row := q.db.QueryRow(ctx, getTradeByID, id)
-	var i GetTradeByIDRow
+	var i Trade
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
@@ -246,27 +131,18 @@ func (q *Queries) GetTradeByID(ctx context.Context, id uuid.UUID) (GetTradeByIDR
 		&i.CandleID,
 		&i.Symbol,
 		&i.Timeframe,
-		&i.SetupTimestampUtc,
-		&i.AccountBalanceAtSetup,
-		&i.LeverageAtSetup,
-		&i.MaxRiskPerTradePctAtSetup,
-		&i.TimezoneAtSetup,
-		&i.Bias,
+		&i.Direction,
 		&i.PlannedEntry,
-		&i.PlannedSl,
-		&i.PlannedTp,
-		&i.PlannedRr,
-		&i.PlannedRiskPct,
-		&i.PlannedRiskAmount,
-		&i.PlannedPositionSize,
-		&i.ReasonForTrade,
+		&i.StopLoss,
+		&i.TakeProfit,
+		&i.RiskPercent,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const getTradeExecutions = `-- name: GetTradeExecutions :many
-SELECT id, trade_id, event_type, price, position_size, executed_at, session, reason, slippage_pips, pnl, pnl_pips, created_at FROM trade_executions
+SELECT id, trade_id, execution_type, price, quantity, executed_at FROM trade_executions
 WHERE trade_id = $1
 ORDER BY executed_at ASC
 `
@@ -283,16 +159,10 @@ func (q *Queries) GetTradeExecutions(ctx context.Context, tradeID uuid.UUID) ([]
 		if err := rows.Scan(
 			&i.ID,
 			&i.TradeID,
-			&i.EventType,
+			&i.ExecutionType,
 			&i.Price,
-			&i.PositionSize,
+			&i.Quantity,
 			&i.ExecutedAt,
-			&i.Session,
-			&i.Reason,
-			&i.SlippagePips,
-			&i.Pnl,
-			&i.PnlPips,
-			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -305,12 +175,9 @@ func (q *Queries) GetTradeExecutions(ctx context.Context, tradeID uuid.UUID) ([]
 }
 
 const getTradesByAccountAndCandle = `-- name: GetTradesByAccountAndCandle :many
-SELECT id, user_id, account_id, candle_id, symbol, timeframe, setup_timestamp_utc,
-    account_balance_at_setup, leverage_at_setup, max_risk_per_trade_pct_at_setup,
-    timezone_at_setup, bias, planned_entry, planned_sl, planned_tp, planned_rr,
-    planned_risk_pct, planned_risk_amount, planned_position_size, reason_for_trade, created_at 
-FROM trades
-WHERE account_id = $1 AND candle_id = $2
+SELECT id, user_id, account_id, candle_id, symbol, timeframe, direction, planned_entry, stop_loss, take_profit, risk_percent, created_at FROM trades
+WHERE account_id = $1
+  AND candle_id = $2
 ORDER BY created_at DESC
 `
 
@@ -319,39 +186,15 @@ type GetTradesByAccountAndCandleParams struct {
 	CandleID  uuid.UUID `json:"candle_id"`
 }
 
-type GetTradesByAccountAndCandleRow struct {
-	ID                        uuid.UUID          `json:"id"`
-	UserID                    uuid.UUID          `json:"user_id"`
-	AccountID                 uuid.UUID          `json:"account_id"`
-	CandleID                  uuid.UUID          `json:"candle_id"`
-	Symbol                    string             `json:"symbol"`
-	Timeframe                 string             `json:"timeframe"`
-	SetupTimestampUtc         pgtype.Timestamptz `json:"setup_timestamp_utc"`
-	AccountBalanceAtSetup     decimal.Decimal    `json:"account_balance_at_setup"`
-	LeverageAtSetup           int32              `json:"leverage_at_setup"`
-	MaxRiskPerTradePctAtSetup decimal.Decimal    `json:"max_risk_per_trade_pct_at_setup"`
-	TimezoneAtSetup           string             `json:"timezone_at_setup"`
-	Bias                      TradeBias          `json:"bias"`
-	PlannedEntry              decimal.Decimal    `json:"planned_entry"`
-	PlannedSl                 decimal.Decimal    `json:"planned_sl"`
-	PlannedTp                 decimal.Decimal    `json:"planned_tp"`
-	PlannedRr                 decimal.Decimal    `json:"planned_rr"`
-	PlannedRiskPct            decimal.Decimal    `json:"planned_risk_pct"`
-	PlannedRiskAmount         decimal.Decimal    `json:"planned_risk_amount"`
-	PlannedPositionSize       decimal.Decimal    `json:"planned_position_size"`
-	ReasonForTrade            string             `json:"reason_for_trade"`
-	CreatedAt                 pgtype.Timestamptz `json:"created_at"`
-}
-
-func (q *Queries) GetTradesByAccountAndCandle(ctx context.Context, arg GetTradesByAccountAndCandleParams) ([]GetTradesByAccountAndCandleRow, error) {
+func (q *Queries) GetTradesByAccountAndCandle(ctx context.Context, arg GetTradesByAccountAndCandleParams) ([]Trade, error) {
 	rows, err := q.db.Query(ctx, getTradesByAccountAndCandle, arg.AccountID, arg.CandleID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []GetTradesByAccountAndCandleRow
+	var items []Trade
 	for rows.Next() {
-		var i GetTradesByAccountAndCandleRow
+		var i Trade
 		if err := rows.Scan(
 			&i.ID,
 			&i.UserID,
@@ -359,20 +202,11 @@ func (q *Queries) GetTradesByAccountAndCandle(ctx context.Context, arg GetTrades
 			&i.CandleID,
 			&i.Symbol,
 			&i.Timeframe,
-			&i.SetupTimestampUtc,
-			&i.AccountBalanceAtSetup,
-			&i.LeverageAtSetup,
-			&i.MaxRiskPerTradePctAtSetup,
-			&i.TimezoneAtSetup,
-			&i.Bias,
+			&i.Direction,
 			&i.PlannedEntry,
-			&i.PlannedSl,
-			&i.PlannedTp,
-			&i.PlannedRr,
-			&i.PlannedRiskPct,
-			&i.PlannedRiskAmount,
-			&i.PlannedPositionSize,
-			&i.ReasonForTrade,
+			&i.StopLoss,
+			&i.TakeProfit,
+			&i.RiskPercent,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -386,11 +220,7 @@ func (q *Queries) GetTradesByAccountAndCandle(ctx context.Context, arg GetTrades
 }
 
 const getTradesByUserID = `-- name: GetTradesByUserID :many
-SELECT id, user_id, account_id, candle_id, symbol, timeframe, setup_timestamp_utc,
-    account_balance_at_setup, leverage_at_setup, max_risk_per_trade_pct_at_setup,
-    timezone_at_setup, bias, planned_entry, planned_sl, planned_tp, planned_rr,
-    planned_risk_pct, planned_risk_amount, planned_position_size, reason_for_trade, created_at
-FROM trades 
+SELECT id, user_id, account_id, candle_id, symbol, timeframe, direction, planned_entry, stop_loss, take_profit, risk_percent, created_at FROM trades
 WHERE user_id = $1
 ORDER BY created_at DESC
 LIMIT $2
@@ -401,39 +231,15 @@ type GetTradesByUserIDParams struct {
 	Limit  int32     `json:"limit"`
 }
 
-type GetTradesByUserIDRow struct {
-	ID                        uuid.UUID          `json:"id"`
-	UserID                    uuid.UUID          `json:"user_id"`
-	AccountID                 uuid.UUID          `json:"account_id"`
-	CandleID                  uuid.UUID          `json:"candle_id"`
-	Symbol                    string             `json:"symbol"`
-	Timeframe                 string             `json:"timeframe"`
-	SetupTimestampUtc         pgtype.Timestamptz `json:"setup_timestamp_utc"`
-	AccountBalanceAtSetup     decimal.Decimal    `json:"account_balance_at_setup"`
-	LeverageAtSetup           int32              `json:"leverage_at_setup"`
-	MaxRiskPerTradePctAtSetup decimal.Decimal    `json:"max_risk_per_trade_pct_at_setup"`
-	TimezoneAtSetup           string             `json:"timezone_at_setup"`
-	Bias                      TradeBias          `json:"bias"`
-	PlannedEntry              decimal.Decimal    `json:"planned_entry"`
-	PlannedSl                 decimal.Decimal    `json:"planned_sl"`
-	PlannedTp                 decimal.Decimal    `json:"planned_tp"`
-	PlannedRr                 decimal.Decimal    `json:"planned_rr"`
-	PlannedRiskPct            decimal.Decimal    `json:"planned_risk_pct"`
-	PlannedRiskAmount         decimal.Decimal    `json:"planned_risk_amount"`
-	PlannedPositionSize       decimal.Decimal    `json:"planned_position_size"`
-	ReasonForTrade            string             `json:"reason_for_trade"`
-	CreatedAt                 pgtype.Timestamptz `json:"created_at"`
-}
-
-func (q *Queries) GetTradesByUserID(ctx context.Context, arg GetTradesByUserIDParams) ([]GetTradesByUserIDRow, error) {
+func (q *Queries) GetTradesByUserID(ctx context.Context, arg GetTradesByUserIDParams) ([]Trade, error) {
 	rows, err := q.db.Query(ctx, getTradesByUserID, arg.UserID, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []GetTradesByUserIDRow
+	var items []Trade
 	for rows.Next() {
-		var i GetTradesByUserIDRow
+		var i Trade
 		if err := rows.Scan(
 			&i.ID,
 			&i.UserID,
@@ -441,20 +247,11 @@ func (q *Queries) GetTradesByUserID(ctx context.Context, arg GetTradesByUserIDPa
 			&i.CandleID,
 			&i.Symbol,
 			&i.Timeframe,
-			&i.SetupTimestampUtc,
-			&i.AccountBalanceAtSetup,
-			&i.LeverageAtSetup,
-			&i.MaxRiskPerTradePctAtSetup,
-			&i.TimezoneAtSetup,
-			&i.Bias,
+			&i.Direction,
 			&i.PlannedEntry,
-			&i.PlannedSl,
-			&i.PlannedTp,
-			&i.PlannedRr,
-			&i.PlannedRiskPct,
-			&i.PlannedRiskAmount,
-			&i.PlannedPositionSize,
-			&i.ReasonForTrade,
+			&i.StopLoss,
+			&i.TakeProfit,
+			&i.RiskPercent,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -465,83 +262,4 @@ func (q *Queries) GetTradesByUserID(ctx context.Context, arg GetTradesByUserIDPa
 		return nil, err
 	}
 	return items, nil
-}
-
-const updateTradeClosure = `-- name: UpdateTradeClosure :exec
-UPDATE trades
-SET
-    close_timestamp_utc = $2,
-    close_price = $3,
-    result = $4,
-    pips_gained = $5,
-    money_gained = $6,
-    rr_realized = $7,
-    duration_seconds = $8,
-    session = $9
-WHERE id = $1
-`
-
-type UpdateTradeClosureParams struct {
-	ID                uuid.UUID          `json:"id"`
-	CloseTimestampUtc pgtype.Timestamptz `json:"close_timestamp_utc"`
-	ClosePrice        decimal.Decimal    `json:"close_price"`
-	Result            NullTradeResult    `json:"result"`
-	PipsGained        decimal.Decimal    `json:"pips_gained"`
-	MoneyGained       decimal.Decimal    `json:"money_gained"`
-	RrRealized        decimal.Decimal    `json:"rr_realized"`
-	DurationSeconds   pgtype.Int4        `json:"duration_seconds"`
-	Session           NullSessionType    `json:"session"`
-}
-
-func (q *Queries) UpdateTradeClosure(ctx context.Context, arg UpdateTradeClosureParams) error {
-	_, err := q.db.Exec(ctx, updateTradeClosure,
-		arg.ID,
-		arg.CloseTimestampUtc,
-		arg.ClosePrice,
-		arg.Result,
-		arg.PipsGained,
-		arg.MoneyGained,
-		arg.RrRealized,
-		arg.DurationSeconds,
-		arg.Session,
-	)
-	return err
-}
-
-const updateTradeExecution = `-- name: UpdateTradeExecution :exec
-UPDATE trades
-SET
-    actual_entry = $2,
-    actual_sl = $3,
-    actual_tp = $4,
-    actual_risk_pct = $5,
-    actual_risk_amount = $6,
-    actual_position_size = $7,
-    execution_timestamp_utc = $8
-WHERE id = $1
-`
-
-type UpdateTradeExecutionParams struct {
-	ID                    uuid.UUID          `json:"id"`
-	ActualEntry           decimal.Decimal    `json:"actual_entry"`
-	ActualSl              decimal.Decimal    `json:"actual_sl"`
-	ActualTp              decimal.Decimal    `json:"actual_tp"`
-	ActualRiskPct         decimal.Decimal    `json:"actual_risk_pct"`
-	ActualRiskAmount      decimal.Decimal    `json:"actual_risk_amount"`
-	ActualPositionSize    decimal.Decimal    `json:"actual_position_size"`
-	ExecutionTimestampUtc pgtype.Timestamptz `json:"execution_timestamp_utc"`
-}
-
-func (q *Queries) UpdateTradeExecution(ctx context.Context, arg UpdateTradeExecutionParams) error {
-	_, err := q.db.Exec(ctx, updateTradeExecution,
-		arg.ID,
-		arg.ActualEntry,
-		arg.ActualSl,
-		arg.ActualTp,
-		arg.ActualRiskPct,
-		arg.ActualRiskAmount,
-		arg.ActualPositionSize,
-		arg.ExecutionTimestampUtc,
-	)
-	return err
 }

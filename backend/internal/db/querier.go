@@ -8,38 +8,15 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Querier interface {
-	CreateAccount(ctx context.Context, arg CreateAccountParams) (Account, error)
-	CreateCandle(ctx context.Context, arg CreateCandleParams) (CandlesWeekly, error)
-	CreateIndicator(ctx context.Context, arg CreateIndicatorParams) (IndicatorsWeekly, error)
-	CreateRuleResult(ctx context.Context, arg CreateRuleResultParams) error
-	CreateTrade(ctx context.Context, arg CreateTradeParams) (CreateTradeRow, error)
+	CreateTrade(ctx context.Context, arg CreateTradeParams) (Trade, error)
 	CreateTradeExecution(ctx context.Context, arg CreateTradeExecutionParams) (TradeExecution, error)
-	CreateUser(ctx context.Context, id uuid.UUID) (User, error)
-	GetAccountByID(ctx context.Context, id uuid.UUID) (Account, error)
-	GetAccountsByUserID(ctx context.Context, userID uuid.UUID) ([]Account, error)
-	GetAllCandlesOrdered(ctx context.Context) ([]CandlesWeekly, error)
-	GetCandleByID(ctx context.Context, id uuid.UUID) (CandlesWeekly, error)
-	GetCandleByTimestamp(ctx context.Context, timestampUtc pgtype.Timestamptz) (CandlesWeekly, error)
-	GetCandlesInRange(ctx context.Context, arg GetCandlesInRangeParams) ([]CandlesWeekly, error)
-	GetIndicatorByCandleID(ctx context.Context, candleID uuid.UUID) (IndicatorsWeekly, error)
-	GetLatestCandles(ctx context.Context, limit int32) ([]CandlesWeekly, error)
-	GetLatestIndicators(ctx context.Context, limit int32) ([]GetLatestIndicatorsRow, error)
-	GetPreviousIndicatorByTimestamp(ctx context.Context, timestampUtc pgtype.Timestamptz) (GetPreviousIndicatorByTimestampRow, error)
-	GetRuleResultsByCandleID(ctx context.Context, candleID uuid.UUID) ([]GetRuleResultsByCandleIDRow, error)
-	GetTradeByID(ctx context.Context, id uuid.UUID) (GetTradeByIDRow, error)
+	GetTradeByID(ctx context.Context, id uuid.UUID) (Trade, error)
 	GetTradeExecutions(ctx context.Context, tradeID uuid.UUID) ([]TradeExecution, error)
-	GetTradesByAccountAndCandle(ctx context.Context, arg GetTradesByAccountAndCandleParams) ([]GetTradesByAccountAndCandleRow, error)
-	GetTradesByUserID(ctx context.Context, arg GetTradesByUserIDParams) ([]GetTradesByUserIDRow, error)
-	GetUser(ctx context.Context, id uuid.UUID) (User, error)
-	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
-	TruncateRuleResults(ctx context.Context) error
-	UpdateIndicatorEMAs(ctx context.Context, arg UpdateIndicatorEMAsParams) error
-	UpdateTradeClosure(ctx context.Context, arg UpdateTradeClosureParams) error
-	UpdateTradeExecution(ctx context.Context, arg UpdateTradeExecutionParams) error
+	GetTradesByAccountAndCandle(ctx context.Context, arg GetTradesByAccountAndCandleParams) ([]Trade, error)
+	GetTradesByUserID(ctx context.Context, arg GetTradesByUserIDParams) ([]Trade, error)
 }
 
 var _ Querier = (*Queries)(nil)

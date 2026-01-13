@@ -55,94 +55,49 @@ func (ns NullAccountType) Value() (driver.Value, error) {
 	return string(ns.AccountType), nil
 }
 
-type EmotionType string
+type ExecutionType string
 
 const (
-	EmotionTypeCalm    EmotionType = "calm"
-	EmotionTypeAnxious EmotionType = "anxious"
-	EmotionTypeFomo    EmotionType = "fomo"
-	EmotionTypeRevenge EmotionType = "revenge"
-	EmotionTypeOther   EmotionType = "other"
+	ExecutionTypeENTRYFILLED ExecutionType = "ENTRY_FILLED"
+	ExecutionTypePARTIALEXIT ExecutionType = "PARTIAL_EXIT"
+	ExecutionTypeTPHIT       ExecutionType = "TP_HIT"
+	ExecutionTypeSLHIT       ExecutionType = "SL_HIT"
+	ExecutionTypeMANUALCLOSE ExecutionType = "MANUAL_CLOSE"
 )
 
-func (e *EmotionType) Scan(src interface{}) error {
+func (e *ExecutionType) Scan(src interface{}) error {
 	switch s := src.(type) {
 	case []byte:
-		*e = EmotionType(s)
+		*e = ExecutionType(s)
 	case string:
-		*e = EmotionType(s)
+		*e = ExecutionType(s)
 	default:
-		return fmt.Errorf("unsupported scan type for EmotionType: %T", src)
+		return fmt.Errorf("unsupported scan type for ExecutionType: %T", src)
 	}
 	return nil
 }
 
-type NullEmotionType struct {
-	EmotionType EmotionType `json:"emotion_type"`
-	Valid       bool        `json:"valid"` // Valid is true if EmotionType is not NULL
+type NullExecutionType struct {
+	ExecutionType ExecutionType `json:"execution_type"`
+	Valid         bool          `json:"valid"` // Valid is true if ExecutionType is not NULL
 }
 
 // Scan implements the Scanner interface.
-func (ns *NullEmotionType) Scan(value interface{}) error {
+func (ns *NullExecutionType) Scan(value interface{}) error {
 	if value == nil {
-		ns.EmotionType, ns.Valid = "", false
+		ns.ExecutionType, ns.Valid = "", false
 		return nil
 	}
 	ns.Valid = true
-	return ns.EmotionType.Scan(value)
+	return ns.ExecutionType.Scan(value)
 }
 
 // Value implements the driver Valuer interface.
-func (ns NullEmotionType) Value() (driver.Value, error) {
+func (ns NullExecutionType) Value() (driver.Value, error) {
 	if !ns.Valid {
 		return nil, nil
 	}
-	return string(ns.EmotionType), nil
-}
-
-type ExecutionEventType string
-
-const (
-	ExecutionEventTypeEntry        ExecutionEventType = "entry"
-	ExecutionEventTypePartialClose ExecutionEventType = "partial_close"
-	ExecutionEventTypeTpHit        ExecutionEventType = "tp_hit"
-	ExecutionEventTypeSlHit        ExecutionEventType = "sl_hit"
-	ExecutionEventTypeManualClose  ExecutionEventType = "manual_close"
-)
-
-func (e *ExecutionEventType) Scan(src interface{}) error {
-	switch s := src.(type) {
-	case []byte:
-		*e = ExecutionEventType(s)
-	case string:
-		*e = ExecutionEventType(s)
-	default:
-		return fmt.Errorf("unsupported scan type for ExecutionEventType: %T", src)
-	}
-	return nil
-}
-
-type NullExecutionEventType struct {
-	ExecutionEventType ExecutionEventType `json:"execution_event_type"`
-	Valid              bool               `json:"valid"` // Valid is true if ExecutionEventType is not NULL
-}
-
-// Scan implements the Scanner interface.
-func (ns *NullExecutionEventType) Scan(value interface{}) error {
-	if value == nil {
-		ns.ExecutionEventType, ns.Valid = "", false
-		return nil
-	}
-	ns.Valid = true
-	return ns.ExecutionEventType.Scan(value)
-}
-
-// Value implements the driver Valuer interface.
-func (ns NullExecutionEventType) Value() (driver.Value, error) {
-	if !ns.Valid {
-		return nil, nil
-	}
-	return string(ns.ExecutionEventType), nil
+	return string(ns.ExecutionType), nil
 }
 
 type RuleResultType string
@@ -272,89 +227,46 @@ func (ns NullSessionType) Value() (driver.Value, error) {
 	return string(ns.SessionType), nil
 }
 
-type TradeBias string
+type TradeDirection string
 
 const (
-	TradeBiasLong  TradeBias = "long"
-	TradeBiasShort TradeBias = "short"
+	TradeDirectionLONG  TradeDirection = "LONG"
+	TradeDirectionSHORT TradeDirection = "SHORT"
 )
 
-func (e *TradeBias) Scan(src interface{}) error {
+func (e *TradeDirection) Scan(src interface{}) error {
 	switch s := src.(type) {
 	case []byte:
-		*e = TradeBias(s)
+		*e = TradeDirection(s)
 	case string:
-		*e = TradeBias(s)
+		*e = TradeDirection(s)
 	default:
-		return fmt.Errorf("unsupported scan type for TradeBias: %T", src)
+		return fmt.Errorf("unsupported scan type for TradeDirection: %T", src)
 	}
 	return nil
 }
 
-type NullTradeBias struct {
-	TradeBias TradeBias `json:"trade_bias"`
-	Valid     bool      `json:"valid"` // Valid is true if TradeBias is not NULL
+type NullTradeDirection struct {
+	TradeDirection TradeDirection `json:"trade_direction"`
+	Valid          bool           `json:"valid"` // Valid is true if TradeDirection is not NULL
 }
 
 // Scan implements the Scanner interface.
-func (ns *NullTradeBias) Scan(value interface{}) error {
+func (ns *NullTradeDirection) Scan(value interface{}) error {
 	if value == nil {
-		ns.TradeBias, ns.Valid = "", false
+		ns.TradeDirection, ns.Valid = "", false
 		return nil
 	}
 	ns.Valid = true
-	return ns.TradeBias.Scan(value)
+	return ns.TradeDirection.Scan(value)
 }
 
 // Value implements the driver Valuer interface.
-func (ns NullTradeBias) Value() (driver.Value, error) {
+func (ns NullTradeDirection) Value() (driver.Value, error) {
 	if !ns.Valid {
 		return nil, nil
 	}
-	return string(ns.TradeBias), nil
-}
-
-type TradeResult string
-
-const (
-	TradeResultWin       TradeResult = "win"
-	TradeResultLoss      TradeResult = "loss"
-	TradeResultBreakeven TradeResult = "breakeven"
-)
-
-func (e *TradeResult) Scan(src interface{}) error {
-	switch s := src.(type) {
-	case []byte:
-		*e = TradeResult(s)
-	case string:
-		*e = TradeResult(s)
-	default:
-		return fmt.Errorf("unsupported scan type for TradeResult: %T", src)
-	}
-	return nil
-}
-
-type NullTradeResult struct {
-	TradeResult TradeResult `json:"trade_result"`
-	Valid       bool        `json:"valid"` // Valid is true if TradeResult is not NULL
-}
-
-// Scan implements the Scanner interface.
-func (ns *NullTradeResult) Scan(value interface{}) error {
-	if value == nil {
-		ns.TradeResult, ns.Valid = "", false
-		return nil
-	}
-	ns.Valid = true
-	return ns.TradeResult.Scan(value)
-}
-
-// Value implements the driver Valuer interface.
-func (ns NullTradeResult) Value() (driver.Value, error) {
-	if !ns.Valid {
-		return nil, nil
-	}
-	return string(ns.TradeResult), nil
+	return string(ns.TradeDirection), nil
 }
 
 type Account struct {
@@ -418,77 +330,27 @@ type RuleResult struct {
 }
 
 type Trade struct {
-	ID                        uuid.UUID          `json:"id"`
-	UserID                    uuid.UUID          `json:"user_id"`
-	AccountID                 uuid.UUID          `json:"account_id"`
-	CandleID                  uuid.UUID          `json:"candle_id"`
-	Symbol                    string             `json:"symbol"`
-	Timeframe                 string             `json:"timeframe"`
-	SetupTimestampUtc         pgtype.Timestamptz `json:"setup_timestamp_utc"`
-	AccountBalanceAtSetup     decimal.Decimal    `json:"account_balance_at_setup"`
-	LeverageAtSetup           int32              `json:"leverage_at_setup"`
-	MaxRiskPerTradePctAtSetup decimal.Decimal    `json:"max_risk_per_trade_pct_at_setup"`
-	TimezoneAtSetup           string             `json:"timezone_at_setup"`
-	Bias                      TradeBias          `json:"bias"`
-	PlannedEntry              decimal.Decimal    `json:"planned_entry"`
-	PlannedSl                 decimal.Decimal    `json:"planned_sl"`
-	PlannedTp                 decimal.Decimal    `json:"planned_tp"`
-	PlannedRr                 decimal.Decimal    `json:"planned_rr"`
-	PlannedRiskPct            decimal.Decimal    `json:"planned_risk_pct"`
-	PlannedRiskAmount         decimal.Decimal    `json:"planned_risk_amount"`
-	PlannedPositionSize       decimal.Decimal    `json:"planned_position_size"`
-	ReasonForTrade            string             `json:"reason_for_trade"`
-	ActualEntry               decimal.Decimal    `json:"actual_entry"`
-	ActualSl                  decimal.Decimal    `json:"actual_sl"`
-	ActualTp                  decimal.Decimal    `json:"actual_tp"`
-	ActualRiskPct             decimal.Decimal    `json:"actual_risk_pct"`
-	ActualRiskAmount          decimal.Decimal    `json:"actual_risk_amount"`
-	ActualPositionSize        decimal.Decimal    `json:"actual_position_size"`
-	ExecutionTimestampUtc     pgtype.Timestamptz `json:"execution_timestamp_utc"`
-	CloseTimestampUtc         pgtype.Timestamptz `json:"close_timestamp_utc"`
-	ClosePrice                decimal.Decimal    `json:"close_price"`
-	Result                    NullTradeResult    `json:"result"`
-	PipsGained                decimal.Decimal    `json:"pips_gained"`
-	MoneyGained               decimal.Decimal    `json:"money_gained"`
-	RrRealized                decimal.Decimal    `json:"rr_realized"`
-	DurationSeconds           pgtype.Int4        `json:"duration_seconds"`
-	Session                   NullSessionType    `json:"session"`
-	CreatedAt                 pgtype.Timestamptz `json:"created_at"`
-}
-
-type TradeExecution struct {
 	ID           uuid.UUID          `json:"id"`
-	TradeID      uuid.UUID          `json:"trade_id"`
-	EventType    ExecutionEventType `json:"event_type"`
-	Price        decimal.Decimal    `json:"price"`
-	PositionSize decimal.Decimal    `json:"position_size"`
-	ExecutedAt   pgtype.Timestamptz `json:"executed_at"`
-	Session      NullSessionType    `json:"session"`
-	Reason       pgtype.Text        `json:"reason"`
-	SlippagePips decimal.Decimal    `json:"slippage_pips"`
-	Pnl          decimal.Decimal    `json:"pnl"`
-	PnlPips      decimal.Decimal    `json:"pnl_pips"`
+	UserID       uuid.UUID          `json:"user_id"`
+	AccountID    uuid.UUID          `json:"account_id"`
+	CandleID     uuid.UUID          `json:"candle_id"`
+	Symbol       string             `json:"symbol"`
+	Timeframe    string             `json:"timeframe"`
+	Direction    TradeDirection     `json:"direction"`
+	PlannedEntry decimal.Decimal    `json:"planned_entry"`
+	StopLoss     decimal.Decimal    `json:"stop_loss"`
+	TakeProfit   decimal.Decimal    `json:"take_profit"`
+	RiskPercent  decimal.Decimal    `json:"risk_percent"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 }
 
-type TradeFeedback struct {
-	ID             uuid.UUID          `json:"id"`
-	TradeID        uuid.UUID          `json:"trade_id"`
-	FollowedPlan   bool               `json:"followed_plan"`
-	EmotionBefore  EmotionType        `json:"emotion_before"`
-	EmotionDuring  EmotionType        `json:"emotion_during"`
-	EmotionAfter   EmotionType        `json:"emotion_after"`
-	BiggestMistake pgtype.Text        `json:"biggest_mistake"`
-	ScreenshotUrl  pgtype.Text        `json:"screenshot_url"`
-	FeedbackAt     pgtype.Timestamptz `json:"feedback_at"`
-}
-
-type TradeIntent struct {
-	ID         uuid.UUID          `json:"id"`
-	TradeID    uuid.UUID          `json:"trade_id"`
-	IntentType string             `json:"intent_type"`
-	Reason     string             `json:"reason"`
-	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+type TradeExecution struct {
+	ID            uuid.UUID          `json:"id"`
+	TradeID       uuid.UUID          `json:"trade_id"`
+	ExecutionType ExecutionType      `json:"execution_type"`
+	Price         decimal.Decimal    `json:"price"`
+	Quantity      decimal.Decimal    `json:"quantity"`
+	ExecutedAt    pgtype.Timestamptz `json:"executed_at"`
 }
 
 type User struct {
