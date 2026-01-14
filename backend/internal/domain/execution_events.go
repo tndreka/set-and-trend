@@ -4,11 +4,11 @@ package domain
 type ExecutionEventType string
 
 const (
-	EventEntry        ExecutionEventType = "entry"
-	EventPartialClose ExecutionEventType = "partial_close"
-	EventTPHit        ExecutionEventType = "tp_hit"
-	EventSLHit        ExecutionEventType = "sl_hit"
-	EventManualClose  ExecutionEventType = "manual_close"
+	EventEntry        ExecutionEventType = "ENTRY_FILLED"
+	EventPartialClose ExecutionEventType = "PARTIAL_EXITe"
+	EventTPHit        ExecutionEventType = "TP_HIT"
+	EventSLHit        ExecutionEventType = "SL_HIT"
+	EventManualClose  ExecutionEventType = "MANUAL_CLOSE"
 )
 
 // TradeIntentType represents user decisions (NOT market events)

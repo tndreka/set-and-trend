@@ -25,7 +25,7 @@ const (
 type TradeExecution struct {
 	ExecutionType    string
 	Price        float64
-	PositionSize float64
+	Quantity float64
 	ExecutedAt   time.Time
 	PnL          float64
 	PnLPips      float64
@@ -80,17 +80,29 @@ func DeriveTradeState(
 		}
 		
 		// Apply transition
-		switch exec. ExecutionType {
-		case "entry":
-			currentState = StateOpen
-		case "partial_close": 
-			if currentState == StateOpen {
-				currentState = StatePartial
-			}
-			// If already partial, stays partial
-		case "tp_hit", "sl_hit", "manual_close": 
-			currentState = StateClosed
+		
+		switch exec.ExecutionType {
+		case "ENTRY_FILLED":
+    			currentState = StateOpen
+		case "PARTIAL_EXIT": 
+    			if currentState == StateOpen {
+        			currentState = StatePartial
+    		}
+    		// If already partial, stays partial
+		case "TP_HIT", "SL_HIT", "MANUAL_CLOSE": 
+		    currentState = StateClosed
 		}
+		//switch exec. ExecutionType {
+		//case "entry":
+		//	currentState = StateOpen
+		//case "partial_close": 
+		//	if currentState == StateOpen {
+		//		currentState = StatePartial
+		//	}
+			// If already partial, stays partial
+		//case "tp_hit", "sl_hit", "manual_close": 
+		//	currentState = StateClosed
+		//}
 	}
 	
 	return currentState, nil
@@ -99,25 +111,46 @@ func DeriveTradeState(
 // CanTransition validates if a state transition is allowed
 func CanTransition(currentState TradeState, eventType string) error {
 	validTransitions := map[TradeState][]string{
-		StatePlanned: {
-			"entry", // → open
-		},
-		StateOpen: {
-			"partial_close", // → partial
-			"tp_hit",        // → closed
-			"sl_hit",        // → closed
-			"manual_close",  // → closed
-		},
-		StatePartial: {
-			"partial_close", // → partial (additional)
-			"tp_hit",        // → closed
-			"sl_hit",        // → closed
-			"manual_close",  // → closed
-		},
-		StateClosed:      {},
-		StateCancelled:   {},
-		StateInvalidated: {},
-	}
+   		 StatePlanned: {
+        		"ENTRY_FILLED", // → open (was "entry")
+    		},
+    		StateOpen: {
+        		"PARTIAL_EXIT",  // → partial (was "partial_close")
+        		"TP_HIT",        // → closed (was "tp_hit")
+        		"SL_HIT",        // → closed (was "sl_hit")
+        		"MANUAL_CLOSE",  // → closed (was "manual_close")
+    		},
+    		StatePartial: {
+        		"PARTIAL_EXIT",  // → partial (was "partial_close")
+        		"TP_HIT",        // → closed
+        		"SL_HIT",        // → closed
+        		"MANUAL_CLOSE",  // → closed
+    		},
+    		StateClosed:      {},
+    		StateCancelled:   {},
+    		StateInvalidated: {},
+	     }
+
+//validTransitions := map[TradeState][]string{
+	//	StatePlanned: {
+	//		"entry", // → open
+	//	},
+	//	StateOpen: {
+	//		"partial_close", // → partial
+	//		"tp_hit",        // → closed
+	//		"sl_hit",        // → closed
+	//		"manual_close",  // → closed
+	//	},
+	//	StatePartial: {
+	//		"partial_close", // → partial (additional)
+	//		"tp_hit",        // → closed
+	//		"sl_hit",        // → closed
+	//		"manual_close",  // → closed
+	//	},
+	//	StateClosed:      {},
+	//	StateCancelled:   {},
+	//	StateInvalidated: {},
+	//}
 	
 	allowed := validTransitions[currentState]
 	for _, valid := range allowed {
@@ -137,7 +170,7 @@ func CanTransition(currentState TradeState, eventType string) error {
 // This is CRITICAL for correct PnL calculation (not planned entry)
 func GetActualEntryPrice(executions []TradeExecution) (float64, error) {
 	for _, exec := range executions {
-		if exec.ExecutionType == "entry" {
+		if exec.ExecutionType == "ENTRY_FILLED" {
 			if exec.Price <= 0 {
 				return 0, errors.New("entry price must be positive")
 			}
@@ -180,10 +213,10 @@ func ComputePnL(
 
 // ComputeRemainingPosition calculates how much position is still open
 func ComputeRemainingPosition(
-	plannedPositionSize float64,
+	plannedQuantity float64,
 	executions []TradeExecution,
 ) (float64, error) {
-	if plannedPositionSize <= 0 {
+	if plannedQuantity <= 0 {
 		return 0, errors.New("planned position size must be positive")
 	}
 	
@@ -194,7 +227,7 @@ func ComputeRemainingPosition(
 		return sortedExecs[i].ExecutedAt.Before(sortedExecs[j].ExecutedAt)
 	})
 	
-	remaining := plannedPositionSize
+	remaining := plannedQuantity
 	entryFilled := false
 	
 	for _, exec := range sortedExecs {
@@ -206,26 +239,26 @@ func ComputeRemainingPosition(
 			if !entryFilled {
 				return 0, errors.New("partial close before entry")
 			}
-			if exec. PositionSize <= 0 {
+			if exec. Quantity <= 0 {
 				return 0, errors.New("partial close size must be positive")
 			}
-			if exec.PositionSize >= remaining {
+			if exec.Quantity >= remaining {
 				return 0, fmt.Errorf(
 					"partial close %.4f exceeds remaining %.4f",
-					exec.PositionSize,
+					exec.Quantity,
 					remaining,
 				)
 			}
-			remaining -= exec.PositionSize
+			remaining -= exec.Quantity
 			
 		case "tp_hit", "sl_hit", "manual_close": 
 			if !entryFilled {
 				return 0, errors.New("close event before entry")
 			}
-			if exec.PositionSize != remaining {
+			if exec.Quantity != remaining {
 				return 0, fmt.Errorf(
 					"close size %.4f does not match remaining %.4f",
-					exec.PositionSize,
+					exec.Quantity,
 					remaining,
 				)
 			}

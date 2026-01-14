@@ -2,13 +2,13 @@ package services
 
 import (
 	"context"
-	"errors"
+//	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
+//	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog/log"
 
@@ -91,10 +91,12 @@ func (s *ExecutionService) RecordExecution(
 		return nil, fmt.Errorf("get executions: %w", err)
 	}
 
-	intent, err := s.intentRepo.GetIntentByTradeIDTx(ctx, tx, tradeID)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return nil, fmt.Errorf("get intent: %w", err)
-	}
+	// TODO: Re-enable when trade_intents table is created
+	var intent *repositories.TradeIntent = nil
+	//intent, err := s.intentRepo.GetIntentByTradeIDTx(ctx, tx, tradeID)
+	//if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+	//	return nil, fmt.Errorf("get intent: %w", err)
+	//}
 
 	tradeExecs := mapToTradeExecutions(executions)
 	tradeIntent := mapToTradeIntent(intent)
@@ -144,7 +146,7 @@ func (s *ExecutionService) RecordExecution(
 			TradeID:      tradeID,
 			ExecutionType:    eventType,
 			Price:        &price,
-			PositionSize: &positionSize,
+			Quantity: &positionSize,
 			ExecutedAt:   time.Now(),
 			Reason:       reasonPtr,
 			PnL:          pnl,
@@ -309,10 +311,12 @@ func (s *ExecutionService) GetTradeState(
 		return "", err
 	}
 
-	intent, err := s.intentRepo.GetIntentByTradeID(ctx, tradeID)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return "", err
-	}
+	//intent, err := s.intentRepo.GetIntentByTradeID(ctx, tradeID)
+	//if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+	//	return "", err
+	//}
+	
+	var intent *repositories.TradeIntent = nil
 
 	return DeriveTradeState(
 		mapToTradeExecutions(executions),

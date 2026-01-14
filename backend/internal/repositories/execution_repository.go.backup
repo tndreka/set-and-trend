@@ -52,7 +52,7 @@ type CreateExecutionParams struct {
 // CreateExecution inserts a new execution event
 func (r *ExecutionRepository) CreateExecution(ctx context.Context, params CreateExecutionParams) (*TradeExecution, error) {
 	// Convert floats to decimals for storage
-	var priceStr, sizeStr *string
+	var priceStr, sizeStr, pnlStr, pnlPipsStr, slippageStr *string
 	
 	if params.Price != nil {
 		s := decimal.NewFromFloat(*params.Price).String()
@@ -62,24 +62,44 @@ func (r *ExecutionRepository) CreateExecution(ctx context.Context, params Create
 		s := decimal.NewFromFloat(*params.Quantity).String()
 		sizeStr = &s
 	}
+	if params.PnL != nil {
+		s := decimal. NewFromFloat(*params.PnL).String()
+		pnlStr = &s
+	}
+	if params.PnLPips != nil {
+		s := decimal.NewFromFloat(*params.PnLPips).String()
+		pnlPipsStr = &s
+	}
+	if params.SlippagePips != nil {
+		s := decimal.NewFromFloat(*params. SlippagePips).String()
+		slippageStr = &s
+	}
 	
 	var exec TradeExecution
 	
 	err := r.pool.QueryRow(ctx, `
 		INSERT INTO trade_executions (
-    		id, trade_id, execution_type, price, quantity, executed_at
+			id, trade_id, execution_type, price, quantity, 
+			executed_at, session, reason, slippage_pips, pnl, pnl_pips, created_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())
 		RETURNING id, trade_id, execution_type, price, quantity, 
-			executed_at
+			executed_at, session, reason, slippage_pips, pnl, pnl_pips, created_at
 	`, uuid.New(), params.TradeID, params.ExecutionType, 
-		priceStr, sizeStr, params.ExecutedAt).Scan(
+		priceStr, sizeStr, params.ExecutedAt, params.Session, params.Reason, 
+		slippageStr, pnlStr, pnlPipsStr).Scan(
 		&exec.ID,
 		&exec.TradeID,
 		&exec.ExecutionType,
 		&exec.Price,
 		&exec.Quantity,
 		&exec.ExecutedAt,
+		&exec. Session,
+		&exec. Reason,
+		&exec.SlippagePips,
+		&exec.PnL,
+		&exec.PnLPips,
+		&exec.CreatedAt,
 	)
 	
 	if err != nil {
@@ -93,7 +113,7 @@ func (r *ExecutionRepository) CreateExecution(ctx context.Context, params Create
 func (r *ExecutionRepository) GetExecutionsByTradeID(ctx context.Context, tradeID uuid.UUID) ([]TradeExecution, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, trade_id, execution_type, price, quantity,
-			executed_at
+			executed_at, session, reason, slippage_pips, pnl, pnl_pips, created_at
 		FROM trade_executions
 		WHERE trade_id = $1
 		ORDER BY executed_at ASC
@@ -113,6 +133,12 @@ func (r *ExecutionRepository) GetExecutionsByTradeID(ctx context.Context, tradeI
 			&exec.Price,
 			&exec.Quantity,
 			&exec.ExecutedAt,
+			&exec.Session,
+			&exec.Reason,
+			&exec.SlippagePips,
+			&exec. PnL,
+			&exec.PnLPips,
+			&exec.CreatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("scan execution: %w", err)
@@ -129,7 +155,7 @@ func (r *ExecutionRepository) GetExecutionsByTradeID(ctx context.Context, tradeI
 // CreateExecutionTx inserts execution within a transaction
 func (r *ExecutionRepository) CreateExecutionTx(ctx context.Context, tx pgx.Tx, params CreateExecutionParams) (*TradeExecution, error) {
 	// Convert floats to decimals for storage
-	var priceStr, sizeStr *string
+	var priceStr, sizeStr, pnlStr, pnlPipsStr, slippageStr *string
 	
 	if params.Price != nil {
 		s := decimal.NewFromFloat(*params.Price).String()
@@ -139,25 +165,44 @@ func (r *ExecutionRepository) CreateExecutionTx(ctx context.Context, tx pgx.Tx, 
 		s := decimal.NewFromFloat(*params.Quantity).String()
 		sizeStr = &s
 	}
+	if params.PnL != nil {
+		s := decimal.NewFromFloat(*params.PnL).String()
+		pnlStr = &s
+	}
+	if params.PnLPips != nil {
+		s := decimal. NewFromFloat(*params.PnLPips).String()
+		pnlPipsStr = &s
+	}
+	if params.SlippagePips != nil {
+		s := decimal.NewFromFloat(*params. SlippagePips).String()
+		slippageStr = &s
+	}
 	
 	var exec TradeExecution
 	
 	err := tx.QueryRow(ctx, `
 		INSERT INTO trade_executions (
 			id, trade_id, execution_type, price, quantity, 
-			executed_at
+			executed_at, session, reason, slippage_pips, pnl, pnl_pips, created_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())
 		RETURNING id, trade_id, execution_type, price, quantity, 
-			executed_at
+			executed_at, session, reason, slippage_pips, pnl, pnl_pips, created_at
 	`, uuid.New(), params.TradeID, params.ExecutionType, 
-		priceStr, sizeStr, params.ExecutedAt).Scan(
+		priceStr, sizeStr, params. ExecutedAt, params.Session, params.Reason, 
+		slippageStr, pnlStr, pnlPipsStr).Scan(
 		&exec.ID,
 		&exec.TradeID,
 		&exec.ExecutionType,
 		&exec.Price,
 		&exec.Quantity,
 		&exec.ExecutedAt,
+		&exec.Session,
+		&exec.Reason,
+		&exec.SlippagePips,
+		&exec.PnL,
+		&exec.PnLPips,
+		&exec.CreatedAt,
 	)
 	
 	if err != nil {
@@ -171,7 +216,7 @@ func (r *ExecutionRepository) CreateExecutionTx(ctx context.Context, tx pgx.Tx, 
 func (r *ExecutionRepository) GetExecutionsByTradeIDTx(ctx context. Context, tx pgx.Tx, tradeID uuid.UUID) ([]TradeExecution, error) {
 	rows, err := tx.Query(ctx, `
 		SELECT id, trade_id, execution_type, price, quantity,
-			executed_at
+			executed_at, session, reason, slippage_pips, pnl, pnl_pips, created_at
 		FROM trade_executions
 		WHERE trade_id = $1
 		ORDER BY executed_at ASC
@@ -191,6 +236,12 @@ func (r *ExecutionRepository) GetExecutionsByTradeIDTx(ctx context. Context, tx 
 			&exec.Price,
 			&exec.Quantity,
 			&exec.ExecutedAt,
+			&exec.Session,
+			&exec.Reason,
+			&exec.SlippagePips,
+			&exec.PnL,
+			&exec.PnLPips,
+			&exec.CreatedAt,
 		)
 		if err != nil {
 			return nil, fmt. Errorf("scan execution (tx): %w", err)

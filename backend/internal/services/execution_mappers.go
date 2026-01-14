@@ -49,7 +49,7 @@ func mapToTradeExecutions(execs []repositories.TradeExecution) []TradeExecution 
 		te := TradeExecution{
 			ExecutionType:    e.ExecutionType,
 			Price:        parseRequiredFloat(e.Price, "price", e.ID),
-			PositionSize: parseRequiredFloat(e.PositionSize, "position_size", e.ID),
+			Quantity: parseRequiredFloat(e.Quantity, "position_size", e.ID),
 			ExecutedAt:   e.ExecutedAt,
 			PnL:          parseOptionalFloat(e.PnL, "pnl", e.ID),
 			PnLPips:      parseOptionalFloat(e.PnLPips, "pnl_pips", e.ID),
