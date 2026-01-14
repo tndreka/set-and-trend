@@ -47,7 +47,7 @@ func mapToTradeExecutions(execs []repositories.TradeExecution) []TradeExecution 
 
 	for _, e := range execs {
 		te := TradeExecution{
-			EventType:    e.EventType,
+			ExecutionType:    e.ExecutionType,
 			Price:        parseRequiredFloat(e.Price, "price", e.ID),
 			PositionSize: parseRequiredFloat(e.PositionSize, "position_size", e.ID),
 			ExecutedAt:   e.ExecutedAt,

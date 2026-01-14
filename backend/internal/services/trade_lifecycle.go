@@ -23,7 +23,7 @@ const (
 
 // TradeExecution represents an execution event
 type TradeExecution struct {
-	EventType    string
+	ExecutionType    string
 	Price        float64
 	PositionSize float64
 	ExecutedAt   time.Time
@@ -72,7 +72,7 @@ func DeriveTradeState(
 	
 	for i, exec := range sortedExecs {
 		// Validate transition is legal
-		if err := CanTransition(currentState, exec.EventType); err != nil {
+		if err := CanTransition(currentState, exec.ExecutionType); err != nil {
 			return "", fmt.Errorf(
 				"invalid execution sequence at index %d: %w",
 				i, err,
@@ -80,7 +80,7 @@ func DeriveTradeState(
 		}
 		
 		// Apply transition
-		switch exec. EventType {
+		switch exec. ExecutionType {
 		case "entry":
 			currentState = StateOpen
 		case "partial_close": 
@@ -137,7 +137,7 @@ func CanTransition(currentState TradeState, eventType string) error {
 // This is CRITICAL for correct PnL calculation (not planned entry)
 func GetActualEntryPrice(executions []TradeExecution) (float64, error) {
 	for _, exec := range executions {
-		if exec.EventType == "entry" {
+		if exec.ExecutionType == "entry" {
 			if exec.Price <= 0 {
 				return 0, errors.New("entry price must be positive")
 			}
@@ -198,7 +198,7 @@ func ComputeRemainingPosition(
 	entryFilled := false
 	
 	for _, exec := range sortedExecs {
-		switch exec.EventType {
+		switch exec.ExecutionType {
 		case "entry":
 			entryFilled = true
 			

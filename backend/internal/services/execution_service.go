@@ -142,7 +142,7 @@ func (s *ExecutionService) RecordExecution(
 		tx,
 		repositories.CreateExecutionParams{
 			TradeID:      tradeID,
-			EventType:    eventType,
+			ExecutionType:    eventType,
 			Price:        &price,
 			PositionSize: &positionSize,
 			ExecutedAt:   time.Now(),

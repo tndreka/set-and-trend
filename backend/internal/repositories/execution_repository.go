@@ -23,7 +23,7 @@ func NewExecutionRepository(pool *pgxpool.Pool) *ExecutionRepository {
 type TradeExecution struct {
 	ID           uuid.UUID  `json:"id"`
 	TradeID      uuid.UUID  `json:"trade_id"`
-	EventType    string     `json:"event_type"`
+	ExecutionType    string     `json:"execution_type"`
 	Price        *string    `json:"price,omitempty"`
 	PositionSize *string    `json:"position_size,omitempty"`
 	PnL          *string    `json:"pnl,omitempty"`
@@ -38,7 +38,7 @@ type TradeExecution struct {
 // CreateExecutionParams contains parameters for creating an execution event
 type CreateExecutionParams struct {
 	TradeID      uuid. UUID
-	EventType    string
+	ExecutionType    string
 	Price        *float64
 	PositionSize *float64
 	PnL          *float64
@@ -79,18 +79,18 @@ func (r *ExecutionRepository) CreateExecution(ctx context.Context, params Create
 	
 	err := r.pool.QueryRow(ctx, `
 		INSERT INTO trade_executions (
-			id, trade_id, event_type, price, position_size, 
+			id, trade_id, execution_type, price, position_size, 
 			executed_at, session, reason, slippage_pips, pnl, pnl_pips, created_at
 		)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())
-		RETURNING id, trade_id, event_type, price, position_size, 
+		RETURNING id, trade_id, execution_type, price, position_size, 
 			executed_at, session, reason, slippage_pips, pnl, pnl_pips, created_at
-	`, uuid.New(), params.TradeID, params. EventType, 
+	`, uuid.New(), params.TradeID, params.ExecutionType, 
 		priceStr, sizeStr, params.ExecutedAt, params.Session, params.Reason, 
 		slippageStr, pnlStr, pnlPipsStr).Scan(
 		&exec.ID,
 		&exec.TradeID,
-		&exec.EventType,
+		&exec.ExecutionType,
 		&exec.Price,
 		&exec.PositionSize,
 		&exec.ExecutedAt,
@@ -112,7 +112,7 @@ func (r *ExecutionRepository) CreateExecution(ctx context.Context, params Create
 // GetExecutionsByTradeID retrieves all execution events for a trade
 func (r *ExecutionRepository) GetExecutionsByTradeID(ctx context.Context, tradeID uuid.UUID) ([]TradeExecution, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, trade_id, event_type, price, position_size,
+		SELECT id, trade_id, execution_type, price, position_size,
 			executed_at, session, reason, slippage_pips, pnl, pnl_pips, created_at
 		FROM trade_executions
 		WHERE trade_id = $1
@@ -129,7 +129,7 @@ func (r *ExecutionRepository) GetExecutionsByTradeID(ctx context.Context, tradeI
 		err := rows.Scan(
 			&exec.ID,
 			&exec.TradeID,
-			&exec.EventType,
+			&exec.ExecutionType,
 			&exec.Price,
 			&exec.PositionSize,
 			&exec.ExecutedAt,
@@ -182,20 +182,20 @@ func (r *ExecutionRepository) CreateExecutionTx(ctx context.Context, tx pgx.Tx, 
 	
 	err := tx.QueryRow(ctx, `
 		INSERT INTO trade_executions (
-			id, trade_id, event_type, price, position_size, 
+			id, trade_id, execution_type, price, position_size, 
 			executed_at, session, reason, slippage_pips, pnl, pnl_pips, created_at
 		)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())
-		RETURNING id, trade_id, event_type, price, position_size, 
+		RETURNING id, trade_id, execution_type, price, position_size, 
 			executed_at, session, reason, slippage_pips, pnl, pnl_pips, created_at
-	`, uuid.New(), params.TradeID, params. EventType, 
+	`, uuid.New(), params.TradeID, params.ExecutionType, 
 		priceStr, sizeStr, params. ExecutedAt, params.Session, params.Reason, 
 		slippageStr, pnlStr, pnlPipsStr).Scan(
 		&exec.ID,
-		&exec. TradeID,
-		&exec.EventType,
+		&exec.TradeID,
+		&exec.ExecutionType,
 		&exec.Price,
-		&exec. PositionSize,
+		&exec.PositionSize,
 		&exec.ExecutedAt,
 		&exec.Session,
 		&exec.Reason,
@@ -215,7 +215,7 @@ func (r *ExecutionRepository) CreateExecutionTx(ctx context.Context, tx pgx.Tx, 
 // GetExecutionsByTradeIDTx retrieves executions within a transaction
 func (r *ExecutionRepository) GetExecutionsByTradeIDTx(ctx context. Context, tx pgx.Tx, tradeID uuid.UUID) ([]TradeExecution, error) {
 	rows, err := tx.Query(ctx, `
-		SELECT id, trade_id, event_type, price, position_size,
+		SELECT id, trade_id, execution_type, price, position_size,
 			executed_at, session, reason, slippage_pips, pnl, pnl_pips, created_at
 		FROM trade_executions
 		WHERE trade_id = $1
@@ -232,7 +232,7 @@ func (r *ExecutionRepository) GetExecutionsByTradeIDTx(ctx context. Context, tx 
 		err := rows.Scan(
 			&exec.ID,
 			&exec.TradeID,
-			&exec.EventType,
+			&exec.ExecutionType,
 			&exec.Price,
 			&exec.PositionSize,
 			&exec.ExecutedAt,

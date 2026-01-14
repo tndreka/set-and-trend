@@ -47,7 +47,7 @@ func (s *TradeService) CreateTrade(ctx context.Context, input CreateTradeInput) 
 	}
 
 	// 3. Validate trade geometry
-	err = ValidateTradeGeometry(input.PlannedEntry, input.PlannedSL, input.PlannedTP, direction)
+	err = ValidateTradeGeometry(input.PlannedEntry, input.PlannedSL, input.PlannedTP, strings.ToLower(direction))
 	if err != nil {
 		return nil, fmt.Errorf("invalid geometry: %w", err)
 	}
@@ -86,7 +86,7 @@ func (s *TradeService) CreateTrade(ctx context.Context, input CreateTradeInput) 
 		return nil, fmt.Errorf("position sizing: %w", err)
 	}
 
-	rr, err := ComputeRR(input.PlannedEntry, input.PlannedSL, input.PlannedTP, direction)
+	rr, err := ComputeRR(input.PlannedEntry, input.PlannedSL, input.PlannedTP, strings.ToLower(direction))
 	if err != nil {
 		return nil, fmt.Errorf("RR calculation: %w", err)
 	}
