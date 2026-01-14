@@ -20,13 +20,13 @@ func NewTradeHandler(tradeService *services.TradeService) *TradeHandler {
 type CreateTradeRequest struct {
 	AccountID      string  `json:"account_id" binding:"required,uuid"`
 	CandleID       string  `json:"candle_id" binding:"required,uuid"`
-	Bias           string  `json:"bias" binding:"required,oneof=long short"`
+	Direction      string  `json:"direction" binding:"required,oneof=LONG SHORT long short"`
 	PlannedEntry   float64 `json:"planned_entry" binding:"required,gt=0"`
 	PlannedSL      float64 `json:"planned_sl" binding:"required,gt=0"`
 	PlannedTP      float64 `json:"planned_tp" binding:"required,gt=0"`
 	PlannedRiskPct float64 `json:"planned_risk_pct" binding:"required,gt=0,lte=100"`
-	ReasonForTrade string  `json:"reason_for_trade" binding:"required,min=10"`
 }
+
 
 func (h *TradeHandler) CreateTrade(c *gin.Context) {
 	var req CreateTradeRequest
@@ -48,16 +48,20 @@ func (h *TradeHandler) CreateTrade(c *gin.Context) {
 		return
 	}
 
-	trade, err := h.tradeService.CreateTrade(c.Request.Context(), services.CreateTradeInput{
+	trade, err := h.tradeService.CreateTrade(
+	c.Request.Context(),
+	services.CreateTradeInput{
 		AccountID:      accountID,
 		CandleID:       candleID,
-		Bias:           req.Bias,
+		Direction:      req.Direction,
 		PlannedEntry:   req.PlannedEntry,
 		PlannedSL:      req.PlannedSL,
 		PlannedTP:      req.PlannedTP,
 		PlannedRiskPct: req.PlannedRiskPct,
-		ReasonForTrade: req.ReasonForTrade,
-	})
+	    },
+	)
+
+
 	if err != nil {
 		log.Error().Err(err).Msg("create trade failed")
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -66,8 +70,7 @@ func (h *TradeHandler) CreateTrade(c *gin.Context) {
 
 	log.Info().
 		Str("trade_id", trade.ID.String()).
-		Str("bias", trade.Bias).
-		Str("rr", trade.PlannedRR).
+		Str("direction", trade.Direction).
 		Msg("trade created")
 
 	c.JSON(http.StatusCreated, gin.H{"status": "success", "data": trade})

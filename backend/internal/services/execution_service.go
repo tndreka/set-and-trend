@@ -298,3 +298,24 @@ func (s *ExecutionService) CancelTrade(ctx context.Context, input CancelTradeInp
 	)
 	return err
 }
+
+func (s *ExecutionService) GetTradeState(
+	ctx context.Context,
+	tradeID uuid.UUID,
+) (TradeState, error) {
+
+	executions, err := s.executionRepo.GetExecutionsByTradeID(ctx, tradeID)
+	if err != nil {
+		return "", err
+	}
+
+	intent, err := s.intentRepo.GetIntentByTradeID(ctx, tradeID)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return "", err
+	}
+
+	return DeriveTradeState(
+		mapToTradeExecutions(executions),
+		mapToTradeIntent(intent),
+	)
+}

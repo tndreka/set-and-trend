@@ -3,12 +3,13 @@ package services
 import (
 	"context"
 	"fmt"
-	"strconv"
+	"strings"
 	"time"
 
-	"github.com/google/uuid"
+	//"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 	"set-and-trend/backend/internal/constants"
-	"set-and-trend/backend/internal/repositories"
+	"set-and-trend/backend/internal/db"
 )
 
 type TradeService struct {
@@ -29,39 +30,30 @@ func NewTradeService(
 	}
 }
 
-// CreateTradeInput represents user intent
-type CreateTradeInput struct {
-	AccountID      uuid.UUID
-	CandleID       uuid.UUID
-	Bias           string
-	PlannedEntry   float64
-	PlannedSL      float64
-	PlannedTP      float64
-	PlannedRiskPct float64
-	ReasonForTrade string
-}
-
 // CreateTrade orchestrates trade creation with full validation
-func (s *TradeService) CreateTrade(ctx context.Context, input CreateTradeInput) (*repositories.Trade, error) {
+func (s *TradeService) CreateTrade(ctx context.Context, input CreateTradeInput) (*Trade, error) {
+	// Normalize direction to uppercase for DB enum
+	direction := strings.ToUpper(input.Direction)
+	
 	// 1. Load account
 	account, err := s.accountRepo.GetAccountByID(ctx, input.AccountID)
 	if err != nil {
 		return nil, fmt.Errorf("account not found: %w", err)
 	}
 	
-	// 2. Verify candle exists (anchor only, no OHLC validation yet)
+	// 2. Verify candle exists
 	if _, err := s.candleRepo.GetCandleByID(ctx, input.CandleID); err != nil {
 		return nil, fmt.Errorf("candle not found: %w", err)
 	}
 
 	// 3. Validate trade geometry
-	err = ValidateTradeGeometry(input.PlannedEntry, input.PlannedSL, input.PlannedTP, input.Bias)
+	err = ValidateTradeGeometry(input.PlannedEntry, input.PlannedSL, input.PlannedTP, direction)
 	if err != nil {
 		return nil, fmt.Errorf("invalid geometry: %w", err)
 	}
 
 	// 4. Validate risk percentage
-	accountMaxRisk := account.MaxRiskPerTradePct
+	accountMaxRisk := account.MaxRiskPerTradePct.InexactFloat64()
 	if input.PlannedRiskPct > accountMaxRisk {
 		return nil, fmt.Errorf("planned risk %.2f%% exceeds account max %.2f%%", input.PlannedRiskPct, accountMaxRisk)
 	}
@@ -70,7 +62,7 @@ func (s *TradeService) CreateTrade(ctx context.Context, input CreateTradeInput) 
 	}
 
 	// 5. Compute risk math
-	balance, _ := strconv.ParseFloat(account.Balance, 64)
+	balance := account.Balance.InexactFloat64()
 	
 	riskAmount, err := ComputeRiskAmount(balance, input.PlannedRiskPct)
 	if err != nil {
@@ -94,21 +86,21 @@ func (s *TradeService) CreateTrade(ctx context.Context, input CreateTradeInput) 
 		return nil, fmt.Errorf("position sizing: %w", err)
 	}
 
-	rr, err := ComputeRR(input.PlannedEntry, input.PlannedSL, input.PlannedTP, input.Bias)
+	rr, err := ComputeRR(input.PlannedEntry, input.PlannedSL, input.PlannedTP, direction)
 	if err != nil {
 		return nil, fmt.Errorf("RR calculation: %w", err)
 	}
 
-	// 5.5. Check for duplicate trade (idempotency - friendly error before DB constraint)
+	// 5.5. Check for duplicate trade
 	existingTrades, err := s.tradeRepo.GetTradesByAccountAndCandle(ctx, input.AccountID, input.CandleID)
 	if err != nil {
 		return nil, fmt.Errorf("duplicate check failed: %w", err)
 	}
 
 	for _, existing := range existingTrades {
-		if existing.Bias == input.Bias {
+		if string(existing.Direction) == direction {
 			return nil, fmt.Errorf("duplicate trade: account %s already has %s trade on candle %s",
-				input.AccountID, input.Bias, input.CandleID)
+				input.AccountID, direction, input.CandleID)
 		}
 	}
 
@@ -118,7 +110,7 @@ func (s *TradeService) CreateTrade(ctx context.Context, input CreateTradeInput) 
 	}
 
 	// 5.7. Validate position size against leverage
-	maxPositionSize, err := ComputeMaxPositionSize(balance, account.Leverage, constants.ContractSizeEURUSD)
+	maxPositionSize, err := ComputeMaxPositionSize(balance, int(account.Leverage), constants.ContractSizeEURUSD)
 	if err != nil {
 		return nil, fmt.Errorf("leverage check: %w", err)
 	}
@@ -126,32 +118,37 @@ func (s *TradeService) CreateTrade(ctx context.Context, input CreateTradeInput) 
 		return nil, fmt.Errorf("position size %.2f lots exceeds max %.2f lots (leverage: %dx)",
 			positionSize, maxPositionSize, account.Leverage)
 	}
-	// 6. Create trade with immutable snapshots
-	trade, err := s.tradeRepo.CreateTrade(ctx, repositories.TradeCreateParams{
-		ID:                        uuid.New(),
-		UserID:                    account.UserID,
-		AccountID:                 input.AccountID,
-		CandleID:                  input.CandleID,
-		Symbol:                    constants.SymbolEURUSD,
-		Timeframe:                 constants.TimeframeW1,
-		SetupTimestampUTC:         time.Now().UTC(),
-		AccountBalanceAtSetup:     account.Balance,
-		LeverageAtSetup:           int32(account.Leverage),
-		MaxRiskPerTradePctAtSetup: fmt.Sprintf("%.2f", account.MaxRiskPerTradePct),
-		TimezoneAtSetup:           account.Timezone,
-		Bias:                      input.Bias,
-		PlannedEntry:              fmt.Sprintf("%.5f", input.PlannedEntry),
-		PlannedSL:                 fmt.Sprintf("%.5f", input.PlannedSL),
-		PlannedTP:                 fmt.Sprintf("%.5f", input.PlannedTP),
-		PlannedRR:                 fmt.Sprintf("%.2f", rr),
-		PlannedRiskPct:            fmt.Sprintf("%.2f", input.PlannedRiskPct),
-		PlannedRiskAmount:         fmt.Sprintf("%.2f", riskAmount),
-		PlannedPositionSize:       fmt.Sprintf("%.2f", positionSize),
-		ReasonForTrade:            input.ReasonForTrade,
+
+	// 6. Create trade - map to DB params
+	dbTrade, err := s.tradeRepo.CreateTrade(ctx, db.CreateTradeParams{
+		UserID:       account.UserID,
+		AccountID:    input.AccountID,
+		CandleID:     input.CandleID,
+		Symbol:       constants.SymbolEURUSD,
+		Timeframe:    constants.TimeframeW1,
+		Direction:    db.TradeDirection(direction),
+		PlannedEntry: decimal.NewFromFloat(input.PlannedEntry),
+		StopLoss:     decimal.NewFromFloat(input.PlannedSL),
+		TakeProfit:   decimal.NewFromFloat(input.PlannedTP),
+		RiskPercent:  decimal.NewFromFloat(input.PlannedRiskPct),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("persist trade: %w", err)
 	}
 
-	return trade, nil
+	// 7. Convert db.Trade to service Trade
+	return &Trade{
+		ID:           dbTrade.ID,
+		UserID:       dbTrade.UserID,
+		AccountID:    dbTrade.AccountID,
+		CandleID:     dbTrade.CandleID,
+		Symbol:       dbTrade.Symbol,
+		Timeframe:    dbTrade.Timeframe,
+		Direction:    string(dbTrade.Direction),
+		PlannedEntry: dbTrade.PlannedEntry.String(),
+		StopLoss:     dbTrade.StopLoss.String(),
+		TakeProfit:   dbTrade.TakeProfit.String(),
+		RiskPercent:  dbTrade.RiskPercent.String(),
+		CreatedAt:    dbTrade.CreatedAt.Time.Format(time.RFC3339),
+	}, nil
 }
