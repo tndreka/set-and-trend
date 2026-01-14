@@ -161,3 +161,23 @@ func (h *ExecutionHandler) GetTradeExecutions(c *gin.Context) {
 		"count":      len(executions),
 	})
 }
+
+func (h *ExecutionHandler) GetTradeState(c *gin.Context) {
+	tradeID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid trade ID"})
+		return
+	}
+	
+	state, err := h.executionService.GetTradeState(c.Request.Context(), tradeID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	
+	c.JSON(http.StatusOK, gin.H{
+		"status":      "success",
+		"trade_id":    tradeID,
+		"trade_state": state,
+	})
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/google/uuid"
 	"set-and-trend/backend/internal/db"
+	"set-and-trend/backend/internal/repositories"
 )
 
 // ============================================================================
@@ -54,17 +55,17 @@ type AccountRepo interface {
 }
 
 type CandleRepo interface {
-	GetCandleByID(ctx context.Context, id uuid.UUID) (*CandlesWeekly, error)
+	GetCandleByID(ctx context.Context, id uuid.UUID) (*repositories.Candle, error)
 }
 
 // CandlesWeekly is what candle repo returns (not db.CandlesWeekly)
-type CandlesWeekly struct {
-	ID           uuid.UUID
-	TimestampUTC string
-	Open         string
-	High         string
-	Low          string
-	Close        string
-	Volume       *int64
-	CreatedAt    string
-}
+//type CandlesWeekly struct {
+//	ID           uuid.UUID
+//	TimestampUTC string
+//	Open         string
+//	High         string
+//	Low          string
+//	Close        string
+//	Volume       *int64
+//	CreatedAt    string
+//}
