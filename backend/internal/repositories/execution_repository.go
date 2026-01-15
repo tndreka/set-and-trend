@@ -43,7 +43,6 @@ type CreateExecutionParams struct {
 	Quantity *float64
 	PnL          *float64
 	PnLPips      *float64
-	ExecutedAt   time.Time
 	Session      *string
 	Reason       *string
 	SlippagePips *float64
@@ -67,13 +66,13 @@ func (r *ExecutionRepository) CreateExecution(ctx context.Context, params Create
 	
 	err := r.pool.QueryRow(ctx, `
 		INSERT INTO trade_executions (
-    		id, trade_id, execution_type, price, quantity, executed_at
+    		id, trade_id, execution_type, price, quantity
 		)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		VALUES ($1, $2, $3, $4, $5)
 		RETURNING id, trade_id, execution_type, price, quantity, 
 			executed_at
 	`, uuid.New(), params.TradeID, params.ExecutionType, 
-		priceStr, sizeStr, params.ExecutedAt).Scan(
+		priceStr, sizeStr).Scan(
 		&exec.ID,
 		&exec.TradeID,
 		&exec.ExecutionType,
@@ -144,14 +143,13 @@ func (r *ExecutionRepository) CreateExecutionTx(ctx context.Context, tx pgx.Tx, 
 	
 	err := tx.QueryRow(ctx, `
 		INSERT INTO trade_executions (
-			id, trade_id, execution_type, price, quantity, 
-			executed_at
+			id, trade_id, execution_type, price, quantity
 		)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		VALUES ($1, $2, $3, $4, $5)
 		RETURNING id, trade_id, execution_type, price, quantity, 
 			executed_at
 	`, uuid.New(), params.TradeID, params.ExecutionType, 
-		priceStr, sizeStr, params.ExecutedAt).Scan(
+		priceStr, sizeStr).Scan(
 		&exec.ID,
 		&exec.TradeID,
 		&exec.ExecutionType,

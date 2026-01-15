@@ -147,7 +147,6 @@ func (s *ExecutionService) RecordExecution(
 			ExecutionType:    eventType,
 			Price:        &price,
 			Quantity: &positionSize,
-			ExecutedAt:   time.Now(),
 			Reason:       reasonPtr,
 			PnL:          pnl,
 			PnLPips:      pnlPips,

@@ -142,7 +142,7 @@ CREATE TABLE trade_executions (
     execution_type execution_type NOT NULL,
     price NUMERIC(12,5) NOT NULL CHECK (price > 0),
     quantity NUMERIC(12,4) NOT NULL CHECK (quantity > 0),
-    executed_at TIMESTAMPTZ NOT NULL
+    executed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_trade_executions_trade_id ON trade_executions(trade_id);

@@ -4,15 +4,26 @@ import (
 	"context"
 	"fmt"
 	"time"
+	"net/url"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"set-and-trend/backend/internal/db"
 )
 
 func NewDatabase(ctx context.Context, cfg *Config) (*db.Queries, *pgxpool.Pool, error) {
-	dsn := fmt. Sprintf(
-		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
-		cfg. DBHost, cfg.DBPort, cfg.DBUser, cfg.DBPassword, cfg.DBName, cfg.DBSSLMode,
+	//dsn := fmt. Sprintf(
+	//	"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+	//	cfg. DBHost, cfg.DBPort, cfg.DBUser, cfg.DBPassword, cfg.DBName, cfg.DBSSLMode,
+	//)
+
+	dsn := fmt.Sprintf(
+	"postgres://%s:%s@%s:%s/%s?sslmode=%s",
+	cfg.DBUser,
+	url.QueryEscape(cfg.DBPassword),
+	cfg.DBHost,
+	cfg.DBPort,
+	cfg.DBName,
+	cfg.DBSSLMode,
 	)
 
 	poolConfig, err := pgxpool.ParseConfig(dsn)

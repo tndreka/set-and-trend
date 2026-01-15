@@ -9,7 +9,6 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/shopspring/decimal"
 )
 
@@ -80,20 +79,18 @@ INSERT INTO trade_executions (
     trade_id,
     execution_type,
     price,
-    quantity,
-    executed_at
+    quantity
 ) VALUES (
-    $1, $2, $3, $4, $5
+    $1, $2, $3, $4
 )
 RETURNING id, trade_id, execution_type, price, quantity, executed_at
 `
 
 type CreateTradeExecutionParams struct {
-	TradeID       uuid.UUID          `json:"trade_id"`
-	ExecutionType ExecutionType      `json:"execution_type"`
-	Price         decimal.Decimal    `json:"price"`
-	Quantity      decimal.Decimal    `json:"quantity"`
-	ExecutedAt    pgtype.Timestamptz `json:"executed_at"`
+	TradeID       uuid.UUID       `json:"trade_id"`
+	ExecutionType ExecutionType   `json:"execution_type"`
+	Price         decimal.Decimal `json:"price"`
+	Quantity      decimal.Decimal `json:"quantity"`
 }
 
 func (q *Queries) CreateTradeExecution(ctx context.Context, arg CreateTradeExecutionParams) (TradeExecution, error) {
@@ -102,7 +99,6 @@ func (q *Queries) CreateTradeExecution(ctx context.Context, arg CreateTradeExecu
 		arg.ExecutionType,
 		arg.Price,
 		arg.Quantity,
-		arg.ExecutedAt,
 	)
 	var i TradeExecution
 	err := row.Scan(

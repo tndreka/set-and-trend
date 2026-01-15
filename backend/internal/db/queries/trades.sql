@@ -36,10 +36,9 @@ INSERT INTO trade_executions (
     trade_id,
     execution_type,
     price,
-    quantity,
-    executed_at
+    quantity
 ) VALUES (
-    $1, $2, $3, $4, $5
+    $1, $2, $3, $4
 )
 RETURNING *;
 
