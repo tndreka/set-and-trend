@@ -97,3 +97,21 @@ func (h *IndicatorHandler) ComputeIndicator(c *gin.Context) {
 
 	c.JSON(http.StatusCreated, gin.H{"status": "success", "data": indicator})
 }
+
+func (h *IndicatorHandler) GetLatestIndicators(c *gin.Context) {
+	limitStr := c.DefaultQuery("limit", "20")
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid limit parameter"})
+		return
+	}
+
+	indicators, err := h.indicatorRepo.GetLatestIndicators(c.Request.Context(), int32(limit))
+	if err != nil {
+		log.Error().Err(err).Msg("get latest indicators failed")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "success", "data": indicators})
+}

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -66,7 +67,15 @@ func (h *CandleHandler) CreateCandle(c *gin.Context) {
 }
 
 func (h *CandleHandler) GetLatestCandles(c *gin.Context) {
-	candles, err := h.candleRepo.GetLatestCandles(c.Request.Context(), 20)
+	// Read limit from query parameter, default to 600
+	limitStr := c.DefaultQuery("limit", "600")
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid limit parameter"})
+		return
+	}
+
+	candles, err := h.candleRepo.GetLatestCandles(c.Request.Context(), limit)
 	if err != nil {
 		log.Error().Err(err).Msg("get candles failed")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gin-contrib/cors"
 	"set-and-trend/backend/internal/config"
 	"set-and-trend/backend/internal/handlers"
 	"set-and-trend/backend/internal/repositories"
@@ -51,12 +52,21 @@ func main() {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
 
+	r.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"http://164.92.229.200:3000", "http://localhost:3000"},
+		AllowMethods:     []string{"GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Content-Type", "Authorization"},
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	}))
+
 	api := r.Group("/api")
 	{
 		api.POST("/users", userHandler.CreateUser)
 		api.POST("/accounts", accountHandler.CreateAccount)
 		api.POST("/candles", candleHandler.CreateCandle)
 		api.GET("/candles/latest", candleHandler.GetLatestCandles)
+		api.GET("/indicators/latest", indicatorHandler.GetLatestIndicators)
 		api.POST("/indicators/compute", indicatorHandler.ComputeIndicator)
 		api.POST("/trades", tradeHandler.CreateTrade)
 		api.POST("/trades/:id/execute", executionHandler.ExecuteTrade)

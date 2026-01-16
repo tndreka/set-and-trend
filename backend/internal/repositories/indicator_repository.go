@@ -186,3 +186,42 @@ func (r *IndicatorRepository) GetPreviousIndicatorByTimestamp(
 		ComputedAt:         indicator.ComputedAt.Time,
 	}, nil
 }
+
+func (r *IndicatorRepository) GetLatestIndicators(ctx context.Context, limit int32) ([]Indicator, error) {
+	dbIndicators, err := r.q.GetLatestIndicators(ctx, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	indicators := make([]Indicator, len(dbIndicators))
+	for i, ind := range dbIndicators {
+		var swingHighStr, swingLowStr *string
+		if ind.LastSwingHighPrice.String() != "0" {
+			s := ind.LastSwingHighPrice.String()
+			swingHighStr = &s
+		}
+		if ind.LastSwingLowPrice.String() != "0" {
+			s := ind.LastSwingLowPrice.String()
+			swingLowStr = &s
+		}
+
+		indicators[i] = Indicator{
+			ID:                 ind.ID,
+			CandleID:           ind.CandleID,
+			EMA20:              ind.Ema20.String(),
+			EMA50:              ind.Ema50.String(),
+			EMA200:             ind.Ema200.String(),
+			RangeSize:          ind.RangeSize.String(),
+			BodySize:           ind.BodySize.String(),
+			UpperWick:          ind.UpperWick.String(),
+			LowerWick:          ind.LowerWick.String(),
+			MidPrice:           ind.MidPrice.String(),
+			LastSwingHighPrice: swingHighStr,
+			LastSwingLowPrice:  swingLowStr,
+			ComputedAt:         ind.ComputedAt.Time,
+		}
+	}
+	return indicators, nil
+}
+
+
