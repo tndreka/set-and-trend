@@ -49,14 +49,20 @@ export default function LoadingScreen() {
   ];
 
   return (
-    <div className="fixed inset-0 bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center">
-      <div className="text-center space-y-16 px-8">
+    <div className="fixed inset-0 bg-black flex items-center justify-center overflow-hidden">
+      {/* Background Grid */}
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff08_1px,transparent_1px),linear-gradient(to_bottom,#ffffff08_1px,transparent_1px)] bg-[size:64px_64px]" />
+      
+      {/* Green Glow */}
+      <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-green-500/20 rounded-full blur-[120px]" />
+      
+      <div className="text-center space-y-16 px-8 relative z-10">
         
         {/* Title */}
-        <h1 className="text-7xl font-bold">
-          <span className="bg-gradient-to-r from-green-400 via-emerald-500 to-green-600 bg-clip-text text-transparent">
-            Set The Trend
-          </span>
+        <h1 className="text-6xl font-bold tracking-tight mb-8">
+          <span className="text-white">SET</span>
+          <span className="text-green-400">&</span>
+          <span className="text-white">TREND</span>
         </h1>
 
         {/* 8 Candles in Uptrend */}
