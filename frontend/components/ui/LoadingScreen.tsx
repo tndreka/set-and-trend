@@ -10,15 +10,15 @@ export default function LoadingScreen() {
     
     const updateProgress = () => {
       if (currentProgress < 20) {
-        currentProgress += 1;
+        currentProgress += 2;
       } else if (currentProgress < 50) {
-        currentProgress += 1.5;
+        currentProgress += 2.5;
       } else if (currentProgress < 80) {
-        currentProgress += 1;
+        currentProgress += 2;
       } else if (currentProgress < 95) {
-        currentProgress += 0.5;
+        currentProgress += 1;
       } else if (currentProgress < 99) {
-        currentProgress += 0.2;
+        currentProgress += 0.5;
       } else {
         currentProgress = 100;
       }
@@ -26,7 +26,7 @@ export default function LoadingScreen() {
       setProgress(Math.min(currentProgress, 100));
     };
     
-    const interval = setInterval(updateProgress, 100);
+    const interval = setInterval(updateProgress, 80);
     
     return () => clearInterval(interval);
   }, []);
