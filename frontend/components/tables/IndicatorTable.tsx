@@ -3,25 +3,36 @@
 import { useMemo } from 'react';
 import { format, parseISO } from 'date-fns';
 import { Indicator } from '@/types/indicator';
+import { Candle } from '@/types/candle';
 
 interface IndicatorTableProps {
-  data: Indicator[];
+  indicators: Indicator[];
+  candles: Candle[];
 }
 
-export default function IndicatorTable({ data }: IndicatorTableProps) {
+export default function IndicatorTable({ indicators, candles }: IndicatorTableProps) {
   const tableData = useMemo(() => {
-    return data
-      .map(ind => ({
-        id: ind.id,
-        timestamp: ind.computed_at,
-        date: format(parseISO(ind.computed_at), 'MMM dd, yyyy'),
-        ema20: parseFloat(ind.ema20),
-        ema50: parseFloat(ind.ema50),
-        ema200: parseFloat(ind.ema200),
-      }))
-      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-      .slice(0, 10); // Latest 10
-  }, [data]);
+    // Create map of candle_id -> candle
+    const candleMap = new Map(candles.map(c => [c.id, c]));
+
+    return indicators
+      .map(ind => {
+        const candle = candleMap.get(ind.candle_id);
+        if (!candle) return null;
+
+        return {
+          id: ind.id,
+          timestamp: candle.timestamp_utc,
+          date: format(parseISO(candle.timestamp_utc), 'MMM dd, yyyy'),
+          ema20: parseFloat(ind.ema20),
+          ema50: parseFloat(ind.ema50),
+          ema200: parseFloat(ind.ema200),
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => new Date(b!.timestamp).getTime() - new Date(a!.timestamp).getTime())
+      .slice(0, 260); // Last 5 years (52 weeks × 5)
+  }, [indicators, candles]);
 
   const getTrendLabel = (ema50: number, ema200: number) => {
     if (ema50 > ema200) {
@@ -32,35 +43,45 @@ export default function IndicatorTable({ data }: IndicatorTableProps) {
 
   return (
     <div className="p-6 border rounded-lg">
-      <h2 className="text-2xl font-bold mb-4">Latest Weekly Indicators</h2>
+      <h2 className="text-2xl font-bold mb-4">Weekly Indicators History</h2>
       <p className="text-sm text-gray-600 mb-4">
-        Showing last 10 weeks • Trend = EMA50 vs EMA200
+        Showing last 5 years ({tableData.length} weeks) • Trend = EMA50 vs EMA200 • Scroll to see more
       </p>
 
-      <div className="overflow-x-auto">
+      {/* Scrollable container with max height */}
+      <div className="overflow-auto max-h-[600px] border border-gray-700 rounded">
         <table className="w-full text-left">
-          <thead className="border-b border-gray-700">
+          <thead className="border-b border-gray-700 bg-gray-900 sticky top-0">
             <tr>
-              <th className="pb-3 pr-4">Week</th>
-              <th className="pb-3 pr-4 text-right">EMA 20</th>
-              <th className="pb-3 pr-4 text-right">EMA 50</th>
-              <th className="pb-3 pr-4 text-right">EMA 200</th>
-              <th className="pb-3">Trend</th>
+              <th className="py-3 px-4 font-semibold">Week</th>
+              <th className="py-3 px-4 text-right font-semibold">EMA 20</th>
+              <th className="py-3 px-4 text-right font-semibold">EMA 50</th>
+              <th className="py-3 px-4 text-right font-semibold">EMA 200</th>
+              <th className="py-3 px-4 font-semibold">Trend</th>
             </tr>
           </thead>
           <tbody>
             {tableData.map((row, idx) => (
-              <tr key={row.id} className={idx % 2 === 0 ? 'bg-gray-900' : ''}>
-                <td className="py-3 pr-4">{row.date}</td>
-                <td className="py-3 pr-4 text-right font-mono text-sm">{row.ema20.toFixed(5)}</td>
-                <td className="py-3 pr-4 text-right font-mono text-sm">{row.ema50.toFixed(5)}</td>
-                <td className="py-3 pr-4 text-right font-mono text-sm">{row.ema200.toFixed(5)}</td>
-                <td className="py-3">{getTrendLabel(row.ema50, row.ema200)}</td>
+              <tr 
+                key={row!.id} 
+                className={`border-b border-gray-800 hover:bg-gray-800 transition-colors ${
+                  idx % 2 === 0 ? 'bg-gray-900/50' : ''
+                }`}
+              >
+                <td className="py-3 px-4 text-sm">{row!.date}</td>
+                <td className="py-3 px-4 text-right font-mono text-sm">{row!.ema20.toFixed(5)}</td>
+                <td className="py-3 px-4 text-right font-mono text-sm">{row!.ema50.toFixed(5)}</td>
+                <td className="py-3 px-4 text-right font-mono text-sm">{row!.ema200.toFixed(5)}</td>
+                <td className="py-3 px-4">{getTrendLabel(row!.ema50, row!.ema200)}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      <p className="text-xs text-gray-500 mt-2">
+         Tip: Scroll down to see historical data back to {tableData[tableData.length - 1]?.date}
+      </p>
     </div>
   );
 }

@@ -2,26 +2,42 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
+import { useEffect, useState } from 'react';
+import LoadingScreen from '@/components/ui/LoadingScreen'; 
 import CandleChart from '@/components/charts/CandleChart';
 import IndicatorTable from '@/components/tables/IndicatorTable';
 
 export default function Dashboard() {
+  const [showLoading, setShowLoading] = useState(true);
+  const [minLoadingComplete, setMinLoadingComplete] = useState(false);
+  
   const { data: candles, isLoading: candlesLoading, error: candlesError } = useQuery({
     queryKey: ['candles'],
     queryFn: () => apiClient.getLatestCandles(600),
   });
+
+  // loading time: 12 seconds
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setMinLoadingComplete(true);
+    }, 12000);
+
+    return () => clearTimeout(timer);
+  }, []);
 
   const { data: indicators, isLoading: indicatorsLoading, error: indicatorsError } = useQuery({
     queryKey: ['indicators'],
     queryFn: () => apiClient.getLatestIndicators(600),
   });
 
-  if (candlesLoading || indicatorsLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-xl">Loading data...</div>
-      </div>
-    );
+   useEffect(() => {
+    if (!candlesLoading && !indicatorsLoading && minLoadingComplete) {
+      setShowLoading(false);
+    }
+  }, [candlesLoading, indicatorsLoading, minLoadingComplete]); 
+
+  if (showLoading || candlesLoading || indicatorsLoading) {
+    return <LoadingScreen />;
   }
 
   if (candlesError || indicatorsError) {
@@ -59,8 +75,12 @@ export default function Dashboard() {
         indicators={indicators?.data?.data || []}
       />
 
-	{/* Indicator Table */}
-      <IndicatorTable data={indicators?.data?.data || []} />
+	   {/* Indicator Table - NOW RECEIVES BOTH */}
+      <IndicatorTable 
+        indicators={indicators?.data?.data || []}
+        candles={candles?.data?.data || []}
+      />
+
 
       <div className="p-6 border rounded-lg">
         <h2 className="text-xl font-semibold mb-4">Backend Status</h2>
@@ -71,4 +91,5 @@ export default function Dashboard() {
       </div>
     </div>
   );
-}
+ }
+
