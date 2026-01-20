@@ -4,20 +4,41 @@ import { useState } from 'react';
 import { TrendingUp, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { apiClient } from '@/lib/api/client';
 
 export default function LoginPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // No backend auth - just redirect to dashboard
-    router.push('/dashboard');
+    setError('');
+    setLoading(true);
+
+    try {
+      const response = await apiClient.login({
+        username_or_email: username,
+        password,
+      });
+
+      // Save token to localStorage
+      localStorage.setItem('auth_token', response.data.token);
+      localStorage.setItem('user', JSON.stringify(response.data.user));
+
+      // Redirect to dashboard
+      router.push('/dashboard');
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Login failed. Please check your credentials.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div className="min-h-screen bg-black text-white flex items-center justify-center relative overflow-hidden">
+    <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center relative overflow-hidden">
       {/* Background Grid */}
       <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff08_1px,transparent_1px),linear-gradient(to_bottom,#ffffff08_1px,transparent_1px)] bg-[size:64px_64px]" />
       
@@ -40,6 +61,12 @@ export default function LoginPage() {
         <div className="bg-gradient-to-br from-gray-900 to-black border border-white/10 rounded-2xl p-8 shadow-2xl">
           <h1 className="text-3xl font-bold mb-2">Welcome back</h1>
           <p className="text-gray-400 mb-8">Sign in to continue to your dashboard</p>
+
+          {error && (
+            <div className="bg-red-500/10 border border-red-500/50 rounded-lg p-4 mb-4">
+              <p className="text-red-400 text-sm">{error}</p>
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Username Field */}
@@ -88,10 +115,11 @@ export default function LoginPage() {
             {/* Submit Button */}
             <button
               type="submit"
-              className="w-full py-3 bg-green-500 text-black rounded-lg font-semibold hover:bg-green-400 transition-all flex items-center justify-center space-x-2 shadow-lg shadow-green-500/30"
+              disabled={loading}
+              className="w-full py-3 bg-green-500 text-black rounded-lg font-semibold hover:bg-green-400 transition-all flex items-center justify-center space-x-2 shadow-lg shadow-green-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <span>Sign In</span>
-              <ArrowRight className="w-5 h-5" />
+              <span>{loading ? 'Signing In...' : 'Sign In'}</span>
+              {!loading && <ArrowRight className="w-5 h-5" />}
             </button>
           </form>
 
