@@ -4,7 +4,7 @@ import (
 	"context"
 	
 	"github.com/google/uuid"
-	"time"
+	// "time"
 	"set-and-trend/backend/internal/db"
 )
 
@@ -16,30 +16,57 @@ func NewUserRepository(q *db.Queries) *UserRepository {
 	return &UserRepository{q: q}
 }
 
-type User struct {
-	ID        uuid.UUID `json:"id"`
-	CreatedAt time.Time `json:"created_at"`
-}
-
-func (r *UserRepository) CreateUser(ctx context.Context, id uuid.UUID) (*User, error) {
-	user, err := r.q.CreateUser(ctx, id)
+// GetUserByID retrieves a user by their ID
+func (r *UserRepository) GetUserByID(ctx context.Context, id uuid.UUID) (*db.GetUserByIDRow, error) {
+	user, err := r.q.GetUserByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
+	return &user, nil
+}
+
+// GetUserByUsername retrieves a user by username
+func (r *UserRepository) GetUserByUsername(ctx context.Context, username string) (*db.GetUserByUsernameRow, error) {
+	user, err := r.q.GetUserByUsername(ctx, username)
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
+// GetUserByEmail retrieves a user by email
+func (r *UserRepository) GetUserByEmail(ctx context.Context, email string) (*db.GetUserByEmailRow, error) {
+	user, err := r.q.GetUserByEmail(ctx, email)
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
+// type User struct {
+// 	ID        uuid.UUID `json:"id"`
+// 	CreatedAt time.Time `json:"created_at"`
+// }
+
+// func (r *UserRepository) CreateUser(ctx context.Context, id uuid.UUID) (*User, error) {
+// 	user, err := r.q.CreateUser(ctx, id)
+// 	if err != nil {
+// 		return nil, err
+// 	}
 	
-	return &User{
-		ID:        user.ID,
-		CreatedAt: user.CreatedAt.Time,
-	}, nil
-}
+// 	return &User{
+// 		ID:        user.ID,
+// 		CreatedAt: user.CreatedAt.Time,
+// 	}, nil
+// }
 
-func (r *UserRepository) GetUser(ctx context.Context, id uuid.UUID) (*User, error) {
-	user, err := r.q.GetUser(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	return &User{
-		ID:        user.ID,
-		CreatedAt: user.CreatedAt.Time,
-	}, nil
-}
+// func (r *UserRepository) GetUser(ctx context.Context, id uuid.UUID) (*User, error) {
+// 	user, err := r.q.GetUser(ctx, id)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	return &User{
+// 		ID:        user.ID,
+// 		CreatedAt: user.CreatedAt.Time,
+// 	}, nil
+// }
