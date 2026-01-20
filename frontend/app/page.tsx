@@ -5,9 +5,9 @@ import { ArrowRight, TrendingUp, TrendingDown } from 'lucide-react';
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-black text-white overflow-hidden">
+    <div className="min-h-screen bg-gray-950 text-white overflow-hidden">
       {/* Fixed Navbar */}
-      <nav className="fixed top-0 left-0 right-0 z-50 bg-black/80 backdrop-blur-xl border-b border-white/10">
+      <nav className="fixed top-0 left-0 right-0 z-50 bg-gray-950/80 backdrop-blur-xl border-b border-white/10">
         <div className="max-w-[1400px] mx-auto px-8 py-5 flex items-center justify-between">
           {/* Logo */}
           <Link href="/" className="flex items-center space-x-3 group">
@@ -431,7 +431,7 @@ export default function LandingPage() {
         </section>
 
         {/* Footer */}
-        <footer className="border-t border-white/5 bg-black">
+        <footer className="border-t border-white/5 bg-gray-950">
           <div className="max-w-[1400px] mx-auto px-8 py-16">
             <div className="grid grid-cols-2 md:grid-cols-5 gap-12 mb-16">
               <div className="col-span-2">
