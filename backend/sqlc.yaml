@@ -2,7 +2,9 @@ version: "2"
 
 sql:
   - engine: "postgresql"
-    schema: "migrations/000001_init_schema.up.sql"
+    schema: 
+      - "migrations/000001_init_schema.up.sql"
+      - "migrations/000006_add_user_auth_fields.up.sql"
     queries: "internal/db/queries/"
     gen:
       go:

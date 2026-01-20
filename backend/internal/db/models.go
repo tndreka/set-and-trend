@@ -354,6 +354,17 @@ type TradeExecution struct {
 }
 
 type User struct {
-	ID        uuid.UUID          `json:"id"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	ID                     uuid.UUID          `json:"id"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	Username               string             `json:"username"`
+	Email                  string             `json:"email"`
+	PasswordHash           string             `json:"password_hash"`
+	Name                   pgtype.Text        `json:"name"`
+	Surname                pgtype.Text        `json:"surname"`
+	IsEmailVerified        bool               `json:"is_email_verified"`
+	EmailVerificationToken pgtype.Text        `json:"email_verification_token"`
+	PasswordResetToken     pgtype.Text        `json:"password_reset_token"`
+	PasswordResetExpires   pgtype.Timestamptz `json:"password_reset_expires"`
+	LastLogin              pgtype.Timestamptz `json:"last_login"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
 }

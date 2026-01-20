@@ -8,15 +8,26 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Querier interface {
 	CreateTrade(ctx context.Context, arg CreateTradeParams) (Trade, error)
 	CreateTradeExecution(ctx context.Context, arg CreateTradeExecutionParams) (TradeExecution, error)
+	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
 	GetTradeByID(ctx context.Context, id uuid.UUID) (Trade, error)
 	GetTradeExecutions(ctx context.Context, tradeID uuid.UUID) ([]TradeExecution, error)
 	GetTradesByAccountAndCandle(ctx context.Context, arg GetTradesByAccountAndCandleParams) ([]Trade, error)
 	GetTradesByUserID(ctx context.Context, arg GetTradesByUserIDParams) ([]Trade, error)
+	GetUserByEmail(ctx context.Context, email string) (GetUserByEmailRow, error)
+	GetUserByID(ctx context.Context, id uuid.UUID) (GetUserByIDRow, error)
+	GetUserByUsername(ctx context.Context, username string) (GetUserByUsernameRow, error)
+	ResetPassword(ctx context.Context, arg ResetPasswordParams) error
+	SetEmailVerificationToken(ctx context.Context, arg SetEmailVerificationTokenParams) error
+	SetPasswordResetToken(ctx context.Context, arg SetPasswordResetTokenParams) error
+	UpdateUserLastLogin(ctx context.Context, id uuid.UUID) error
+	UpdateUserProfile(ctx context.Context, arg UpdateUserProfileParams) error
+	VerifyEmail(ctx context.Context, emailVerificationToken pgtype.Text) error
 }
 
 var _ Querier = (*Queries)(nil)

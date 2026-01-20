@@ -9,39 +9,303 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createUser = `-- name: CreateUser :one
-INSERT INTO users (id, created_at)
-VALUES ($1, NOW())
-RETURNING id, created_at
+INSERT INTO users (
+    id, 
+    username, 
+    email, 
+    password_hash, 
+    name, 
+    surname,
+    created_at,
+    updated_at
+)
+VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+RETURNING id, username, email, name, surname, is_email_verified, created_at, updated_at
 `
 
-func (q *Queries) CreateUser(ctx context.Context, id uuid.UUID) (User, error) {
-	row := q.db.QueryRow(ctx, createUser, id)
-	var i User
-	err := row.Scan(&i.ID, &i.CreatedAt)
+type CreateUserParams struct {
+	ID           uuid.UUID   `json:"id"`
+	Username     string      `json:"username"`
+	Email        string      `json:"email"`
+	PasswordHash string      `json:"password_hash"`
+	Name         pgtype.Text `json:"name"`
+	Surname      pgtype.Text `json:"surname"`
+}
+
+type CreateUserRow struct {
+	ID              uuid.UUID          `json:"id"`
+	Username        string             `json:"username"`
+	Email           string             `json:"email"`
+	Name            pgtype.Text        `json:"name"`
+	Surname         pgtype.Text        `json:"surname"`
+	IsEmailVerified bool               `json:"is_email_verified"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error) {
+	row := q.db.QueryRow(ctx, createUser,
+		arg.ID,
+		arg.Username,
+		arg.Email,
+		arg.PasswordHash,
+		arg.Name,
+		arg.Surname,
+	)
+	var i CreateUserRow
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.Email,
+		&i.Name,
+		&i.Surname,
+		&i.IsEmailVerified,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
 	return i, err
 }
 
-const getUser = `-- name: GetUser :one
-SELECT id, created_at FROM users WHERE id = $1
+const getUserByEmail = `-- name: GetUserByEmail :one
+SELECT 
+    id, 
+    username, 
+    email, 
+    password_hash, 
+    name, 
+    surname, 
+    is_email_verified,
+    last_login,
+    created_at,
+    updated_at
+FROM users
+WHERE email = $1
 `
 
-func (q *Queries) GetUser(ctx context.Context, id uuid.UUID) (User, error) {
-	row := q.db.QueryRow(ctx, getUser, id)
-	var i User
-	err := row.Scan(&i.ID, &i.CreatedAt)
+type GetUserByEmailRow struct {
+	ID              uuid.UUID          `json:"id"`
+	Username        string             `json:"username"`
+	Email           string             `json:"email"`
+	PasswordHash    string             `json:"password_hash"`
+	Name            pgtype.Text        `json:"name"`
+	Surname         pgtype.Text        `json:"surname"`
+	IsEmailVerified bool               `json:"is_email_verified"`
+	LastLogin       pgtype.Timestamptz `json:"last_login"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) GetUserByEmail(ctx context.Context, email string) (GetUserByEmailRow, error) {
+	row := q.db.QueryRow(ctx, getUserByEmail, email)
+	var i GetUserByEmailRow
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.Email,
+		&i.PasswordHash,
+		&i.Name,
+		&i.Surname,
+		&i.IsEmailVerified,
+		&i.LastLogin,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, created_at FROM users WHERE id = $1
+SELECT 
+    id, 
+    username, 
+    email, 
+    name, 
+    surname, 
+    is_email_verified,
+    last_login,
+    created_at,
+    updated_at
+FROM users
+WHERE id = $1
 `
 
-func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
+type GetUserByIDRow struct {
+	ID              uuid.UUID          `json:"id"`
+	Username        string             `json:"username"`
+	Email           string             `json:"email"`
+	Name            pgtype.Text        `json:"name"`
+	Surname         pgtype.Text        `json:"surname"`
+	IsEmailVerified bool               `json:"is_email_verified"`
+	LastLogin       pgtype.Timestamptz `json:"last_login"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (GetUserByIDRow, error) {
 	row := q.db.QueryRow(ctx, getUserByID, id)
-	var i User
-	err := row.Scan(&i.ID, &i.CreatedAt)
+	var i GetUserByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.Email,
+		&i.Name,
+		&i.Surname,
+		&i.IsEmailVerified,
+		&i.LastLogin,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
 	return i, err
+}
+
+const getUserByUsername = `-- name: GetUserByUsername :one
+SELECT 
+    id, 
+    username, 
+    email, 
+    password_hash, 
+    name, 
+    surname, 
+    is_email_verified,
+    last_login,
+    created_at,
+    updated_at
+FROM users
+WHERE username = $1
+`
+
+type GetUserByUsernameRow struct {
+	ID              uuid.UUID          `json:"id"`
+	Username        string             `json:"username"`
+	Email           string             `json:"email"`
+	PasswordHash    string             `json:"password_hash"`
+	Name            pgtype.Text        `json:"name"`
+	Surname         pgtype.Text        `json:"surname"`
+	IsEmailVerified bool               `json:"is_email_verified"`
+	LastLogin       pgtype.Timestamptz `json:"last_login"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) GetUserByUsername(ctx context.Context, username string) (GetUserByUsernameRow, error) {
+	row := q.db.QueryRow(ctx, getUserByUsername, username)
+	var i GetUserByUsernameRow
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.Email,
+		&i.PasswordHash,
+		&i.Name,
+		&i.Surname,
+		&i.IsEmailVerified,
+		&i.LastLogin,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const resetPassword = `-- name: ResetPassword :exec
+UPDATE users
+SET 
+    password_hash = $2,
+    password_reset_token = NULL,
+    password_reset_expires = NULL,
+    updated_at = NOW()
+WHERE password_reset_token = $1 
+AND password_reset_expires > NOW()
+`
+
+type ResetPasswordParams struct {
+	PasswordResetToken pgtype.Text `json:"password_reset_token"`
+	PasswordHash       string      `json:"password_hash"`
+}
+
+func (q *Queries) ResetPassword(ctx context.Context, arg ResetPasswordParams) error {
+	_, err := q.db.Exec(ctx, resetPassword, arg.PasswordResetToken, arg.PasswordHash)
+	return err
+}
+
+const setEmailVerificationToken = `-- name: SetEmailVerificationToken :exec
+UPDATE users
+SET email_verification_token = $2
+WHERE id = $1
+`
+
+type SetEmailVerificationTokenParams struct {
+	ID                     uuid.UUID   `json:"id"`
+	EmailVerificationToken pgtype.Text `json:"email_verification_token"`
+}
+
+func (q *Queries) SetEmailVerificationToken(ctx context.Context, arg SetEmailVerificationTokenParams) error {
+	_, err := q.db.Exec(ctx, setEmailVerificationToken, arg.ID, arg.EmailVerificationToken)
+	return err
+}
+
+const setPasswordResetToken = `-- name: SetPasswordResetToken :exec
+UPDATE users
+SET 
+    password_reset_token = $2,
+    password_reset_expires = $3,
+    updated_at = NOW()
+WHERE id = $1
+`
+
+type SetPasswordResetTokenParams struct {
+	ID                   uuid.UUID          `json:"id"`
+	PasswordResetToken   pgtype.Text        `json:"password_reset_token"`
+	PasswordResetExpires pgtype.Timestamptz `json:"password_reset_expires"`
+}
+
+func (q *Queries) SetPasswordResetToken(ctx context.Context, arg SetPasswordResetTokenParams) error {
+	_, err := q.db.Exec(ctx, setPasswordResetToken, arg.ID, arg.PasswordResetToken, arg.PasswordResetExpires)
+	return err
+}
+
+const updateUserLastLogin = `-- name: UpdateUserLastLogin :exec
+UPDATE users
+SET last_login = NOW()
+WHERE id = $1
+`
+
+func (q *Queries) UpdateUserLastLogin(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, updateUserLastLogin, id)
+	return err
+}
+
+const updateUserProfile = `-- name: UpdateUserProfile :exec
+UPDATE users
+SET 
+    name = COALESCE($2, name),
+    surname = COALESCE($3, surname),
+    updated_at = NOW()
+WHERE id = $1
+`
+
+type UpdateUserProfileParams struct {
+	ID      uuid.UUID   `json:"id"`
+	Name    pgtype.Text `json:"name"`
+	Surname pgtype.Text `json:"surname"`
+}
+
+func (q *Queries) UpdateUserProfile(ctx context.Context, arg UpdateUserProfileParams) error {
+	_, err := q.db.Exec(ctx, updateUserProfile, arg.ID, arg.Name, arg.Surname)
+	return err
+}
+
+const verifyEmail = `-- name: VerifyEmail :exec
+UPDATE users
+SET 
+    is_email_verified = true,
+    email_verification_token = NULL,
+    updated_at = NOW()
+WHERE email_verification_token = $1
+`
+
+func (q *Queries) VerifyEmail(ctx context.Context, emailVerificationToken pgtype.Text) error {
+	_, err := q.db.Exec(ctx, verifyEmail, emailVerificationToken)
+	return err
 }
