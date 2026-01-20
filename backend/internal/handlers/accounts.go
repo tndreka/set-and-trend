@@ -50,7 +50,8 @@ func (h *AccountHandler) CreateAccount(c *gin.Context) {
 	}
 
 	// User existence check
-	_, err = h.userRepo.GetUser(c.Request.Context(), userID)
+	//_, err = h.userRepo.GetUser(c.Request.Context(), userID)
+	_, err = h.userRepo.GetUserByID(c.Request.Context(), userID)
 	if err != nil {
 		log.Warn().Str("user_id", userID.String()).Msg("user not found")
 		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
