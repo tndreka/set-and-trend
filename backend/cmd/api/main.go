@@ -13,6 +13,7 @@ import (
 	"set-and-trend/backend/internal/handlers"
 	"set-and-trend/backend/internal/repositories"
 	"set-and-trend/backend/internal/services"
+	"set-and-trend/backend/internal/services/auth"
 )
 
 func main() {
@@ -41,8 +42,9 @@ func main() {
 
 	tradeService := services.NewTradeService(tradeRepo, accountRepo, candleRepo)
 	executionService := services.NewExecutionService(tradeRepo, executionRepo, intentRepo, pool)
-	
-	userHandler := handlers.NewUserHandler(userRepo)
+	authService := auth.NewAuthService(queries)
+	//userHandler := handlers.NewUserHandler(userRepo)
+	userHandler := handlers.NewUserHandler(authService)
 	accountHandler := handlers.NewAccountHandler(accountRepo, userRepo)
 	candleHandler := handlers.NewCandleHandler(candleRepo)
 	indicatorHandler := handlers.NewIndicatorHandler(indicatorRepo, candleRepo)
@@ -62,7 +64,9 @@ func main() {
 
 	api := r.Group("/api")
 	{
-		api.POST("/users", userHandler.CreateUser)
+		// api.POST("/users", userHandler.CreateUser)
+		api.POST("/auth/signup", userHandler.SignUp)
+		api.POST("/auth/login", userHandler.Login)
 		api.POST("/accounts", accountHandler.CreateAccount)
 		api.POST("/candles", candleHandler.CreateCandle)
 		api.GET("/candles/latest", candleHandler.GetLatestCandles)
