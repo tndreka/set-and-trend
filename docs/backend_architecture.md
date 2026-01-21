@@ -212,6 +212,9 @@ sql:
 
 | Responsibility | Owner | Input | Output | Trigger |
 |----------------|-------|-------|--------|---------|
+| **User Registration** | `services.AuthService` | Username, email, password | `users` row + JWT token | On-demand (POST /api/auth/signup) |
+| **User Login** | `services.AuthService` | Username/email + password | JWT token | On-demand (POST /api/auth/login) |
+| **Password Hashing** | `services.AuthService` | Plain password | bcrypt hash | Internal (during signup) |
 | **Candle Ingestion** | `repositories.CandleRepository` | CSV/JSON OHLC data | `candles_weekly` row | On-demand (POST /api/candles) |
 | **Indicator Computation** | `services.MarketData` | `candles_weekly` row | `indicators_weekly` row | On-demand (sync) |
 | **Swing Detection** | `services.MarketData` | Recent candles array | Swing high/low prices | On-demand (internal) |
@@ -272,7 +275,53 @@ SQLC: INSERT INTO rule_results (ON CONFLICT DO NOTHING)
 
 ---
 
-### Flow 3: Trade Lifecycle
+### Flow 3: User Authentication
+```
+POST /api/auth/signup
+    ↓
+UserHandler.SignUp()
+    ↓
+AuthService.Signup()
+    ↓
+bcrypt.GenerateFromPassword() [hash password]
+    ↓
+Queries.CreateUser()
+    ↓
+SQLC: INSERT INTO users (username, email, password_hash, ...)
+    ↓
+GenerateToken() [create JWT]
+    ↓
+Return {token, user}
+
+POST /api/auth/login
+    ↓
+UserHandler.Login()
+    ↓
+AuthService.Login()
+    ↓
+UserRepository.GetUserByUsername()
+    ↓
+SQLC: SELECT * FROM users WHERE username = $1
+    ↓
+bcrypt.CompareHashAndPassword() [verify password]
+    ↓
+UpdateUserLastLogin()
+    ↓
+GenerateToken() [create JWT]
+    ↓
+Return {token, user}
+```
+
+**Characteristics:**
+- Password never stored in plaintext
+- bcrypt cost factor: 10
+- JWT expiration: 24 hours
+- Support username OR email login
+- Last login timestamp tracked
+
+---
+
+### Flow 4: Trade Lifecycle
 ```
 POST /api/trades
     ↓

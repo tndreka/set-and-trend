@@ -199,3 +199,276 @@ Schema changes require complete data pipeline re-run:
 **API:** Frozen for Frontend Development  
 **Data:** 554 candles with indicators and rules  
 **Next Phase:** Frontend Dashboard Implementation
+
+---
+
+## 2026-01-20 - User Authentication & Frontend Integration
+
+### Overview
+Implemented complete user authentication system with JWT tokens and bcrypt password hashing. Integrated authentication with frontend signup/login pages. Redesigned dashboard with vertical navigation and consistent dark theme.
+
+### Backend Implementation
+
+#### Database Migration
+**File:** `backend/migrations/000006_add_user_auth_fields.up.sql`
+
+**Added Fields:**
+- `username` VARCHAR(50) UNIQUE NOT NULL
+- `email` VARCHAR(255) UNIQUE NOT NULL
+- `password_hash` VARCHAR(255) NOT NULL
+- `name`, `surname` VARCHAR(100)
+- `is_email_verified` BOOLEAN DEFAULT false
+- `email_verification_token` VARCHAR(255)
+- `password_reset_token` VARCHAR(255)
+- `password_reset_expires` TIMESTAMPTZ
+- `last_login` TIMESTAMPTZ
+- `updated_at` TIMESTAMPTZ DEFAULT NOW()
+
+**Indexes Created:**
+- idx_users_username
+- idx_users_email
+- idx_users_email_verification_token
+- idx_users_password_reset_token
+
+#### Authentication Service
+**Files:** `backend/internal/services/auth/auth_service.go`, `jwt.go`
+
+**Features:**
+- User signup with validation
+- bcrypt password hashing (cost: 10)
+- JWT token generation (24h expiration)
+- User login with credential verification
+- Support for username OR email login
+
+**Key Functions:**
+```go
+Signup(ctx, username, email, password, name, surname) (*CreateUserRow, error)
+Login(ctx, usernameOrEmail, password) (string, error)
+GenerateToken(userID, username, secret) (string, error)
+ValidateToken(tokenString, secret) (*Claims, error)
+```
+
+#### API Endpoints
+**File:** `backend/cmd/api/main.go`
+
+**New Routes:**
+- POST `/api/auth/signup` - User registration
+- POST `/api/auth/login` - User authentication
+
+**Request/Response:**
+```json
+// Signup Request
+{
+  "username": "string",
+  "email": "string",
+  "password": "string",
+  "name": "string",
+  "surname": "string"
+}
+
+// Login Request
+{
+  "username_or_email": "string",
+  "password": "string"
+}
+
+// Response (both)
+{
+  "token": "jwt_token_string",
+  "user": {
+    "id": "uuid",
+    "username": "string",
+    "email": "string",
+    "name": "string",
+    "surname": "string"
+  }
+}
+```
+
+#### Repository Updates
+**File:** `backend/internal/repositories/user_repository.go`
+
+**New Methods:**
+- `GetUserByUsername()` - Returns user with password_hash
+- `GetUserByEmail()` - Returns user with password_hash
+- `GetUserByID()` - Returns user profile (no password)
+
+#### Query Layer
+**File:** `backend/internal/db/queries/users.sql`
+
+**New Queries:**
+- CreateUser with auth fields
+- GetUserByUsername
+- GetUserByEmail
+- GetUserByID
+- UpdateUserLastLogin
+- SetEmailVerificationToken
+- VerifyEmail
+- SetPasswordResetToken
+- ResetPassword
+- UpdateUserProfile
+
+**SQLC Config Update:**
+```yaml
+schema: 
+  - "migrations/000001_init_schema.up.sql"
+  - "migrations/000006_add_user_auth_fields.up.sql"
+```
+
+### Frontend Implementation
+
+#### Authentication Pages
+**Files:** `frontend/app/signup/page.tsx`, `frontend/app/login/page.tsx`
+
+**Features:**
+- Form validation for all fields
+- API integration with error handling
+- Loading states during submission
+- JWT token storage in localStorage
+- Redirect to dashboard on success
+- Error message display to user
+
+**Signup Form Fields:**
+- Name, Surname, Username, Email, Password
+- Terms & Conditions checkbox
+
+**Login Form Fields:**
+- Username or Email
+- Password
+- Remember me checkbox
+- Forgot password link
+
+#### API Client
+**File:** `frontend/lib/api/client.ts`
+
+**New Methods:**
+```typescript
+interface SignupRequest {
+  username: string;
+  email: string;
+  password: string;
+  name?: string;
+  surname?: string;
+}
+
+interface LoginRequest {
+  username_or_email: string;
+  password: string;
+}
+
+apiClient.signup(data: SignupRequest)
+apiClient.login(data: LoginRequest)
+```
+
+#### Dashboard Redesign
+**File:** `frontend/app/dashboard/page.tsx`
+
+**Major Changes:**
+- Applied gray-950 background (matching landing page)
+- Added background grid pattern and green glow effects
+- Implemented fixed vertical sidebar navigation
+- Section-based UI (Markets/Journal/Profile/Settings)
+- Active state indicators with green accent
+- Gradient card styling for all components
+
+**Navigation Structure:**
+- Markets (Active - shows chart and indicators)
+- Journal (Placeholder)
+- Profile (Placeholder)
+- Settings (Placeholder)
+
+#### UI Theme Updates
+**Files Modified:**
+- `frontend/app/page.tsx` - Lightened to gray-950
+- `frontend/app/login/page.tsx` - Dark theme applied
+- `frontend/app/signup/page.tsx` - Dark theme applied
+- `frontend/components/ui/LoadingScreen.tsx` - Themed animation
+
+**Color Palette:**
+- Background: `bg-gray-950`
+- Accent: `text-green-400` / `bg-green-500`
+- Borders: `border-white/10`
+- Cards: `from-gray-900 to-black` gradient
+
+### Technical Metrics
+
+| Metric | Value |
+|--------|-------|
+| Files Created | 17 |
+| Files Modified | 15 |
+| Lines Added | ~10,958 |
+| Lines Removed | ~83 |
+| New Dependencies | 3 (bcrypt, JWT, axios) |
+| New Migrations | 1 (000006) |
+| New API Endpoints | 2 |
+| SQL Queries Added | 10 |
+| Frontend Pages | 3 |
+
+### Security Implementation
+
+**Password Security:**
+- bcrypt hashing with cost factor 10
+- Automatic salt generation
+- Only hash stored, never plaintext
+- Constant-time comparison
+
+**JWT Security:**
+- Secret stored in environment variable
+- 24-hour expiration
+- Claims: userID and username only
+- Client-side localStorage storage
+
+**API Security:**
+- CORS configured for frontend domain
+- Input validation on all fields
+- Generic error messages (prevent user enumeration)
+
+### Verification Results
+
+**Test User Creation:**
+```bash
+curl -X POST http://164.92.229.200:8080/api/auth/signup \
+  -d '{"username":"test","email":"test@example.com","password":"pass123"}'
+```
+✅ User created with bcrypt hash
+✅ JWT token returned
+✅ User data stored in database
+
+**Test Login:**
+```bash
+curl -X POST http://164.92.229.200:8080/api/auth/login \
+  -d '{"username_or_email":"test","password":"pass123"}'
+```
+✅ Password validated
+✅ JWT token returned
+✅ Last login timestamp updated
+
+### Known Limitations
+
+**Implemented:**
+- ✅ Signup and login
+- ✅ JWT token generation
+- ✅ Password hashing
+- ✅ Token storage
+
+**Not Implemented (Future):**
+- ❌ Logout functionality
+- ❌ Token refresh mechanism
+- ❌ Email verification flow
+- ❌ Password reset flow
+- ❌ Protected route middleware
+- ❌ Rate limiting
+
+### Lessons Learned
+
+1. **Field Naming:** Backend expects `username_or_email`, frontend must match exactly
+2. **URL Encoding:** Special characters in passwords need `url.QueryEscape()`
+3. **SQLC Config:** Must include all migrations in schema array
+4. **Theme Consistency:** Define color palette once, reuse everywhere
+
+### Status
+
+**Backend:** Authentication Complete ✅  
+**Frontend:** Auth UI Complete ✅  
+**Integration:** Working End-to-End ✅  
+**Next Phase:** Protected Routes & Trade Journal

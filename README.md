@@ -19,7 +19,7 @@ Set The Trend is a backend system that transforms subjective trading decisions i
 
 ## System Status
 
-**Last Updated:** January 15, 2026
+**Last Updated:** January 20, 2026
 
 | Component | Status |
 |-----------|--------|
@@ -27,7 +27,12 @@ Set The Trend is a backend system that transforms subjective trading decisions i
 | Database | ✅ Seeded (554 candles) |
 | Indicators | ✅ Computed (EMA 20/50/200) |
 | Rules | ✅ Evaluated (W1_TREND_BULLISH) |
-| Frontend | 🚧 In Development |
+| Authentication | ✅ Complete (JWT + bcrypt) |
+| Frontend - Auth | ✅ Complete (signup/login) |
+| Frontend - Dashboard | ✅ Complete (UI only) |
+| Frontend - Journal | 🚧 Placeholder |
+| Frontend - Profile | 🚧 Placeholder |
+| Frontend - Settings | 🚧 Placeholder |
 
 ---
 
@@ -205,6 +210,67 @@ curl http://localhost:8080/api/indicators/latest?limit=5
 ---
 
 ## API Documentation
+
+### Authentication
+
+**POST** `/api/auth/signup`
+
+Creates a new user account.
+
+**Request Body:**
+```json
+{
+  "username": "trader1",
+  "email": "trader@example.com",
+  "password": "SecurePass123!",
+  "name": "John",
+  "surname": "Doe"
+}
+```
+
+**Response:**
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "user": {
+    "id": "uuid",
+    "username": "trader1",
+    "email": "trader@example.com",
+    "name": "John",
+    "surname": "Doe"
+  }
+}
+```
+
+---
+
+**POST** `/api/auth/login`
+
+Authenticates a user and returns JWT token.
+
+**Request Body:**
+```json
+{
+  "username_or_email": "trader1",
+  "password": "SecurePass123!"
+}
+```
+
+**Response:**
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "user": {
+    "id": "uuid",
+    "username": "trader1",
+    "email": "trader@example.com",
+    "name": "John",
+    "surname": "Doe"
+  }
+}
+```
+
+---
 
 ### Candles
 
