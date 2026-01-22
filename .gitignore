@@ -1,5 +1,13 @@
 /backend/.env
 
+# Secrets - NEVER commit these
+secrets/.env
+secrets/*.pem
+secrets/*.key
+!secrets/.env.example
+!secrets/.gitignore
+!secrets/.gitkeep
+
 # Backend build artifacts
 backend/api
 backend/api.log
@@ -14,3 +22,6 @@ backend/*.out
 .DS_Store
 Thumbs.db
 .env
+
+# Docker
+.docker/
