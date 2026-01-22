@@ -36,8 +36,9 @@ export default function SignupPage() {
 
       // Redirect to dashboard
       router.push('/dashboard');
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Signup failed. Please try again.');
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { data?: { error?: string } } };
+      setError(axiosError.response?.data?.error || 'Signup failed. Please try again.');
     } finally {
       setLoading(false);
     }
