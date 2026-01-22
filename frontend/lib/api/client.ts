@@ -3,7 +3,7 @@ import { APIResponse } from '@/types/api';
 import { Candle } from '@/types/candle';
 import { Indicator } from '@/types/indicator';
 
-const API_BASE = 'http://164.92.229.200:8080';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
 export const api = axios.create({
   baseURL: API_BASE,
