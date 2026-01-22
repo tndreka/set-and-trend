@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: stt-postgres
+    restart: unless-stopped
+    env_file:
+      - ./secrets/.env
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/migrations/000001_init_schema.up.sql:/docker-entrypoint-initdb.d/001_init.sql:ro
+      - ./backend/migrations/000006_add_user_auth_fields.up.sql:/docker-entrypoint-initdb.d/002_auth.sql:ro
+    ports:
+      - "5433:5432"  # Use 5433 on host to avoid conflict with local postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${DB_USER} -d $${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - stt-network
+
+  # Go Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: stt-backend
+    restart: unless-stopped
+    env_file:
+      - ./secrets/.env
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      PORT: 8080
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - stt-network
+
+  # Next.js Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080}
+    container_name: stt-frontend
+    restart: unless-stopped
+    env_file:
+      - ./secrets/.env
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - stt-network
+
+volumes:
+  postgres_data:
+
+networks:
+  stt-network:
+    driver: bridge

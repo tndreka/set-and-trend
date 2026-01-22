@@ -1,0 +1,41 @@
+# Dependencies
+vendor/
+
+# Build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+main
+api
+
+# Test files
+*_test.go
+*.test
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment files (use Docker env instead)
+.env
+.env.local
+.env.*.local
+
+# Git
+.git
+.gitignore
+
+# Documentation
+*.md
+docs/
+
+# Backup files
+*.backup
+*.bak
+
+# MT4 data files (large)
+mt4_ready/*.csv
