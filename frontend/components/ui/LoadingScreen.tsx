@@ -54,19 +54,19 @@ export default function LoadingScreen() {
       <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff08_1px,transparent_1px),linear-gradient(to_bottom,#ffffff08_1px,transparent_1px)] bg-[size:64px_64px]" />
       
       {/* Green Glow */}
-      <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-green-500/20 rounded-full blur-[120px]" />
+      <div className="absolute top-1/4 left-1/4 w-[300px] md:w-[500px] h-[300px] md:h-[500px] bg-green-500/20 rounded-full blur-[120px]" />
       
-      <div className="text-center space-y-16 px-8 relative z-10">
+      <div className="text-center space-y-8 md:space-y-16 px-4 md:px-8 relative z-10">
         
         {/* Title */}
-        <h1 className="text-6xl font-bold tracking-tight mb-8">
+        <h1 className="text-4xl md:text-6xl font-bold tracking-tight mb-4 md:mb-8">
           <span className="text-white">SET</span>
           <span className="text-green-400">&</span>
           <span className="text-white">TREND</span>
         </h1>
 
         {/* 8 Candles in Uptrend */}
-        <div className="flex items-end justify-center space-x-6 h-80">
+        <div className="flex items-end justify-center space-x-2 md:space-x-6 h-48 md:h-80">
           {candles.map((candle, idx) => {
             // Each candle fills based on progress (0-100 split into 8 segments)
             const candleStartPercent = (idx / 13) * 100;
@@ -94,7 +94,7 @@ export default function LoadingScreen() {
     
     {/* Top Wick */}
     <div 
-      className="w-1 bg-gray-600"
+      className="w-0.5 md:w-1 bg-gray-600"
       style={{ 
         height: `${candle.high - Math.max(candle.open, candle.close)}%`,
       }}
@@ -102,7 +102,7 @@ export default function LoadingScreen() {
     
     {/* Candle Body */}
     <div
-      className={`w-14 relative border-2 transition-all duration-300 ${
+      className={`w-5 md:w-14 relative border md:border-2 transition-all duration-300 ${
         isGreen 
           ? 'border-green-500/50' 
           : 'border-red-500/50'
@@ -152,7 +152,7 @@ export default function LoadingScreen() {
     
     {/* Bottom Wick - NOW CONNECTED */}
     <div 
-      className="w-1 bg-gray-600"
+      className="w-0.5 md:w-1 bg-gray-600"
       style={{ 
         height: `${Math.min(candle.open, candle.close) - candle.low}%`,
       }}
@@ -165,8 +165,8 @@ export default function LoadingScreen() {
         </div>
 
         {/* Horizontal Progress Bar */}
-        <div className="w-full max-w-3xl mx-auto space-y-3">
-          <div className="h-3 bg-gray-800 rounded-full overflow-hidden shadow-inner">
+        <div className="w-full max-w-md md:max-w-3xl mx-auto space-y-2 md:space-y-3">
+          <div className="h-2 md:h-3 bg-gray-800 rounded-full overflow-hidden shadow-inner">
             <div
               className="h-full bg-gradient-to-r from-green-500 via-emerald-500 to-green-600 transition-all duration-300 ease-out"
               style={{ 
@@ -175,12 +175,12 @@ export default function LoadingScreen() {
               }}
             />
           </div>
-          <p className="text-gray-400 text-xl font-medium">
+          <p className="text-gray-400 text-lg md:text-xl font-medium">
             {Math.round(progress)}%
           </p>
         </div>
 
-        <p className="text-gray-500 text-lg">Loading your data...</p>
+        <p className="text-gray-500 text-sm md:text-lg">Loading your data...</p>
 
       </div>
 

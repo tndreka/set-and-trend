@@ -39,29 +39,29 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center relative overflow-hidden">
+    <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center relative overflow-hidden px-4">
       {/* Background Grid */}
       <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff08_1px,transparent_1px),linear-gradient(to_bottom,#ffffff08_1px,transparent_1px)] bg-[size:64px_64px]" />
       
       {/* Green Glow */}
-      <div className="absolute top-1/3 left-1/2 w-[500px] h-[500px] bg-green-500/20 rounded-full blur-[120px] -translate-x-1/2" />
+      <div className="absolute top-1/3 left-1/2 w-[300px] md:w-[500px] h-[300px] md:h-[500px] bg-green-500/20 rounded-full blur-[120px] -translate-x-1/2" />
 
-      <div className="relative z-10 w-full max-w-md px-8">
+      <div className="relative z-10 w-full max-w-md px-4 md:px-8">
         {/* Logo */}
-        <Link href="/" className="flex items-center justify-center space-x-3 mb-12 group">
+        <Link href="/" className="flex items-center justify-center space-x-3 mb-8 md:mb-12 group">
           <div className="relative">
             <div className="absolute inset-0 bg-green-500 blur-lg opacity-50 group-hover:opacity-70 transition-opacity" />
-            <TrendingUp className="w-8 h-8 text-green-400 relative" />
+            <TrendingUp className="w-7 h-7 md:w-8 md:h-8 text-green-400 relative" />
           </div>
-          <span className="text-2xl font-bold tracking-tight">
+          <span className="text-xl md:text-2xl font-bold tracking-tight">
             SET<span className="text-green-400">&</span>TREND
           </span>
         </Link>
 
         {/* Login Card */}
-        <div className="bg-gradient-to-br from-gray-900 to-black border border-white/10 rounded-2xl p-8 shadow-2xl">
-          <h1 className="text-3xl font-bold mb-2">Welcome back</h1>
-          <p className="text-gray-400 mb-8">Sign in to continue to your dashboard</p>
+        <div className="bg-gradient-to-br from-gray-900 to-black border border-white/10 rounded-xl md:rounded-2xl p-6 md:p-8 shadow-2xl">
+          <h1 className="text-2xl md:text-3xl font-bold mb-2">Welcome back</h1>
+          <p className="text-gray-400 mb-6 md:mb-8 text-sm md:text-base">Sign in to continue to your dashboard</p>
 
           {error && (
             <div className="bg-red-500/10 border border-red-500/50 rounded-lg p-4 mb-4">
