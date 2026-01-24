@@ -17,7 +17,7 @@ import (
 )
 
 func main() {
-	ctx := context.Background()
+	ctx := context.Background()//root context
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -30,8 +30,8 @@ func main() {
 	}
 	defer pool.Close()
 
-	log.Println("✅ Database connected with 100 connection pool")
 
+	//Repository Layer
 	userRepo := repositories.NewUserRepository(queries)
 	accountRepo := repositories.NewAccountRepository(queries)
 	candleRepo := repositories.NewCandleRepository(queries)
@@ -39,17 +39,21 @@ func main() {
 	tradeRepo := repositories.NewTradeRepository(queries)
 	executionRepo := repositories.NewExecutionRepository(pool)
 	intentRepo := repositories.NewIntentRepository(pool)
-
+	feedbackRepo := repositories.NewFeedbackRepository(queries)
+	analyticsRepo := repositories.NewAnalyticsRepository(pool)
+	//service layer
 	tradeService := services.NewTradeService(tradeRepo, accountRepo, candleRepo)
 	executionService := services.NewExecutionService(tradeRepo, executionRepo, intentRepo, pool)
 	authService := auth.NewAuthService(queries)
-	//userHandler := handlers.NewUserHandler(userRepo)
+	//handler layer
 	userHandler := handlers.NewUserHandler(authService)
 	accountHandler := handlers.NewAccountHandler(accountRepo, userRepo)
 	candleHandler := handlers.NewCandleHandler(candleRepo)
 	indicatorHandler := handlers.NewIndicatorHandler(indicatorRepo, candleRepo)
 	tradeHandler := handlers.NewTradeHandler(tradeService)
 	executionHandler := handlers.NewExecutionHandler(executionService, executionRepo)
+	feedbackHandler := handlers.NewFeedbackHandler(feedbackRepo, tradeRepo)
+	analyticsHandler := handlers.NewAnalyticsHandler(analyticsRepo)
 	
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
@@ -78,6 +82,18 @@ func main() {
 		api.POST("/trades/:id/cancel", executionHandler.CancelTrade)
 		api.GET("/trades/:id/state", executionHandler.GetTradeState)
 		api.GET("/trades/:id/executions", executionHandler.GetTradeExecutions)
+		
+		// Trade Feedback
+		api.POST("/trades/:id/feedback", feedbackHandler.CreateFeedback)
+		api.GET("/trades/:id/feedback", feedbackHandler.GetFeedback)
+		api.PUT("/trades/:id/feedback", feedbackHandler.UpdateFeedback)
+		api.DELETE("/trades/:id/feedback", feedbackHandler.DeleteFeedback)
+		
+		// Analytics
+		api.GET("/analytics/summary", analyticsHandler.GetSummary)
+		api.GET("/analytics/by-rule", analyticsHandler.GetByRule)
+		api.GET("/analytics/by-session", analyticsHandler.GetBySession)
+		api.GET("/analytics/by-emotion", analyticsHandler.GetByEmotion)
 	}
 
 	r.GET("/health", func(c *gin.Context) {
