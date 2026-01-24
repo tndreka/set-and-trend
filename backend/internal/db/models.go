@@ -55,6 +55,51 @@ func (ns NullAccountType) Value() (driver.Value, error) {
 	return string(ns.AccountType), nil
 }
 
+type EmotionType string
+
+const (
+	EmotionTypeCalm    EmotionType = "calm"
+	EmotionTypeAnxious EmotionType = "anxious"
+	EmotionTypeFomo    EmotionType = "fomo"
+	EmotionTypeRevenge EmotionType = "revenge"
+	EmotionTypeOther   EmotionType = "other"
+)
+
+func (e *EmotionType) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = EmotionType(s)
+	case string:
+		*e = EmotionType(s)
+	default:
+		return fmt.Errorf("unsupported scan type for EmotionType: %T", src)
+	}
+	return nil
+}
+
+type NullEmotionType struct {
+	EmotionType EmotionType `json:"emotion_type"`
+	Valid       bool        `json:"valid"` // Valid is true if EmotionType is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullEmotionType) Scan(value interface{}) error {
+	if value == nil {
+		ns.EmotionType, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.EmotionType.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullEmotionType) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.EmotionType), nil
+}
+
 type ExecutionType string
 
 const (
@@ -351,6 +396,18 @@ type TradeExecution struct {
 	Price         decimal.Decimal    `json:"price"`
 	Quantity      decimal.Decimal    `json:"quantity"`
 	ExecutedAt    pgtype.Timestamptz `json:"executed_at"`
+}
+
+type TradeFeedback struct {
+	ID             uuid.UUID          `json:"id"`
+	TradeID        uuid.UUID          `json:"trade_id"`
+	FollowedPlan   bool               `json:"followed_plan"`
+	EmotionBefore  EmotionType        `json:"emotion_before"`
+	EmotionDuring  EmotionType        `json:"emotion_during"`
+	EmotionAfter   EmotionType        `json:"emotion_after"`
+	BiggestMistake pgtype.Text        `json:"biggest_mistake"`
+	ScreenshotUrl  pgtype.Text        `json:"screenshot_url"`
+	FeedbackAt     pgtype.Timestamptz `json:"feedback_at"`
 }
 
 type User struct {

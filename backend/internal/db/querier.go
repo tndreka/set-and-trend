@@ -14,9 +14,12 @@ import (
 type Querier interface {
 	CreateTrade(ctx context.Context, arg CreateTradeParams) (Trade, error)
 	CreateTradeExecution(ctx context.Context, arg CreateTradeExecutionParams) (TradeExecution, error)
+	CreateTradeFeedback(ctx context.Context, arg CreateTradeFeedbackParams) (TradeFeedback, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
+	DeleteTradeFeedback(ctx context.Context, tradeID uuid.UUID) error
 	GetTradeByID(ctx context.Context, id uuid.UUID) (Trade, error)
 	GetTradeExecutions(ctx context.Context, tradeID uuid.UUID) ([]TradeExecution, error)
+	GetTradeFeedbackByTradeID(ctx context.Context, tradeID uuid.UUID) (TradeFeedback, error)
 	GetTradesByAccountAndCandle(ctx context.Context, arg GetTradesByAccountAndCandleParams) ([]Trade, error)
 	GetTradesByUserID(ctx context.Context, arg GetTradesByUserIDParams) ([]Trade, error)
 	GetUserByEmail(ctx context.Context, email string) (GetUserByEmailRow, error)
@@ -25,6 +28,7 @@ type Querier interface {
 	ResetPassword(ctx context.Context, arg ResetPasswordParams) error
 	SetEmailVerificationToken(ctx context.Context, arg SetEmailVerificationTokenParams) error
 	SetPasswordResetToken(ctx context.Context, arg SetPasswordResetTokenParams) error
+	UpdateTradeFeedback(ctx context.Context, arg UpdateTradeFeedbackParams) (TradeFeedback, error)
 	UpdateUserLastLogin(ctx context.Context, id uuid.UUID) error
 	UpdateUserProfile(ctx context.Context, arg UpdateUserProfileParams) error
 	VerifyEmail(ctx context.Context, emailVerificationToken pgtype.Text) error
