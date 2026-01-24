@@ -19,7 +19,7 @@ Set The Trend is a backend system that transforms subjective trading decisions i
 
 ## System Status
 
-**Last Updated:** January 20, 2026
+**Last Updated:** January 24, 2026
 
 | Component | Status |
 |-----------|--------|
@@ -28,6 +28,8 @@ Set The Trend is a backend system that transforms subjective trading decisions i
 | Indicators | ✅ Computed (EMA 20/50/200) |
 | Rules | ✅ Evaluated (W1_TREND_BULLISH) |
 | Authentication | ✅ Complete (JWT + bcrypt) |
+| Trade Feedback | ✅ Complete (emotions, plan adherence) |
+| Analytics API | ✅ Complete (win rate, by-rule, by-session) |
 | Frontend - Auth | ✅ Complete (signup/login) |
 | Frontend - Dashboard | ✅ Complete (UI only) |
 | Frontend - Journal | 🚧 Placeholder |
@@ -164,6 +166,7 @@ DB_PASSWORD=secure_password
 DB_NAME=set_the_trend
 DB_SSLMODE=disable
 PORT=8080
+JWT_SECRET=your-secure-secret-here
 EOF
 ```
 
@@ -382,6 +385,90 @@ Returns current trade state (planned/open/partial/closed/cancelled).
 **GET** `/api/trades/:id/executions`
 
 Returns all execution events for the trade in chronological order.
+
+---
+
+### Trade Feedback
+
+**POST** `/api/trades/:id/feedback`
+
+Creates feedback for a completed trade.
+
+**Request Body:**
+```json
+{
+  "followed_plan": true,
+  "emotion_before": "calm",
+  "emotion_during": "anxious",
+  "emotion_after": "calm",
+  "biggest_mistake": "Moved stop loss too early",
+  "screenshot_url": "https://example.com/trade-screenshot.png"
+}
+```
+
+**Valid emotions:** `calm`, `anxious`, `fomo`, `revenge`, `other`
+
+---
+
+**GET** `/api/trades/:id/feedback`
+
+Returns feedback for a specific trade.
+
+---
+
+**PUT** `/api/trades/:id/feedback`
+
+Updates existing feedback for a trade.
+
+---
+
+**DELETE** `/api/trades/:id/feedback`
+
+Deletes feedback for a trade.
+
+---
+
+### Analytics
+
+**GET** `/api/analytics/summary?user_id=uuid`
+
+Returns overall trading statistics.
+
+**Response:**
+```json
+{
+  "status": "success",
+  "data": {
+    "total_trades": 25,
+    "win_count": 15,
+    "loss_count": 8,
+    "breakeven_count": 2,
+    "win_rate": 60.0,
+    "avg_rr": 2.1,
+    "total_pnl": 1250.50,
+    "best_trade": 450.00,
+    "worst_trade": -180.00
+  }
+}
+```
+
+---
+
+**GET** `/api/analytics/by-rule?user_id=uuid`
+
+Returns statistics grouped by trading rule.
+
+---
+
+**GET** `/api/analytics/by-session?user_id=uuid`
+
+Returns statistics grouped by trading session (london, new_york, asian).
+
+---
+
+**GET** `/api/analytics/by-emotion?user_id=uuid`
+
+Returns statistics grouped by pre-trade emotion with plan adherence rates.
 
 ---
 
