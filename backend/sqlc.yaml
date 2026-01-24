@@ -5,6 +5,7 @@ sql:
     schema: 
       - "migrations/000001_init_schema.up.sql"
       - "migrations/000006_add_user_auth_fields.up.sql"
+      - "migrations/000007_add_trade_feedback.up.sql"
     queries: "internal/db/queries/"
     gen:
       go:
