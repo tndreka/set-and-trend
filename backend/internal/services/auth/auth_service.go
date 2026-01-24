@@ -2,9 +2,11 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"golang.org/x/crypto/bcrypt"
 	"set-and-trend/backend/internal/db"
@@ -37,11 +39,17 @@ func (s *AuthService) SignUp(ctx context.Context, username, email, password, nam
 	if err == nil {
 		return nil, fmt.Errorf("username already taken")
 	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return nil, fmt.Errorf("failed to check username: %w", err)
+	}
 
 	// Check if email already exists
 	_, err = s.queries.GetUserByEmail(ctx, email)
 	if err == nil {
 		return nil, fmt.Errorf("email already registered")
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return nil, fmt.Errorf("failed to check email: %w", err)
 	}
 
 	// Hash password
