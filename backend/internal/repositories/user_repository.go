@@ -43,30 +43,3 @@ func (r *UserRepository) GetUserByEmail(ctx context.Context, email string) (*db.
 	return &user, nil
 }
 
-// type User struct {
-// 	ID        uuid.UUID `json:"id"`
-// 	CreatedAt time.Time `json:"created_at"`
-// }
-
-// func (r *UserRepository) CreateUser(ctx context.Context, id uuid.UUID) (*User, error) {
-// 	user, err := r.q.CreateUser(ctx, id)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-	
-// 	return &User{
-// 		ID:        user.ID,
-// 		CreatedAt: user.CreatedAt.Time,
-// 	}, nil
-// }
-
-// func (r *UserRepository) GetUser(ctx context.Context, id uuid.UUID) (*User, error) {
-// 	user, err := r.q.GetUser(ctx, id)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	return &User{
-// 		ID:        user.ID,
-// 		CreatedAt: user.CreatedAt.Time,
-// 	}, nil
-// }
