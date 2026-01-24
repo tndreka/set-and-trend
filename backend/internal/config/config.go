@@ -23,7 +23,10 @@ func Load() (*Config, error) {
 		fmt.Println("No .env file found, using OS env vars")
 	}
 	
-	port, _ := strconv.Atoi(os.Getenv("PORT"))
+	port, err := strconv.Atoi(os.Getenv("PORT"))
+	if err != nil || port <= 0 {
+		port = 8080 // Default port
+	}
 	
 	return &Config{
 		DBHost:     os.Getenv("DB_HOST"),
