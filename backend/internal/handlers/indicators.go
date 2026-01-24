@@ -44,28 +44,42 @@ func (h *IndicatorHandler) ComputeIndicator(c *gin.Context) {
 		return
 	}
 
-	// Get the candle
-	candles, err := h.candleRepo.GetLatestCandles(c.Request.Context(), 1)
-	if err != nil || len(candles) == 0 {
-		log.Error().Err(err).Msg("candle not found")
+	// Get the specific candle by ID
+	candle, err := h.candleRepo.GetCandleByID(c.Request.Context(), candleID)
+	if err != nil {
+		log.Error().Err(err).Str("candle_id", candleID.String()).Msg("candle not found")
 		c.JSON(http.StatusNotFound, gin.H{"error": "candle not found"})
 		return
 	}
 
-	candle := candles[0]
-
-	// Parse OHLC
-	open, _ := strconv.ParseFloat(candle.Open, 64)
-	high, _ := strconv.ParseFloat(candle.High, 64)
-	low, _ := strconv.ParseFloat(candle.Low, 64)
-	close, _ := strconv.ParseFloat(candle.Close, 64)
+	// Parse OHLC with error handling
+	open, err := strconv.ParseFloat(candle.Open, 64)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "invalid open price format"})
+		return
+	}
+	high, err := strconv.ParseFloat(candle.High, 64)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "invalid high price format"})
+		return
+	}
+	low, err := strconv.ParseFloat(candle.Low, 64)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "invalid low price format"})
+		return
+	}
+	closePrice, err := strconv.ParseFloat(candle.Close, 64)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "invalid close price format"})
+		return
+	}
 
 	// Compute indicators
 	indicators := services.ComputeBasicIndicators(services.Candle{
 		Open:   open,
 		High:   high,
 		Low:    low,
-		Close:  close,
+		Close:  closePrice,
 		Volume: candle.Volume,
 	})
 
