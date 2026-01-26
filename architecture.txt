@@ -1,0 +1,704 @@
+================================================================================
+         SET THE TREND - COMPLETE INTERVIEW WALKTHROUGH WITH FILE REFERENCES
+================================================================================
+
+PROJECT STRUCTURE OVERVIEW
+================================================================================
+
+backend/
+├── cmd/api/main.go                    ← Entry point (start here)
+├── internal/
+│   ├── config/
+│   │   ├── config.go                  ← Environment loading
+│   │   └── database.go                ← PostgreSQL connection pool
+│   ├── constants/
+│   │   └── forex.go                   ← EURUSD pip values, risk guards
+│   ├── db/                            ← SQLC generated (DO NOT EDIT)
+│   │   ├── models.go                  ← Type-safe DB structs
+│   │   ├── trades.sql.go              ← Generated query functions
+│   │   └── queries/trades.sql         ← Raw SQL source
+│   ├── domain/
+│   │   └── enums.go                   ← Business enums (TradeBias, Session, Emotion)
+│   ├── handlers/
+│   │   └── trade_handler.go           ← HTTP request handling
+│   ├── repositories/
+│   │   └── trade_repository.go        ← Data access layer
+│   ├── services/
+│   │   ├── interfaces.go              ← Input/output types + repo interfaces
+│   │   ├── trade_service.go           ← Business logic
+│   │   └── risk_calculator.go         ← Position sizing math
+│   └── rules/
+│       ├── evaluator.go               ← Rule engine (pure functions)
+│       └── conditions.go              ← Boolean rule conditions
+└── migrations/
+    └── 000001_init_schema.up.sql      ← Database schema
+
+
+================================================================================
+PART 1: THE IMPORTS
+================================================================================
+
+FILE: cmd/api/main.go (lines 1-17)
+
+CODE:
+    import (
+        "context"
+        "github.com/gin-gonic/gin"
+        "github.com/gin-contrib/cors"
+        "set-and-trend/backend/internal/config"
+        "set-and-trend/backend/internal/handlers"
+        "set-and-trend/backend/internal/repositories"
+        "set-and-trend/backend/internal/services"
+        "set-and-trend/backend/internal/services/auth"
+    )
+
+WHAT TO SAY:
+"At the top of main.go, I'm importing:
+- Standard Go libraries - 'context' for request cancellation, 'net/http' for the server
+- Gin - my web framework at github.com/gin-gonic/gin
+- CORS middleware - for cross-origin requests from the frontend
+- My internal packages:
+  - internal/config - loads environment variables
+  - internal/handlers - HTTP layer
+  - internal/repositories - data access layer
+  - internal/services - business logic layer
+  - internal/services/auth - authentication service"
+
+
+================================================================================
+PART 2: CONFIGURATION LOADING
+================================================================================
+
+FILE: cmd/api/main.go (lines 19-25)
+
+CODE:
+    func main() {
+        ctx := context.Background()
+
+        cfg, err := config.Load()
+        if err != nil {
+            log.Fatal("config.Load:", err)
+        }
+
+FILE: internal/config/config.go (the actual config loading)
+
+CODE:
+    type Config struct {
+        DBHost     string
+        DBPort     string
+        DBUser     string
+        DBPassword string
+        DBName     string
+        DBSSLMode  string
+        Port       int
+    }
+
+    func Load() (*Config, error) {
+        if err := godotenv.Load(); err != nil {
+            fmt.Println("No .env file found, using OS env vars")
+        }
+        
+        return &Config{
+            DBHost:     os.Getenv("DB_HOST"),
+            DBPort:     os.Getenv("DB_PORT"),
+            // ... etc
+        }, nil
+    }
+
+WHAT TO SAY:
+"The first thing the app does is load configuration from internal/config/config.go.
+
+It uses 'godotenv' to read a .env file with database credentials and the server port. 
+If there's no .env file (like in Docker), it falls back to OS environment variables.
+
+The Config struct holds:
+- Database connection details (host, port, user, password, database name, SSL mode)
+- The port number for the HTTP server"
+
+
+================================================================================
+PART 3: DATABASE CONNECTION
+================================================================================
+
+FILE: cmd/api/main.go (lines 27-31)
+
+CODE:
+    queries, pool, err := config.NewDatabase(ctx, cfg)
+    if err != nil {
+        log.Fatal("database:", err)
+    }
+    defer pool.Close()
+
+FILE: internal/config/database.go (the actual database setup)
+
+CODE:
+    func NewDatabase(ctx context.Context, cfg *Config) (*db.Queries, *pgxpool.Pool, error) {
+        // Build connection string
+        dsn := fmt.Sprintf(
+            "postgres://%s:%s@%s:%s/%s?sslmode=%s",
+            cfg.DBUser, cfg.DBPassword, cfg.DBHost, cfg.DBPort, cfg.DBName, cfg.DBSSLMode,
+        )
+        
+        // Configure connection pool
+        poolConfig.MaxConns = 100
+        poolConfig.MinConns = 10
+        poolConfig.MaxConnLifetime = time.Hour
+        poolConfig.MaxConnIdleTime = 30 * time.Minute
+        poolConfig.HealthCheckPeriod = time.Minute
+        
+        // Create pool
+        pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
+        
+        // Verify connection
+        if err := pool.Ping(ctx); err != nil {
+            return nil, nil, fmt.Errorf("ping: %w", err)
+        }
+
+        return db.New(pool), pool, nil
+    }
+
+WHAT TO SAY:
+"Next, I establish the database connection in internal/config/database.go.
+
+I'm using pgx, which is the fastest PostgreSQL driver for Go. Instead of creating 
+one connection, I create a connection pool with:
+- 100 max connections - handles concurrent requests
+- 10 minimum connections - always kept open, no cold start
+- 1 hour max lifetime - prevents stale connections
+- Health checks every minute - detects dead connections
+
+The function returns two things:
+1. 'queries' - a type-safe SQL interface generated by SQLC
+2. 'pool' - the raw connection pool for transactions
+
+The 'defer pool.Close()' ensures connections are cleaned up when the app exits."
+
+
+================================================================================
+PART 4: REPOSITORY LAYER (DATA ACCESS)
+================================================================================
+
+FILE: cmd/api/main.go (lines 34-41)
+
+CODE:
+    // Repository Layer
+    userRepo := repositories.NewUserRepository(queries)
+    accountRepo := repositories.NewAccountRepository(queries)
+    candleRepo := repositories.NewCandleRepository(queries)
+    indicatorRepo := repositories.NewIndicatorRepository(queries)
+    tradeRepo := repositories.NewTradeRepository(queries)
+    executionRepo := repositories.NewExecutionRepository(pool)
+    intentRepo := repositories.NewIntentRepository(pool)
+
+FILE: internal/repositories/trade_repository.go
+
+CODE:
+    type TradeRepository struct {
+        q *db.Queries  // SQLC-generated type-safe queries
+    }
+
+    func NewTradeRepository(q *db.Queries) *TradeRepository {
+        return &TradeRepository{q: q}
+    }
+
+    func (r *TradeRepository) CreateTrade(ctx context.Context, params db.CreateTradeParams) (db.Trade, error) {
+        return r.q.CreateTrade(ctx, params)  // Calls SQLC-generated function
+    }
+
+    func (r *TradeRepository) GetTradeByID(ctx context.Context, tradeID uuid.UUID) (db.Trade, error) {
+        return r.q.GetTradeByID(ctx, tradeID)
+    }
+
+FILE: internal/db/queries/trades.sql (the raw SQL)
+
+CODE:
+    -- name: CreateTrade :one
+    INSERT INTO trades (
+        user_id, account_id, candle_id, symbol, timeframe,
+        direction, planned_entry, stop_loss, take_profit, risk_percent
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    RETURNING *;
+
+    -- name: GetTradeByID :one
+    SELECT * FROM trades WHERE id = $1;
+
+FILE: internal/db/trades.sql.go (SQLC generated - DO NOT EDIT)
+
+CODE:
+    // Code generated by sqlc. DO NOT EDIT.
+
+    func (q *Queries) CreateTrade(ctx context.Context, arg CreateTradeParams) (Trade, error) {
+        row := q.db.QueryRow(ctx, createTrade, arg.UserID, arg.AccountID, ...)
+        // Type-safe scanning
+    }
+
+WHAT TO SAY:
+"Here I create the Repository Layer. Each repository lives in internal/repositories/ 
+and handles one database table.
+
+Repositories receive 'queries', which is a SQLC-generated interface. The flow is:
+
+1. I write raw SQL in internal/db/queries/trades.sql with special comments like 
+   '-- name: CreateTrade :one'
+2. SQLC reads this and generates Go code in internal/db/trades.sql.go
+3. The generated code has type-safe parameter structs and compile-time validation
+
+If I write invalid SQL, it won't compile. No runtime SQL errors.
+
+Repositories only do CRUD - no business logic. They're a thin wrapper around SQLC."
+
+
+================================================================================
+PART 5: SERVICE LAYER (BUSINESS LOGIC)
+================================================================================
+
+FILE: cmd/api/main.go (lines 43-46)
+
+CODE:
+    // Service Layer
+    tradeService := services.NewTradeService(tradeRepo, accountRepo, candleRepo)
+    executionService := services.NewExecutionService(tradeRepo, executionRepo, intentRepo, pool)
+    authService := auth.NewAuthService(queries)
+
+FILE: internal/services/trade_service.go
+
+CODE:
+    type TradeService struct {
+        tradeRepo   TradeRepo    // Interface, not concrete type
+        accountRepo AccountRepo
+        candleRepo  CandleRepo
+    }
+
+    func (s *TradeService) CreateTrade(ctx context.Context, input CreateTradeInput) (*Trade, error) {
+        // 1. Load account
+        account, err := s.accountRepo.GetAccountByID(ctx, input.AccountID)
+        
+        // 2. Verify candle exists
+        if _, err := s.candleRepo.GetCandleByID(ctx, input.CandleID); err != nil {
+            return nil, fmt.Errorf("candle not found: %w", err)
+        }
+
+        // 3. Validate trade geometry
+        err = ValidateTradeGeometry(input.PlannedEntry, input.PlannedSL, input.PlannedTP, direction)
+        
+        // 4. Validate risk percentage
+        if input.PlannedRiskPct > account.MaxRiskPerTradePct {
+            return nil, fmt.Errorf("planned risk exceeds account max")
+        }
+        
+        // 5. Compute risk math
+        riskAmount, _ := ComputeRiskAmount(balance, input.PlannedRiskPct)
+        stopDistancePips, _ := ComputeStopDistancePips(stopDistance, constants.PipValueEURUSD)
+        positionSize, _ := ComputePositionSize(riskAmount, stopDistancePips, pipValuePerLot)
+        
+        // 6. Persist
+        return s.tradeRepo.CreateTrade(ctx, params)
+    }
+
+FILE: internal/services/interfaces.go (input/output types)
+
+CODE:
+    type CreateTradeInput struct {
+        AccountID      uuid.UUID
+        CandleID       uuid.UUID
+        Direction      string
+        PlannedEntry   float64
+        PlannedSL      float64
+        PlannedTP      float64
+        PlannedRiskPct float64
+    }
+
+    type TradeRepo interface {
+        CreateTrade(ctx context.Context, params db.CreateTradeParams) (db.Trade, error)
+        GetTradeByID(ctx context.Context, id uuid.UUID) (db.Trade, error)
+    }
+
+FILE: internal/services/risk_calculator.go
+
+CODE:
+    func ComputeRiskAmount(balance float64, riskPct float64) (float64, error) {
+        return balance * (riskPct / 100.0), nil
+    }
+
+    func ComputePositionSize(riskAmount, stopDistancePips, pipValuePerLot float64) (float64, error) {
+        return riskAmount / (stopDistancePips * pipValuePerLot), nil
+    }
+
+FILE: internal/constants/forex.go
+
+CODE:
+    const (
+        SymbolEURUSD       = "EURUSD"
+        TimeframeW1        = "W1"
+        PipValueEURUSD     = 0.0001
+        ContractSizeEURUSD = 100000.0
+        MinimumRR          = 1.5
+    )
+
+WHAT TO SAY:
+"Services live in internal/services/ and contain all the business logic.
+
+Notice TradeService receives three repositories because creating a trade requires:
+1. Account repo - to get the trader's balance and risk limits
+2. Candle repo - to verify the weekly candle exists
+3. Trade repo - to actually save the trade
+
+The CreateTrade method:
+1. Loads the account to get balance and max risk percentage
+2. Validates the candle exists
+3. Validates trade geometry - for a LONG, stop loss must be below entry, take profit above
+4. Checks risk doesn't exceed account limits
+5. Calls risk_calculator.go to compute position size
+6. Persists via repository
+
+I also define interfaces in interfaces.go. Services depend on interfaces, not concrete 
+types - this makes unit testing easy because I can pass mock repositories."
+
+
+================================================================================
+PART 6: HANDLER LAYER (HTTP)
+================================================================================
+
+FILE: cmd/api/main.go (lines 48-53)
+
+CODE:
+    // Handler Layer
+    userHandler := handlers.NewUserHandler(authService)
+    accountHandler := handlers.NewAccountHandler(accountRepo, userRepo)
+    candleHandler := handlers.NewCandleHandler(candleRepo)
+    indicatorHandler := handlers.NewIndicatorHandler(indicatorRepo, candleRepo)
+    tradeHandler := handlers.NewTradeHandler(tradeService)
+    executionHandler := handlers.NewExecutionHandler(executionService, executionRepo)
+
+FILE: internal/handlers/trade_handler.go
+
+CODE:
+    type TradeHandler struct {
+        tradeService *services.TradeService
+    }
+
+    type CreateTradeRequest struct {
+        AccountID      string  `json:"account_id" binding:"required,uuid"`
+        CandleID       string  `json:"candle_id" binding:"required,uuid"`
+        Direction      string  `json:"direction" binding:"required,oneof=LONG SHORT long short"`
+        PlannedEntry   float64 `json:"planned_entry" binding:"required,gt=0"`
+        PlannedSL      float64 `json:"planned_sl" binding:"required,gt=0"`
+        PlannedTP      float64 `json:"planned_tp" binding:"required,gt=0"`
+        PlannedRiskPct float64 `json:"planned_risk_pct" binding:"required,gt=0,lte=100"`
+    }
+
+    func (h *TradeHandler) CreateTrade(c *gin.Context) {
+        var req CreateTradeRequest
+        if err := c.ShouldBindJSON(&req); err != nil {
+            c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+            return
+        }
+
+        accountID, _ := uuid.Parse(req.AccountID)
+        candleID, _ := uuid.Parse(req.CandleID)
+
+        trade, err := h.tradeService.CreateTrade(c.Request.Context(), services.CreateTradeInput{
+            AccountID:      accountID,
+            CandleID:       candleID,
+            Direction:      req.Direction,
+            PlannedEntry:   req.PlannedEntry,
+            PlannedSL:      req.PlannedSL,
+            PlannedTP:      req.PlannedTP,
+            PlannedRiskPct: req.PlannedRiskPct,
+        })
+
+        if err != nil {
+            c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+            return
+        }
+
+        c.JSON(http.StatusCreated, gin.H{"status": "success", "data": trade})
+    }
+
+WHAT TO SAY:
+"Handlers live in internal/handlers/ and handle HTTP concerns only.
+
+In trade_handler.go:
+
+1. Request struct with validation tags - 'binding:required,uuid' means the field is 
+   required and must be a valid UUID. Gin validates automatically.
+
+2. ShouldBindJSON(&req) parses the JSON body and validates all fields. If validation 
+   fails, I return 400 Bad Request.
+
+3. Handler calls service with a clean input struct - the handler knows nothing about 
+   business rules.
+
+4. Return JSON response - handlers decide HTTP status codes (201 Created, 400 Bad Request).
+
+Handlers have zero business logic. They just translate HTTP -> service calls -> HTTP responses."
+
+
+================================================================================
+PART 7: HTTP SERVER & ROUTING
+================================================================================
+
+FILE: cmd/api/main.go (lines 55-79)
+
+CODE:
+    gin.SetMode(gin.ReleaseMode)
+    r := gin.Default()
+
+    r.Use(cors.New(cors.Config{
+        AllowOrigins:     []string{"http://164.92.229.200:3000", "http://localhost:3000"},
+        AllowMethods:     []string{"GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"},
+        AllowHeaders:     []string{"Content-Type", "Authorization"},
+        AllowCredentials: true,
+        MaxAge:           12 * time.Hour,
+    }))
+
+    api := r.Group("/api")
+    {
+        api.POST("/auth/signup", userHandler.SignUp)
+        api.POST("/auth/login", userHandler.Login)
+        api.POST("/accounts", accountHandler.CreateAccount)
+        api.POST("/candles", candleHandler.CreateCandle)
+        api.GET("/candles/latest", candleHandler.GetLatestCandles)
+        api.POST("/trades", tradeHandler.CreateTrade)
+        api.POST("/trades/:id/execute", executionHandler.ExecuteTrade)
+        api.POST("/trades/:id/close", executionHandler.CloseTrade)
+        api.GET("/trades/:id/state", executionHandler.GetTradeState)
+    }
+
+    r.GET("/health", func(c *gin.Context) {
+        c.JSON(http.StatusOK, gin.H{"status": "ok"})
+    })
+
+WHAT TO SAY:
+"Now I set up routing:
+
+1. Gin in release mode - disables debug logging
+
+2. CORS middleware - my frontend runs on port 3000, backend on 8080. I whitelist 
+   the frontend's origin and allow the Authorization header for JWT tokens.
+
+3. Route group /api - all routes are prefixed. Each route maps to a handler method.
+
+4. RESTful design:
+   - POST /trades - create trade intent (what you plan to do)
+   - POST /trades/:id/execute - record entry fill (what actually happened)
+   - POST /trades/:id/close - record exit
+   - GET /trades/:id/state - current trade state
+
+5. Health check - returns {"status": "ok"} for Docker health checks."
+
+
+================================================================================
+PART 8: STARTING THE SERVER
+================================================================================
+
+FILE: cmd/api/main.go (lines 81-96)
+
+CODE:
+    srv := &http.Server{
+        Addr:           fmt.Sprintf(":%d", cfg.Port),
+        Handler:        r,
+        ReadTimeout:    10 * time.Second,
+        WriteTimeout:   10 * time.Second,
+        IdleTimeout:    120 * time.Second,
+        MaxHeaderBytes: 1 << 20,  // 1 MB
+    }
+
+    log.Printf("Server ready on :%d", cfg.Port)
+    if err := srv.ListenAndServe(); err != nil {
+        log.Fatal(err)
+    }
+
+WHAT TO SAY:
+"Finally, I create an HTTP server with production-ready settings:
+
+- 10 second timeouts - prevents slow clients from holding connections
+- 2 minute idle timeout - keeps connections alive for reuse
+- 1 MB max header - protects against header attacks
+
+Then ListenAndServe() starts accepting requests on the configured port."
+
+
+================================================================================
+PART 9: ADDITIONAL FILES TO KNOW
+================================================================================
+
+FILE: internal/domain/enums.go - Business domain enums
+
+CODE:
+    type TradeBias string
+    const (
+        BiasLong  TradeBias = "long"
+        BiasShort TradeBias = "short"
+    )
+
+    type TradeResult string
+    const (
+        ResultWin       TradeResult = "win"
+        ResultLoss      TradeResult = "loss"
+        ResultBreakeven TradeResult = "breakeven"
+    )
+
+    type Session string
+    const (
+        SessionLondon  Session = "london"
+        SessionNewYork Session = "new_york"
+    )
+
+    type Emotion string
+    const (
+        EmotionCalm    Emotion = "calm"
+        EmotionFOMO    Emotion = "fomo"
+        EmotionRevenge Emotion = "revenge"
+    )
+
+--------------------------------------------------------------------------------
+
+FILE: internal/rules/evaluator.go - Deterministic rule engine
+
+CODE:
+    // Pure function - no database, no side effects
+    func EvaluateRule(ruleCode RuleCode, c Candle, ind Indicators) (RuleResult, error) {
+        spec, exists := RuleRegistry[ruleCode]
+        
+        for _, condCode := range spec.Conditions {
+            if EvaluateCondition(condCode, c, ind) {
+                result.ConditionsMet = append(result.ConditionsMet, condCode)
+            }
+        }
+        
+        if passed { result.Result = "PASS" } else { result.Result = "FAIL" }
+        return result, nil
+    }
+
+--------------------------------------------------------------------------------
+
+FILE: internal/rules/conditions.go - Boolean rule conditions
+
+CODE:
+    func conditionEMA50GtEMA200(c Candle, ind Indicators) bool {
+        return ind.EMA50 > ind.EMA200  // Bullish structure
+    }
+
+    func conditionCloseGtEMA50(c Candle, ind Indicators) bool {
+        return c.Close > ind.EMA50  // Price in trend
+    }
+
+--------------------------------------------------------------------------------
+
+FILE: migrations/000001_init_schema.up.sql - Database schema
+
+CODE:
+    CREATE TABLE trades (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        direction trade_direction NOT NULL,
+        planned_entry NUMERIC(12,5) NOT NULL CHECK (planned_entry > 0),
+        stop_loss NUMERIC(12,5) NOT NULL CHECK (stop_loss > 0),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+    CREATE TABLE trade_executions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        trade_id UUID NOT NULL REFERENCES trades(id),
+        execution_type execution_type NOT NULL,
+        price NUMERIC(12,5) NOT NULL,
+        executed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()  -- Database owns time
+    );
+
+
+================================================================================
+VISUAL SUMMARY: REQUEST FLOW WITH FILES
+================================================================================
+
+POST /api/trades (JSON body)
+        |
+        v
++-------------------------------------+
+|  cmd/api/main.go                    |  <-- Router dispatches to handler
++-------------------------------------+
+        |
+        v
++-------------------------------------+
+|  handlers/trade_handler.go          |  <-- Parse JSON, validate, call service
+|  -> CreateTradeRequest struct       |
+|  -> c.ShouldBindJSON()              |
++-------------------------------------+
+        |
+        v
++-------------------------------------+
+|  services/trade_service.go          |  <-- Business logic
+|  + services/risk_calculator.go      |  <-- Position sizing
+|  + services/interfaces.go           |  <-- Input/output types
+|  + constants/forex.go               |  <-- Pip values, risk limits
++-------------------------------------+
+        |
+        v
++-------------------------------------+
+|  repositories/trade_repository.go   |  <-- Data access
++-------------------------------------+
+        |
+        v
++-------------------------------------+
+|  db/trades.sql.go (generated)       |  <-- SQLC type-safe queries
+|  <- db/queries/trades.sql (source)  |
++-------------------------------------+
+        |
+        v
++-------------------------------------+
+|  PostgreSQL                         |  <-- migrations/000001_init_schema.up.sql
++-------------------------------------+
+
+
+================================================================================
+QUICK REFERENCE TABLE
+================================================================================
+
+FILE                              | PURPOSE                    | KEY POINT
+----------------------------------|----------------------------|---------------------------
+cmd/api/main.go                   | Entry point                | Dependency injection, layer wiring
+config/config.go                  | Env loading                | Uses godotenv, struct-based config
+config/database.go                | DB connection              | pgx pool, 100 max connections
+handlers/*.go                     | HTTP layer                 | Request validation, no business logic
+services/*.go                     | Business logic             | Pure functions, orchestration
+services/interfaces.go            | Types                      | Input/output structs, repo interfaces
+services/risk_calculator.go       | Math                       | Position sizing, R:R calculation
+repositories/*.go                 | Data access                | Thin wrapper around SQLC
+db/queries/*.sql                  | Raw SQL                    | Human-written, SQLC reads this
+db/*.sql.go                       | Generated                  | SQLC output, type-safe, DO NOT EDIT
+db/models.go                      | DB structs                 | Generated from schema
+domain/enums.go                   | Business enums             | TradeBias, Session, Emotion
+constants/forex.go                | Constants                  | Pip values, risk guards
+rules/evaluator.go                | Rule engine                | Pure functions, PASS/FAIL
+migrations/*.sql                  | Schema                     | Database structure
+
+
+================================================================================
+TECHNOLOGY SUMMARY
+================================================================================
+
+TECHNOLOGY          | WHY I CHOSE IT
+--------------------|---------------------------------------------------------------
+Go                  | Type-safe, compiles to single binary, excellent concurrency, fast
+Gin                 | Most popular Go web framework, middleware support, fast routing
+PostgreSQL          | ACID transactions, great for financial data, pgx is blazing fast
+SQLC                | Compile-time SQL validation, no ORM magic, type-safe queries
+pgx connection pool | Manages 10-100 connections, handles reconnects automatically
+bcrypt              | Industry-standard password hashing
+JWT                 | Stateless authentication, no session storage needed
+Docker Compose      | Local development matches production environment
+
+
+================================================================================
+IF THEY ASK "WHAT WOULD YOU IMPROVE?"
+================================================================================
+
+Be ready with honest answers:
+1. "Add structured logging with correlation IDs for tracing requests"
+2. "Add middleware for JWT authentication on protected routes"
+3. "Add graceful shutdown so in-flight requests complete before exit"
+4. "Add metrics endpoint for Prometheus monitoring"
+
+
+================================================================================
+                              GOOD LUCK WITH YOUR INTERVIEW!
+================================================================================

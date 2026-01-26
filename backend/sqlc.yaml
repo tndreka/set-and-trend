@@ -6,6 +6,7 @@ sql:
       - "migrations/000001_init_schema.up.sql"
       - "migrations/000006_add_user_auth_fields.up.sql"
       - "migrations/000007_add_trade_feedback.up.sql"
+      - "migrations/000008_hns_pattern_detection.up.sql"
     queries: "internal/db/queries/"
     gen:
       go:
@@ -69,3 +70,8 @@ sql:
             go_type:
               import: "github.com/jackc/pgx/v5/pgtype"
               type: "Int4"
+          
+          - db_type: "date"
+            go_type:
+              import: "github.com/jackc/pgx/v5/pgtype"
+              type: "Date"
