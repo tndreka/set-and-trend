@@ -29,7 +29,7 @@ func NewSimulation(candles []patterns.Candle, config SimulationConfig) *Simulati
 // Run starts the simulation in the configured mode
 func (s *Simulation) Run() error {
 	s.running = true
-	
+
 	switch s.config.Mode {
 	case ModeStep:
 		return s.runStepMode()
@@ -45,7 +45,7 @@ func (s *Simulation) Run() error {
 // runStepMode runs interactively, waiting for user input between bars
 func (s *Simulation) runStepMode() error {
 	reader := bufio.NewReader(os.Stdin)
-	
+
 	fmt.Println("\n===============================================================================")
 	fmt.Println("              H&S PATTERN TRADING SIMULATION - STEP MODE")
 	fmt.Println("===============================================================================")
@@ -58,20 +58,19 @@ func (s *Simulation) runStepMode() error {
 	fmt.Println("  q      - Quit")
 	fmt.Println("\nPress ENTER to start...")
 	reader.ReadString('\n')
-	
+
 	for s.running {
 		output, done := s.executor.Step()
 		fmt.Print(output)
-		
+
 		if done {
 			break
 		}
-		
-		// Wait for user input
+
 		fmt.Print("\n> ")
 		input, _ := reader.ReadString('\n')
 		input = strings.TrimSpace(strings.ToLower(input))
-		
+
 		switch input {
 		case "q", "quit":
 			s.running = false
@@ -81,7 +80,6 @@ func (s *Simulation) runStepMode() error {
 			s.config.Mode = ModeAuto
 			return s.runAutoMode()
 		case "s":
-			// Skip 10 bars
 			for i := 0; i < 10 && s.executor.feeder.HasMoreBars(); i++ {
 				s.executor.bot.ProcessBar()
 			}
@@ -101,30 +99,30 @@ func (s *Simulation) runStepMode() error {
 			// ENTER - continue to next bar
 		}
 	}
-	
+
 	return nil
 }
 
 // runAutoMode runs automatically with delays between bars
 func (s *Simulation) runAutoMode() error {
 	delay := time.Duration(s.config.AutoDelayMs) * time.Millisecond
-	
+
 	fmt.Println("\n===============================================================================")
 	fmt.Println("              H&S PATTERN TRADING SIMULATION - AUTO MODE")
 	fmt.Printf("              Running at %dms/bar. Press Ctrl+C to stop.\n", s.config.AutoDelayMs)
 	fmt.Println("===============================================================================")
-	
+
 	for s.running && s.executor.feeder.HasMoreBars() {
 		output, done := s.executor.Step()
 		fmt.Print(output)
-		
+
 		if done {
 			break
 		}
-		
+
 		time.Sleep(delay)
 	}
-	
+
 	fmt.Println(s.executor.GetFinalReport())
 	return nil
 }
@@ -135,21 +133,18 @@ func (s *Simulation) runFastMode() error {
 	fmt.Println("              H&S PATTERN TRADING SIMULATION - FAST MODE")
 	fmt.Println("===============================================================================")
 	fmt.Println("\nRunning simulation...")
-	
+
 	start := time.Now()
-	
+
 	for s.executor.feeder.HasMoreBars() {
-		signal, _, _ := s.executor.bot.ProcessBar()
-		if signal != nil {
-			s.executor.bot.ExecuteSignal(signal)
-		}
+		s.executor.bot.ProcessBar()
 	}
-	
+
 	elapsed := time.Since(start)
-	
+
 	fmt.Printf("\nCompleted in %v\n", elapsed)
 	fmt.Println(s.executor.GetFinalReport())
-	
+
 	return nil
 }
 
@@ -164,7 +159,6 @@ func (s *Simulation) Stop() {
 }
 
 // ConvertDBCandles converts database candle format to patterns.Candle
-// This is a helper function to use with database queries
 func ConvertDBCandles(dbCandles []DBCandle) []patterns.Candle {
 	result := make([]patterns.Candle, len(dbCandles))
 	for i, c := range dbCandles {

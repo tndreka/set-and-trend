@@ -20,7 +20,7 @@ func NewExecutor(candles []patterns.Candle, config SimulationConfig) *Executor {
 	feeder := NewMarketFeeder(candles)
 	bot := NewTradingBot(feeder, config)
 	visualizer := NewVisualizer(config)
-	
+
 	return &Executor{
 		bot:        bot,
 		feeder:     feeder,
@@ -40,29 +40,25 @@ func (e *Executor) Step() (output string, done bool) {
 	if !e.feeder.HasMoreBars() {
 		return e.GetFinalReport(), true
 	}
-	
-	// Get current state before processing
+
 	barIdx := e.feeder.CurrentIndex()
 	currentBar := e.feeder.PeekCurrentBar()
-	
-	// Process the bar
-	signal, closedTrade, errMsg := e.bot.ProcessBar()
-	
+
+	// Process the bar - now returns 4 values
+	signal, closedTrade, orderFilled, errMsg := e.bot.ProcessBar()
+
 	if errMsg != "" {
 		return errMsg, true
 	}
-	
-	// Build output
+
 	var sb strings.Builder
-	
-	// Chart display (if enabled)
+
 	if e.config.ShowChart {
 		visible := e.feeder.GetVisibleWindow(40)
 		chartOutput := e.visualizer.RenderChart(visible, e.bot.state, currentBar)
 		sb.WriteString(chartOutput)
 	}
-	
-	// Status line
+
 	stats := e.bot.GetStats()
 	sb.WriteString(fmt.Sprintf("\n%s %s - Bar %d/%d | Account: %.2fR | Win Rate: %.1f%%\n",
 		e.config.Symbol,
@@ -72,8 +68,7 @@ func (e *Executor) Step() (output string, done bool) {
 		stats.TotalPnLR,
 		stats.WinRate*100,
 	))
-	
-	// Trade events
+
 	if closedTrade != nil {
 		sb.WriteString(fmt.Sprintf("\n[CLOSED] %s %s @ %.5f | P&L: %.2fR | %s\n",
 			closedTrade.Direction,
@@ -83,21 +78,27 @@ func (e *Executor) Step() (output string, done bool) {
 			closedTrade.Outcome,
 		))
 	}
-	
-	if signal != nil {
-		// Execute the signal
-		e.bot.ExecuteSignal(signal)
-		sb.WriteString(fmt.Sprintf("\n[TRADE] %s @ %.5f | SL: %.5f | TP: %.5f | RR: %.2f | Conf: %.0f%%\n",
+
+	if orderFilled && e.bot.state.OpenPosition != nil {
+		pos := e.bot.state.OpenPosition
+		sb.WriteString(fmt.Sprintf("\n[FILLED] %s @ %.5f | SL: %.5f | TP: %.5f | RR: %.2f\n",
+			pos.Direction,
+			pos.EntryPrice,
+			pos.StopLoss,
+			pos.TakeProfit,
+			pos.RiskReward,
+		))
+	}
+
+	if signal != nil && !orderFilled {
+		sb.WriteString(fmt.Sprintf("\n[PENDING ORDER] %s @ %.5f | SL: %.5f | TP: %.5f | Waiting for fill...\n",
 			signal.Direction,
 			signal.EntryPrice,
 			signal.StopLoss,
 			signal.TakeProfit,
-			signal.RiskReward,
-			signal.Confidence*100,
 		))
 	}
-	
-	// Open position info
+
 	if e.bot.state.OpenPosition != nil {
 		pos := e.bot.state.OpenPosition
 		barsHeld := barIdx - pos.EntryBar
@@ -111,19 +112,16 @@ func (e *Executor) Step() (output string, done bool) {
 			e.config.MaxBarsToHold,
 		))
 	}
-	
+
 	return sb.String(), false
 }
 
 // RunFast runs entire simulation without display and returns final report
 func (e *Executor) RunFast() string {
 	for e.feeder.HasMoreBars() {
-		signal, _, _ := e.bot.ProcessBar()
-		if signal != nil {
-			e.bot.ExecuteSignal(signal)
-		}
+		e.bot.ProcessBar()
 	}
-	
+
 	return e.GetFinalReport()
 }
 
@@ -131,29 +129,28 @@ func (e *Executor) RunFast() string {
 func (e *Executor) GetFinalReport() string {
 	stats := e.bot.GetStats()
 	trades := e.bot.state.ClosedTrades
-	
+
 	var sb strings.Builder
-	
+
 	sb.WriteString("\n")
 	sb.WriteString("===============================================================================\n")
 	sb.WriteString("                    H&S PATTERN TRADING SIMULATION COMPLETE\n")
 	sb.WriteString("===============================================================================\n\n")
-	
+
 	sb.WriteString(fmt.Sprintf("Period: %s to %s (%d bars)\n",
 		e.config.StartDate.Format("2006-01-02"),
 		e.config.EndDate.Format("2006-01-02"),
 		e.feeder.TotalBars(),
 	))
 	sb.WriteString(fmt.Sprintf("Timeframe: %s\n\n", e.config.Timeframe))
-	
+
 	sb.WriteString("TRADING RESULTS:\n")
 	sb.WriteString(fmt.Sprintf("  Total Trades: %d\n", stats.TotalTrades))
 	sb.WriteString(fmt.Sprintf("  Winners: %d (%.1f%%)\n", stats.WinningTrades, stats.WinRate*100))
 	sb.WriteString(fmt.Sprintf("  Losers: %d (%.1f%%)\n\n", stats.LosingTrades, (1-stats.WinRate)*100))
-	
+
 	sb.WriteString(fmt.Sprintf("  Total P&L: %+.2fR\n", stats.TotalPnLR))
-	
-	// Calculate average win/loss
+
 	avgWinR := 0.0
 	avgLossR := 0.0
 	if stats.WinningTrades > 0 {
@@ -174,19 +171,19 @@ func (e *Executor) GetFinalReport() string {
 		}
 		avgLossR = totalLoss / float64(stats.LosingTrades)
 	}
-	
+
 	sb.WriteString(fmt.Sprintf("  Average Win: %+.2fR\n", avgWinR))
 	sb.WriteString(fmt.Sprintf("  Average Loss: %.2fR\n", avgLossR))
 	sb.WriteString(fmt.Sprintf("  Expectancy: %+.2fR per trade\n\n", stats.Expectancy))
-	
+
 	sb.WriteString(fmt.Sprintf("  Max Drawdown: -%.2fR\n", stats.MaxDrawdownR))
 	sb.WriteString(fmt.Sprintf("  Max Consecutive Wins: %d\n", stats.ConsecutiveWins))
 	sb.WriteString(fmt.Sprintf("  Max Consecutive Losses: %d\n\n", stats.ConsecutiveLosses))
-	
+
 	sb.WriteString("PATTERN BREAKDOWN:\n")
 	hsTrades := stats.HSWins + stats.HSLosses
 	ihsTrades := stats.IHSWins + stats.IHSLosses
-	
+
 	if hsTrades > 0 {
 		hsWinRate := float64(stats.HSWins) / float64(hsTrades) * 100
 		sb.WriteString(fmt.Sprintf("  H&S (Bearish): %d trades, %d wins (%.1f%%)\n", hsTrades, stats.HSWins, hsWinRate))
@@ -195,14 +192,14 @@ func (e *Executor) GetFinalReport() string {
 		ihsWinRate := float64(stats.IHSWins) / float64(ihsTrades) * 100
 		sb.WriteString(fmt.Sprintf("  IHS (Bullish): %d trades, %d wins (%.1f%%)\n", ihsTrades, stats.IHSWins, ihsWinRate))
 	}
-	
-	sb.WriteString("\nVERIFICATION:\n")
-	sb.WriteString("  [OK] No lookahead bias detected\n")
-	sb.WriteString("  [OK] All signals generated on visible data only\n")
-	sb.WriteString("  [OK] Exit conditions properly evaluated\n")
-	
+
+	sb.WriteString("\nEXECUTION MODEL:\n")
+	sb.WriteString("  - Entry: Limit order at signal price, fills only if price reached\n")
+	sb.WriteString("  - Slippage: If bar opens past entry, fill at open (worse price)\n")
+	sb.WriteString("  - SL/TP: Conservative - if both hit same bar, assume SL first\n")
+
 	sb.WriteString("\n===============================================================================\n")
-	
+
 	return sb.String()
 }
 
