@@ -10,6 +10,8 @@ import (
 
 	"set-and-trend/backend/internal/database"
 	"set-and-trend/backend/internal/indicators"
+	"set-and-trend/backend/internal/mtf"
+	"set-and-trend/backend/internal/scoring"
 )
 
 // SimulationConfig holds simulation parameters
@@ -21,16 +23,19 @@ type SimulationConfig struct {
 	MaxBarsToHold       int
 	CooldownBars        int
 	SwingStrength       int
+	UseSMCFilters       bool
+	MinGrade            string // Minimum grade to trade (A, B, C)
 }
 
 // Position represents an open trade
 type Position struct {
-	Direction   int // 1 = long, -1 = short
+	Direction   int
 	EntryPrice  float64
 	StopLoss    float64
 	TakeProfit  float64
 	EntryBar    int
 	PatternType string
+	Grade       string
 }
 
 // TradeResult represents a closed trade
@@ -47,6 +52,8 @@ type TradeResult struct {
 	PnLR        float64
 	Outcome     string
 	BarsHeld    int
+	Grade       string
+	Score       int
 }
 
 // MarketFeeder provides bar-by-bar data WITHOUT lookahead
@@ -74,7 +81,6 @@ func (f *MarketFeeder) NextBar() *database.Candle {
 	return &bar
 }
 
-// GetVisibleWindow returns ONLY past candles - NO FUTURE DATA
 func (f *MarketFeeder) GetVisibleWindow(size int) []database.Candle {
 	if f.currentIndex == 0 {
 		return nil
@@ -103,7 +109,6 @@ type SwingPoint struct {
 	IsHigh bool
 }
 
-// detectSwings finds swing highs and lows
 func detectSwings(candles []database.Candle, strength int) []SwingPoint {
 	var swings []SwingPoint
 	for i := strength; i < len(candles)-strength; i++ {
@@ -136,9 +141,9 @@ type Signal struct {
 	TakeProfit  float64
 	Confidence  float64
 	RiskReward  float64
+	BarIndex    int
 }
 
-// detectPatterns finds H&S and IHS patterns in visible data only
 func detectPatterns(candles []database.Candle, config SimulationConfig, adx *indicators.ADX) *Signal {
 	if len(candles) < 30 {
 		return nil
@@ -146,7 +151,6 @@ func detectPatterns(candles []database.Candle, config SimulationConfig, adx *ind
 
 	swings := detectSwings(candles, config.SwingStrength)
 
-	// Filter highs and lows
 	var highs, lows []SwingPoint
 	for _, s := range swings {
 		if s.IsHigh {
@@ -163,12 +167,10 @@ func detectPatterns(candles []database.Candle, config SimulationConfig, adx *ind
 			head := highs[i+1]
 			right := highs[i+2]
 
-			// Head must be higher than shoulders
 			if head.Price <= left.Price || head.Price <= right.Price {
 				continue
 			}
 
-			// Check symmetry
 			leftH := head.Price - left.Price
 			rightH := head.Price - right.Price
 			symmetry := 1 - math.Abs(leftH-rightH)/((leftH+rightH)/2)
@@ -176,7 +178,6 @@ func detectPatterns(candles []database.Candle, config SimulationConfig, adx *ind
 				continue
 			}
 
-			// Find neckline (lows between shoulders)
 			var neckLows []SwingPoint
 			for _, l := range lows {
 				if l.Index > left.Index && l.Index < right.Index {
@@ -190,12 +191,10 @@ func detectPatterns(candles []database.Candle, config SimulationConfig, adx *ind
 			neckline := (neckLows[0].Price + neckLows[len(neckLows)-1].Price) / 2
 			lastClose := candles[len(candles)-1].Close
 
-			// Only signal if price is near neckline (within 1%)
 			if lastClose > neckline*1.01 || lastClose < neckline*0.95 {
 				continue
 			}
 
-			// ADX filter - only trade in trending markets
 			if adx != nil && adx.IsValid() && !adx.IsTrending() {
 				continue
 			}
@@ -207,12 +206,13 @@ func detectPatterns(candles []database.Candle, config SimulationConfig, adx *ind
 
 			return &Signal{
 				PatternType: "H&S",
-				Direction:   -1, // Short
+				Direction:   -1,
 				EntryPrice:  entryPrice,
 				StopLoss:    stopLoss,
 				TakeProfit:  takeProfit,
 				Confidence:  symmetry,
 				RiskReward:  2.0,
+				BarIndex:    len(candles) - 1,
 			}
 		}
 	}
@@ -224,12 +224,10 @@ func detectPatterns(candles []database.Candle, config SimulationConfig, adx *ind
 			head := lows[i+1]
 			right := lows[i+2]
 
-			// Head must be lower than shoulders
 			if head.Price >= left.Price || head.Price >= right.Price {
 				continue
 			}
 
-			// Check symmetry
 			leftD := left.Price - head.Price
 			rightD := right.Price - head.Price
 			symmetry := 1 - math.Abs(leftD-rightD)/((leftD+rightD)/2)
@@ -237,7 +235,6 @@ func detectPatterns(candles []database.Candle, config SimulationConfig, adx *ind
 				continue
 			}
 
-			// Find neckline (highs between shoulders)
 			var neckHighs []SwingPoint
 			for _, h := range highs {
 				if h.Index > left.Index && h.Index < right.Index {
@@ -251,12 +248,10 @@ func detectPatterns(candles []database.Candle, config SimulationConfig, adx *ind
 			neckline := (neckHighs[0].Price + neckHighs[len(neckHighs)-1].Price) / 2
 			lastClose := candles[len(candles)-1].Close
 
-			// Only signal if price is near neckline
 			if lastClose < neckline*0.99 || lastClose > neckline*1.05 {
 				continue
 			}
 
-			// ADX filter
 			if adx != nil && adx.IsValid() && !adx.IsTrending() {
 				continue
 			}
@@ -268,12 +263,13 @@ func detectPatterns(candles []database.Candle, config SimulationConfig, adx *ind
 
 			return &Signal{
 				PatternType: "IHS",
-				Direction:   1, // Long
+				Direction:   1,
 				EntryPrice:  entryPrice,
 				StopLoss:    stopLoss,
 				TakeProfit:  takeProfit,
 				Confidence:  symmetry,
 				RiskReward:  2.0,
+				BarIndex:    len(candles) - 1,
 			}
 		}
 	}
@@ -281,37 +277,79 @@ func detectPatterns(candles []database.Candle, config SimulationConfig, adx *ind
 	return nil
 }
 
-// runSimulationForSymbol runs simulation for a single symbol
+// convertSignalForScoring converts our signal to scoring.Signal
+func convertSignalForScoring(s *Signal) *scoring.Signal {
+	return &scoring.Signal{
+		PatternType: s.PatternType,
+		Direction:   s.Direction,
+		EntryPrice:  s.EntryPrice,
+		StopLoss:    s.StopLoss,
+		TakeProfit:  s.TakeProfit,
+		BarIndex:    s.BarIndex,
+	}
+}
+
+// shouldTakeGrade checks if the grade meets minimum requirements
+func shouldTakeGrade(grade, minGrade string) bool {
+	grades := map[string]int{"A": 4, "B": 3, "C": 2, "F": 1}
+	return grades[grade] >= grades[minGrade]
+}
+
 func runSimulationForSymbol(loader *database.SQLiteLoader, symbol string, timeframe database.Timeframe, dateRange *database.DateRange, config SimulationConfig, verbose bool) []TradeResult {
-	candles, err := loader.GetCandles(symbol, timeframe, dateRange)
-	if err != nil || len(candles) == 0 {
+	h4Candles, err := loader.GetCandles(symbol, database.TimeframeH4, dateRange)
+	if err != nil || len(h4Candles) == 0 {
 		return nil
 	}
 
+	// Load daily candles for MTF context
+	var dailyCandles []database.Candle
+	if config.UseSMCFilters {
+		dailyCandles, _ = loader.GetCandles(symbol, database.TimeframeDaily, dateRange)
+	}
+
 	if verbose {
-		fmt.Printf("\nProcessing %s: %d candles...\n", symbol, len(candles))
+		fmt.Printf("\nProcessing %s: %d candles...", symbol, len(h4Candles))
+		if config.UseSMCFilters {
+			fmt.Printf(" (SMC filters enabled, min grade: %s)\n", config.MinGrade)
+		} else {
+			fmt.Println()
+		}
 	}
 
 	config.Symbol = symbol
-	feeder := NewMarketFeeder(candles)
+	feeder := NewMarketFeeder(h4Candles)
 	adx := indicators.NewADX(14)
+
+	// MTF context builder
+	var mtfBuilder *mtf.MTFContextBuilder
+	if config.UseSMCFilters {
+		mtfBuilder = mtf.NewMTFContextBuilder(loader)
+	}
 
 	var trades []TradeResult
 	var position *Position
 	var pendingSignal *Signal
+	var pendingGrade string
+	var pendingScore int // Confluence score for display
 	lastTradeBar := make(map[string]int)
+
+	// Grade statistics
+	gradeStats := map[string]struct{ total, wins int }{
+		"A": {}, "B": {}, "C": {}, "F": {},
+	}
+	filteredByGrade := 0
 
 	for feeder.HasMoreBars() {
 		currentBar := feeder.NextBar()
 		barIdx := feeder.CurrentIndex()
 
-		// 1. Check exits first (if position open)
+		// 1. Check exits first
 		if position != nil {
 			var exitPrice float64
 			var outcome string
 			barsHeld := barIdx - position.EntryBar
 
-			if position.Direction == -1 { // Short
+			if position.Direction == -1 {
 				slHit := currentBar.High >= position.StopLoss
 				tpHit := currentBar.Low <= position.TakeProfit
 
@@ -328,7 +366,7 @@ func runSimulationForSymbol(loader *database.SQLiteLoader, symbol string, timefr
 					exitPrice = currentBar.Close
 					outcome = "TIMEOUT"
 				}
-			} else { // Long
+			} else {
 				slHit := currentBar.Low <= position.StopLoss
 				tpHit := currentBar.High >= position.TakeProfit
 
@@ -364,7 +402,7 @@ func runSimulationForSymbol(loader *database.SQLiteLoader, symbol string, timefr
 					resultOutcome = "WIN"
 				}
 
-				trades = append(trades, TradeResult{
+				trade := TradeResult{
 					Symbol:      symbol,
 					PatternType: position.PatternType,
 					Direction:   position.Direction,
@@ -377,7 +415,20 @@ func runSimulationForSymbol(loader *database.SQLiteLoader, symbol string, timefr
 					PnLR:        pnlR,
 					Outcome:     resultOutcome,
 					BarsHeld:    barsHeld,
-				})
+					Grade:       position.Grade,
+				}
+				trades = append(trades, trade)
+
+				// Update grade stats
+				if position.Grade != "" {
+					stat := gradeStats[position.Grade]
+					stat.total++
+					if resultOutcome == "WIN" {
+						stat.wins++
+					}
+					gradeStats[position.Grade] = stat
+				}
+
 				position = nil
 			}
 		}
@@ -387,14 +438,14 @@ func runSimulationForSymbol(loader *database.SQLiteLoader, symbol string, timefr
 			filled := false
 			fillPrice := pendingSignal.EntryPrice
 
-			if pendingSignal.Direction == -1 { // Short
+			if pendingSignal.Direction == -1 {
 				if currentBar.Open <= pendingSignal.EntryPrice {
 					filled = true
 					fillPrice = currentBar.Open
 				} else if currentBar.Low <= pendingSignal.EntryPrice {
 					filled = true
 				}
-			} else { // Long
+			} else {
 				if currentBar.Open >= pendingSignal.EntryPrice {
 					filled = true
 					fillPrice = currentBar.Open
@@ -411,12 +462,15 @@ func runSimulationForSymbol(loader *database.SQLiteLoader, symbol string, timefr
 					TakeProfit:  pendingSignal.TakeProfit,
 					EntryBar:    barIdx,
 					PatternType: pendingSignal.PatternType,
+					Grade:       pendingGrade,
 				}
 			}
 			pendingSignal = nil
+			pendingGrade = ""
+			_ = pendingScore // Reset
 		}
 
-		// 3. Look for new signals (only if no position)
+		// 3. Look for new signals
 		if position == nil && pendingSignal == nil {
 			visible := feeder.GetVisibleWindow(100)
 			if len(visible) >= 50 {
@@ -431,7 +485,44 @@ func runSimulationForSymbol(loader *database.SQLiteLoader, symbol string, timefr
 					signal := detectPatterns(visible, config, adx)
 					if signal != nil {
 						if (signal.PatternType == "H&S" && hsOK) || (signal.PatternType == "IHS" && ihsOK) {
+							
+							// Apply SMC filters if enabled
+							grade := "B" // Default grade if filters disabled
+							score := 0
+							
+							if config.UseSMCFilters {
+								// Build MTF context from visible data
+								visibleDaily := make([]database.Candle, 0)
+								if len(dailyCandles) > 0 {
+									// Find daily candles up to current time
+									for _, dc := range dailyCandles {
+										if dc.Timestamp.Before(currentBar.Timestamp) || dc.Timestamp.Equal(currentBar.Timestamp) {
+											visibleDaily = append(visibleDaily, dc)
+										}
+									}
+								}
+
+								// Build context from visible candles only (no lookahead)
+								mtfCtx := mtfBuilder.BuildContextFromCandles(symbol, visible, visibleDaily)
+								
+								// Calculate confluence score
+								scoringSignal := convertSignalForScoring(signal)
+								confluenceScore := scoring.CalculateConfluence(mtfCtx, scoringSignal)
+								
+								grade = confluenceScore.Grade
+								score = confluenceScore.Total
+								
+								// Filter by grade
+								if !shouldTakeGrade(grade, config.MinGrade) {
+									filteredByGrade++
+									lastTradeBar[signal.PatternType] = barIdx
+									continue
+								}
+							}
+							
 							pendingSignal = signal
+							pendingGrade = grade
+							pendingScore = score
 							lastTradeBar[signal.PatternType] = barIdx
 						}
 					}
@@ -449,7 +540,23 @@ func runSimulationForSymbol(loader *database.SQLiteLoader, symbol string, timefr
 				wins++
 			}
 		}
-		fmt.Printf("  %s: %d trades, %d wins (%.1f%%), %.2fR\n", symbol, len(trades), wins, float64(wins)/float64(len(trades))*100, totalR)
+		winRate := float64(wins) / float64(len(trades)) * 100
+		fmt.Printf("  %s: %d trades, %d wins (%.1f%%), %.2fR", symbol, len(trades), wins, winRate, totalR)
+		
+		if config.UseSMCFilters && filteredByGrade > 0 {
+			fmt.Printf(" [filtered: %d]", filteredByGrade)
+		}
+		fmt.Println()
+		
+		// Print grade breakdown
+		if config.UseSMCFilters {
+			for g, stat := range gradeStats {
+				if stat.total > 0 {
+					gWinRate := float64(stat.wins) / float64(stat.total) * 100
+					fmt.Printf("    Grade %s: %d trades, %.1f%% win\n", g, stat.total, gWinRate)
+				}
+			}
+		}
 	}
 
 	return trades
@@ -462,10 +569,15 @@ func main() {
 	mode := flag.String("mode", "fast", "Mode: step, auto, fast")
 	startDate := flag.String("start", "2020-01-01", "Start date")
 	endDate := flag.String("end", "2025-12-31", "End date")
+	useSMC := flag.Bool("smc", false, "Enable SMC confluence filters")
+	minGrade := flag.String("grade", "B", "Minimum grade to trade (A, B, C)")
 	flag.Parse()
 
 	fmt.Println("\n===============================================================================")
 	fmt.Println("         H&S PATTERN TRADING SIMULATION (NO LOOKAHEAD BIAS)")
+	if *useSMC {
+		fmt.Println("                  [SMC CONFLUENCE FILTERS ENABLED]")
+	}
 	fmt.Println("===============================================================================")
 
 	loader, err := database.NewSQLiteLoader(*dbPath)
@@ -498,9 +610,10 @@ func main() {
 		MaxBarsToHold:       50,
 		CooldownBars:        10,
 		SwingStrength:       5,
+		UseSMCFilters:       *useSMC,
+		MinGrade:            *minGrade,
 	}
 
-	// Get symbols to process
 	var symbols []string
 	if strings.ToLower(*symbol) == "all" {
 		symbols = database.GetAllSymbols()
@@ -512,6 +625,9 @@ func main() {
 	fmt.Printf("Timeframe: %s\n", *tf)
 	fmt.Printf("Period: %s to %s\n", *startDate, *endDate)
 	fmt.Printf("Mode: %s\n", *mode)
+	if *useSMC {
+		fmt.Printf("SMC Filters: ENABLED (min grade: %s)\n", *minGrade)
+	}
 
 	fmt.Println("\n===============================================================================")
 	fmt.Println("                         SIMULATION RUNNING")
@@ -520,7 +636,6 @@ func main() {
 
 	startTime := time.Now()
 
-	// Run simulation for each symbol
 	var allTrades []TradeResult
 	for _, sym := range symbols {
 		trades := runSimulationForSymbol(loader, sym, timeframe, dateRange, config, len(symbols) > 1)
@@ -529,7 +644,6 @@ func main() {
 
 	elapsed := time.Since(startTime)
 
-	// Print results
 	fmt.Println("\n===============================================================================")
 	fmt.Println("                         SIMULATION COMPLETE")
 	fmt.Println("===============================================================================")
@@ -546,15 +660,25 @@ func main() {
 	totalR := 0.0
 	hsWins, hsLosses := 0, 0
 	ihsWins, ihsLosses := 0, 0
+	gradeStats := map[string]struct{ total, wins int; pnl float64 }{
+		"A": {}, "B": {}, "C": {}, "F": {},
+	}
 	symbolStats := make(map[string]struct{ wins, losses int; pnl float64 })
 
 	for _, t := range allTrades {
 		totalR += t.PnLR
 		stat := symbolStats[t.Symbol]
 		stat.pnl += t.PnLR
+		
+		// Grade stats
+		gStat := gradeStats[t.Grade]
+		gStat.total++
+		gStat.pnl += t.PnLR
+		
 		if t.Outcome == "WIN" {
 			wins++
 			stat.wins++
+			gStat.wins++
 			if t.PatternType == "H&S" {
 				hsWins++
 			} else {
@@ -570,6 +694,7 @@ func main() {
 			}
 		}
 		symbolStats[t.Symbol] = stat
+		gradeStats[t.Grade] = gStat
 	}
 
 	fmt.Printf("\nTRADING RESULTS:\n")
@@ -587,7 +712,19 @@ func main() {
 		fmt.Printf("  IHS (Bullish): %d trades, %d wins (%.1f%%)\n", ihsWins+ihsLosses, ihsWins, float64(ihsWins)/float64(ihsWins+ihsLosses)*100)
 	}
 
-	// Show top 5 best and worst symbols
+	// Grade breakdown
+	if *useSMC {
+		fmt.Printf("\nGRADE BREAKDOWN:\n")
+		for _, g := range []string{"A", "B", "C", "F"} {
+			stat := gradeStats[g]
+			if stat.total > 0 {
+				winRate := float64(stat.wins) / float64(stat.total) * 100
+				avgR := stat.pnl / float64(stat.total)
+				fmt.Printf("  Grade %s: %d trades, %.1f%% win, %.2fR avg, %.2fR total\n", g, stat.total, winRate, avgR, stat.pnl)
+			}
+		}
+	}
+
 	if len(symbols) > 1 {
 		fmt.Printf("\nTOP PERFORMING SYMBOLS:\n")
 		type symbolResult struct {
@@ -600,7 +737,6 @@ func main() {
 		for sym, stat := range symbolStats {
 			results = append(results, symbolResult{sym, stat.wins, stat.losses, stat.pnl})
 		}
-		// Sort by P&L
 		for i := 0; i < len(results)-1; i++ {
 			for j := i + 1; j < len(results); j++ {
 				if results[j].pnl > results[i].pnl {
@@ -632,6 +768,9 @@ func main() {
 	fmt.Println("  - Orders are pending until next bar fills them")
 	fmt.Println("  - If SL and TP both hit same bar, SL assumed first (conservative)")
 	fmt.Println("  - Entry slippage: if bar opens past entry, fill at open")
+	if *useSMC {
+		fmt.Println("  - SMC context built from visible data only (no future data)")
+	}
 
 	fmt.Println("\n===============================================================================")
 }
