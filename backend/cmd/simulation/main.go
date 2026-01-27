@@ -1,164 +1,637 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
-	"log"
+	"math"
 	"os"
+	"strings"
 	"time"
 
-	"set-and-trend/backend/internal/config"
-	"set-and-trend/backend/internal/patterns"
-	"set-and-trend/backend/internal/simulation"
+	"set-and-trend/backend/internal/database"
+	"set-and-trend/backend/internal/indicators"
 )
 
+// SimulationConfig holds simulation parameters
+type SimulationConfig struct {
+	Symbol              string
+	Timeframe           database.Timeframe
+	ConfidenceThreshold float64
+	MinRR               float64
+	MaxBarsToHold       int
+	CooldownBars        int
+	SwingStrength       int
+}
+
+// Position represents an open trade
+type Position struct {
+	Direction   int // 1 = long, -1 = short
+	EntryPrice  float64
+	StopLoss    float64
+	TakeProfit  float64
+	EntryBar    int
+	PatternType string
+}
+
+// TradeResult represents a closed trade
+type TradeResult struct {
+	Symbol      string
+	PatternType string
+	Direction   int
+	EntryPrice  float64
+	ExitPrice   float64
+	StopLoss    float64
+	TakeProfit  float64
+	EntryBar    int
+	ExitBar     int
+	PnLR        float64
+	Outcome     string
+	BarsHeld    int
+}
+
+// MarketFeeder provides bar-by-bar data WITHOUT lookahead
+type MarketFeeder struct {
+	candles      []database.Candle
+	currentIndex int
+}
+
+func NewMarketFeeder(candles []database.Candle) *MarketFeeder {
+	copied := make([]database.Candle, len(candles))
+	copy(copied, candles)
+	return &MarketFeeder{candles: copied, currentIndex: 0}
+}
+
+func (f *MarketFeeder) HasMoreBars() bool {
+	return f.currentIndex < len(f.candles)
+}
+
+func (f *MarketFeeder) NextBar() *database.Candle {
+	if !f.HasMoreBars() {
+		return nil
+	}
+	bar := f.candles[f.currentIndex]
+	f.currentIndex++
+	return &bar
+}
+
+// GetVisibleWindow returns ONLY past candles - NO FUTURE DATA
+func (f *MarketFeeder) GetVisibleWindow(size int) []database.Candle {
+	if f.currentIndex == 0 {
+		return nil
+	}
+	start := f.currentIndex - size
+	if start < 0 {
+		start = 0
+	}
+	visible := make([]database.Candle, f.currentIndex-start)
+	copy(visible, f.candles[start:f.currentIndex])
+	return visible
+}
+
+func (f *MarketFeeder) CurrentIndex() int {
+	return f.currentIndex
+}
+
+func (f *MarketFeeder) TotalBars() int {
+	return len(f.candles)
+}
+
+// SwingPoint represents a significant high or low
+type SwingPoint struct {
+	Index  int
+	Price  float64
+	IsHigh bool
+}
+
+// detectSwings finds swing highs and lows
+func detectSwings(candles []database.Candle, strength int) []SwingPoint {
+	var swings []SwingPoint
+	for i := strength; i < len(candles)-strength; i++ {
+		isHigh := true
+		isLow := true
+		for j := 1; j <= strength; j++ {
+			if candles[i-j].High >= candles[i].High || candles[i+j].High >= candles[i].High {
+				isHigh = false
+			}
+			if candles[i-j].Low <= candles[i].Low || candles[i+j].Low <= candles[i].Low {
+				isLow = false
+			}
+		}
+		if isHigh {
+			swings = append(swings, SwingPoint{Index: i, Price: candles[i].High, IsHigh: true})
+		}
+		if isLow {
+			swings = append(swings, SwingPoint{Index: i, Price: candles[i].Low, IsHigh: false})
+		}
+	}
+	return swings
+}
+
+// Signal represents a trading signal
+type Signal struct {
+	PatternType string
+	Direction   int
+	EntryPrice  float64
+	StopLoss    float64
+	TakeProfit  float64
+	Confidence  float64
+	RiskReward  float64
+}
+
+// detectPatterns finds H&S and IHS patterns in visible data only
+func detectPatterns(candles []database.Candle, config SimulationConfig, adx *indicators.ADX) *Signal {
+	if len(candles) < 30 {
+		return nil
+	}
+
+	swings := detectSwings(candles, config.SwingStrength)
+
+	// Filter highs and lows
+	var highs, lows []SwingPoint
+	for _, s := range swings {
+		if s.IsHigh {
+			highs = append(highs, s)
+		} else {
+			lows = append(lows, s)
+		}
+	}
+
+	// Check H&S (bearish)
+	if len(highs) >= 3 {
+		for i := len(highs) - 3; i >= 0; i-- {
+			left := highs[i]
+			head := highs[i+1]
+			right := highs[i+2]
+
+			// Head must be higher than shoulders
+			if head.Price <= left.Price || head.Price <= right.Price {
+				continue
+			}
+
+			// Check symmetry
+			leftH := head.Price - left.Price
+			rightH := head.Price - right.Price
+			symmetry := 1 - math.Abs(leftH-rightH)/((leftH+rightH)/2)
+			if symmetry < 0.6 {
+				continue
+			}
+
+			// Find neckline (lows between shoulders)
+			var neckLows []SwingPoint
+			for _, l := range lows {
+				if l.Index > left.Index && l.Index < right.Index {
+					neckLows = append(neckLows, l)
+				}
+			}
+			if len(neckLows) < 2 {
+				continue
+			}
+
+			neckline := (neckLows[0].Price + neckLows[len(neckLows)-1].Price) / 2
+			lastClose := candles[len(candles)-1].Close
+
+			// Only signal if price is near neckline (within 1%)
+			if lastClose > neckline*1.01 || lastClose < neckline*0.95 {
+				continue
+			}
+
+			// ADX filter - only trade in trending markets
+			if adx != nil && adx.IsValid() && !adx.IsTrending() {
+				continue
+			}
+
+			entryPrice := neckline * 0.999
+			stopLoss := head.Price * 1.01
+			risk := stopLoss - entryPrice
+			takeProfit := entryPrice - risk*2
+
+			return &Signal{
+				PatternType: "H&S",
+				Direction:   -1, // Short
+				EntryPrice:  entryPrice,
+				StopLoss:    stopLoss,
+				TakeProfit:  takeProfit,
+				Confidence:  symmetry,
+				RiskReward:  2.0,
+			}
+		}
+	}
+
+	// Check IHS (bullish)
+	if len(lows) >= 3 {
+		for i := len(lows) - 3; i >= 0; i-- {
+			left := lows[i]
+			head := lows[i+1]
+			right := lows[i+2]
+
+			// Head must be lower than shoulders
+			if head.Price >= left.Price || head.Price >= right.Price {
+				continue
+			}
+
+			// Check symmetry
+			leftD := left.Price - head.Price
+			rightD := right.Price - head.Price
+			symmetry := 1 - math.Abs(leftD-rightD)/((leftD+rightD)/2)
+			if symmetry < 0.6 {
+				continue
+			}
+
+			// Find neckline (highs between shoulders)
+			var neckHighs []SwingPoint
+			for _, h := range highs {
+				if h.Index > left.Index && h.Index < right.Index {
+					neckHighs = append(neckHighs, h)
+				}
+			}
+			if len(neckHighs) < 2 {
+				continue
+			}
+
+			neckline := (neckHighs[0].Price + neckHighs[len(neckHighs)-1].Price) / 2
+			lastClose := candles[len(candles)-1].Close
+
+			// Only signal if price is near neckline
+			if lastClose < neckline*0.99 || lastClose > neckline*1.05 {
+				continue
+			}
+
+			// ADX filter
+			if adx != nil && adx.IsValid() && !adx.IsTrending() {
+				continue
+			}
+
+			entryPrice := neckline * 1.001
+			stopLoss := head.Price * 0.99
+			risk := entryPrice - stopLoss
+			takeProfit := entryPrice + risk*2
+
+			return &Signal{
+				PatternType: "IHS",
+				Direction:   1, // Long
+				EntryPrice:  entryPrice,
+				StopLoss:    stopLoss,
+				TakeProfit:  takeProfit,
+				Confidence:  symmetry,
+				RiskReward:  2.0,
+			}
+		}
+	}
+
+	return nil
+}
+
+// runSimulationForSymbol runs simulation for a single symbol
+func runSimulationForSymbol(loader *database.SQLiteLoader, symbol string, timeframe database.Timeframe, dateRange *database.DateRange, config SimulationConfig, verbose bool) []TradeResult {
+	candles, err := loader.GetCandles(symbol, timeframe, dateRange)
+	if err != nil || len(candles) == 0 {
+		return nil
+	}
+
+	if verbose {
+		fmt.Printf("\nProcessing %s: %d candles...\n", symbol, len(candles))
+	}
+
+	config.Symbol = symbol
+	feeder := NewMarketFeeder(candles)
+	adx := indicators.NewADX(14)
+
+	var trades []TradeResult
+	var position *Position
+	var pendingSignal *Signal
+	lastTradeBar := make(map[string]int)
+
+	for feeder.HasMoreBars() {
+		currentBar := feeder.NextBar()
+		barIdx := feeder.CurrentIndex()
+
+		// 1. Check exits first (if position open)
+		if position != nil {
+			var exitPrice float64
+			var outcome string
+			barsHeld := barIdx - position.EntryBar
+
+			if position.Direction == -1 { // Short
+				slHit := currentBar.High >= position.StopLoss
+				tpHit := currentBar.Low <= position.TakeProfit
+
+				if slHit && tpHit {
+					exitPrice = position.StopLoss
+					outcome = "SL_HIT"
+				} else if slHit {
+					exitPrice = position.StopLoss
+					outcome = "SL_HIT"
+				} else if tpHit {
+					exitPrice = position.TakeProfit
+					outcome = "TP_HIT"
+				} else if barsHeld >= config.MaxBarsToHold {
+					exitPrice = currentBar.Close
+					outcome = "TIMEOUT"
+				}
+			} else { // Long
+				slHit := currentBar.Low <= position.StopLoss
+				tpHit := currentBar.High >= position.TakeProfit
+
+				if slHit && tpHit {
+					exitPrice = position.StopLoss
+					outcome = "SL_HIT"
+				} else if slHit {
+					exitPrice = position.StopLoss
+					outcome = "SL_HIT"
+				} else if tpHit {
+					exitPrice = position.TakeProfit
+					outcome = "TP_HIT"
+				} else if barsHeld >= config.MaxBarsToHold {
+					exitPrice = currentBar.Close
+					outcome = "TIMEOUT"
+				}
+			}
+
+			if outcome != "" {
+				var pnl float64
+				if position.Direction == -1 {
+					pnl = position.EntryPrice - exitPrice
+				} else {
+					pnl = exitPrice - position.EntryPrice
+				}
+				risk := math.Abs(position.StopLoss - position.EntryPrice)
+				pnlR := pnl / risk
+
+				resultOutcome := "LOSS"
+				if outcome == "TP_HIT" {
+					resultOutcome = "WIN"
+				} else if outcome == "TIMEOUT" && pnlR > 0 {
+					resultOutcome = "WIN"
+				}
+
+				trades = append(trades, TradeResult{
+					Symbol:      symbol,
+					PatternType: position.PatternType,
+					Direction:   position.Direction,
+					EntryPrice:  position.EntryPrice,
+					ExitPrice:   exitPrice,
+					StopLoss:    position.StopLoss,
+					TakeProfit:  position.TakeProfit,
+					EntryBar:    position.EntryBar,
+					ExitBar:     barIdx,
+					PnLR:        pnlR,
+					Outcome:     resultOutcome,
+					BarsHeld:    barsHeld,
+				})
+				position = nil
+			}
+		}
+
+		// 2. Check pending order fill
+		if position == nil && pendingSignal != nil {
+			filled := false
+			fillPrice := pendingSignal.EntryPrice
+
+			if pendingSignal.Direction == -1 { // Short
+				if currentBar.Open <= pendingSignal.EntryPrice {
+					filled = true
+					fillPrice = currentBar.Open
+				} else if currentBar.Low <= pendingSignal.EntryPrice {
+					filled = true
+				}
+			} else { // Long
+				if currentBar.Open >= pendingSignal.EntryPrice {
+					filled = true
+					fillPrice = currentBar.Open
+				} else if currentBar.High >= pendingSignal.EntryPrice {
+					filled = true
+				}
+			}
+
+			if filled {
+				position = &Position{
+					Direction:   pendingSignal.Direction,
+					EntryPrice:  fillPrice,
+					StopLoss:    pendingSignal.StopLoss,
+					TakeProfit:  pendingSignal.TakeProfit,
+					EntryBar:    barIdx,
+					PatternType: pendingSignal.PatternType,
+				}
+			}
+			pendingSignal = nil
+		}
+
+		// 3. Look for new signals (only if no position)
+		if position == nil && pendingSignal == nil {
+			visible := feeder.GetVisibleWindow(100)
+			if len(visible) >= 50 {
+				adx.Calculate(visible)
+
+				lastHS := lastTradeBar["H&S"]
+				lastIHS := lastTradeBar["IHS"]
+				hsOK := barIdx-lastHS > config.CooldownBars
+				ihsOK := barIdx-lastIHS > config.CooldownBars
+
+				if hsOK || ihsOK {
+					signal := detectPatterns(visible, config, adx)
+					if signal != nil {
+						if (signal.PatternType == "H&S" && hsOK) || (signal.PatternType == "IHS" && ihsOK) {
+							pendingSignal = signal
+							lastTradeBar[signal.PatternType] = barIdx
+						}
+					}
+				}
+			}
+		}
+	}
+
+	if verbose && len(trades) > 0 {
+		wins := 0
+		totalR := 0.0
+		for _, t := range trades {
+			totalR += t.PnLR
+			if t.Outcome == "WIN" {
+				wins++
+			}
+		}
+		fmt.Printf("  %s: %d trades, %d wins (%.1f%%), %.2fR\n", symbol, len(trades), wins, float64(wins)/float64(len(trades))*100, totalR)
+	}
+
+	return trades
+}
+
 func main() {
-	// Parse command line flags
-	mode := flag.String("mode", "step", "Simulation mode: step, auto, fast")
-	startDate := flag.String("start", "2015-01-01", "Start date (YYYY-MM-DD)")
-	endDate := flag.String("end", "2025-12-31", "End date (YYYY-MM-DD)")
-	confidence := flag.Float64("confidence", 0.55, "Minimum confidence threshold (0.0-1.0)")
-	minRR := flag.Float64("min-rr", 1.5, "Minimum risk/reward ratio")
-	maxBars := flag.Int("max-bars", 20, "Maximum bars to hold position")
-	cooldown := flag.Int("cooldown", 10, "Cooldown bars between trades")
-	autoDelay := flag.Int("delay", 500, "Delay in ms between bars (auto mode)")
-	noChart := flag.Bool("no-chart", false, "Disable chart visualization")
+	dbPath := flag.String("db", "forex_prices.db", "Path to database")
+	symbol := flag.String("symbol", "EURUSD", "Symbol to trade (or 'all' for all symbols)")
+	tf := flag.String("tf", "h4", "Timeframe")
+	mode := flag.String("mode", "fast", "Mode: step, auto, fast")
+	startDate := flag.String("start", "2020-01-01", "Start date")
+	endDate := flag.String("end", "2025-12-31", "End date")
 	flag.Parse()
 
 	fmt.Println("\n===============================================================================")
-	fmt.Println("              H&S PATTERN TRADING SIMULATION")
+	fmt.Println("         H&S PATTERN TRADING SIMULATION (NO LOOKAHEAD BIAS)")
 	fmt.Println("===============================================================================")
-	fmt.Println("\nInitializing...")
 
-	// Parse dates
-	start, err := time.Parse("2006-01-02", *startDate)
+	loader, err := database.NewSQLiteLoader(*dbPath)
 	if err != nil {
-		log.Fatalf("Invalid start date: %v", err)
+		fmt.Printf("Error: %v\n", err)
+		os.Exit(1)
 	}
-	end, err := time.Parse("2006-01-02", *endDate)
-	if err != nil {
-		log.Fatalf("Invalid end date: %v", err)
-	}
+	defer loader.Close()
 
-	// Determine simulation mode
-	var simMode simulation.SimulationMode
-	switch *mode {
-	case "step":
-		simMode = simulation.ModeStep
-	case "auto":
-		simMode = simulation.ModeAuto
-	case "fast":
-		simMode = simulation.ModeFast
+	var timeframe database.Timeframe
+	switch strings.ToLower(*tf) {
+	case "h4":
+		timeframe = database.TimeframeH4
+	case "h1":
+		timeframe = database.TimeframeH1
+	case "daily":
+		timeframe = database.TimeframeDaily
 	default:
-		log.Fatalf("Invalid mode: %s. Use step, auto, or fast", *mode)
+		timeframe = database.TimeframeH4
 	}
 
-	// Build configuration
-	simConfig := simulation.SimulationConfig{
-		Mode:                simMode,
-		StartDate:           start,
-		EndDate:             end,
-		ConfidenceThreshold: *confidence,
-		MinRR:               *minRR,
-		MaxBarsToHold:       *maxBars,
-		Lookback:            3,
-		CooldownBars:        *cooldown,
-		AutoDelayMs:         *autoDelay,
-		Symbol:              "EURUSD",
-		Timeframe:           patterns.TF_W1,
-		ShowChart:           !*noChart,
+	start, _ := time.Parse("2006-01-02", *startDate)
+	end, _ := time.Parse("2006-01-02", *endDate)
+	dateRange := &database.DateRange{Start: start, End: end}
+
+	config := SimulationConfig{
+		Timeframe:           timeframe,
+		ConfidenceThreshold: 0.6,
+		MinRR:               1.5,
+		MaxBarsToHold:       50,
+		CooldownBars:        10,
+		SwingStrength:       5,
 	}
 
-	fmt.Printf("\nConfiguration:\n")
-	fmt.Printf("  Mode: %s\n", simConfig.Mode)
-	fmt.Printf("  Period: %s to %s\n", simConfig.StartDate.Format("2006-01-02"), simConfig.EndDate.Format("2006-01-02"))
-	fmt.Printf("  Confidence Threshold: %.0f%%\n", simConfig.ConfidenceThreshold*100)
-	fmt.Printf("  Min R:R: %.2f\n", simConfig.MinRR)
-	fmt.Printf("  Max Bars to Hold: %d\n", simConfig.MaxBarsToHold)
-	fmt.Printf("  Cooldown: %d bars\n\n", simConfig.CooldownBars)
-
-	// Load candles from database
-	candles, err := loadCandlesFromDB(simConfig.StartDate, simConfig.EndDate)
-	if err != nil {
-		log.Fatalf("Failed to load candles: %v", err)
+	// Get symbols to process
+	var symbols []string
+	if strings.ToLower(*symbol) == "all" {
+		symbols = database.GetAllSymbols()
+	} else {
+		symbols = []string{*symbol}
 	}
 
-	if len(candles) == 0 {
-		log.Fatal("No candles found for the specified date range")
+	fmt.Printf("\nSymbols: %d\n", len(symbols))
+	fmt.Printf("Timeframe: %s\n", *tf)
+	fmt.Printf("Period: %s to %s\n", *startDate, *endDate)
+	fmt.Printf("Mode: %s\n", *mode)
+
+	fmt.Println("\n===============================================================================")
+	fmt.Println("                         SIMULATION RUNNING")
+	fmt.Println("===============================================================================")
+	fmt.Println("\nProcessing (bot can only see past data)...")
+
+	startTime := time.Now()
+
+	// Run simulation for each symbol
+	var allTrades []TradeResult
+	for _, sym := range symbols {
+		trades := runSimulationForSymbol(loader, sym, timeframe, dateRange, config, len(symbols) > 1)
+		allTrades = append(allTrades, trades...)
 	}
 
-	fmt.Printf("Loaded %d candles from database\n", len(candles))
+	elapsed := time.Since(startTime)
 
-	// Create and run simulation
-	sim := simulation.NewSimulation(candles, simConfig)
-	
-	if err := sim.Run(); err != nil {
-		log.Fatalf("Simulation error: %v", err)
-	}
-}
+	// Print results
+	fmt.Println("\n===============================================================================")
+	fmt.Println("                         SIMULATION COMPLETE")
+	fmt.Println("===============================================================================")
+	fmt.Printf("\nCompleted in %v\n", elapsed)
+	fmt.Printf("Symbols processed: %d\n", len(symbols))
 
-// loadCandlesFromDB fetches candles from the database
-func loadCandlesFromDB(start, end time.Time) ([]patterns.Candle, error) {
-	ctx := context.Background()
-
-	cfg, err := config.Load()
-	if err != nil {
-		return nil, fmt.Errorf("config load: %w", err)
+	if len(allTrades) == 0 {
+		fmt.Println("\nNo trades executed.")
+		return
 	}
 
-	_, pool, err := config.NewDatabase(ctx, cfg)
-	if err != nil {
-		return nil, fmt.Errorf("database connection: %w", err)
-	}
-	defer pool.Close()
+	wins := 0
+	losses := 0
+	totalR := 0.0
+	hsWins, hsLosses := 0, 0
+	ihsWins, ihsLosses := 0, 0
+	symbolStats := make(map[string]struct{ wins, losses int; pnl float64 })
 
-	// Fetch candles from the weekly table
-	rows, err := pool.Query(ctx, `
-		SELECT id, timestamp_utc, open, high, low, close, COALESCE(volume, 0)
-		FROM candles_weekly
-		WHERE timestamp_utc >= $1 AND timestamp_utc <= $2
-		ORDER BY timestamp_utc ASC
-	`, start, end)
-	if err != nil {
-		return nil, fmt.Errorf("query candles: %w", err)
-	}
-	defer rows.Close()
-
-	var candles []patterns.Candle
-	idx := 0
-	for rows.Next() {
-		var id string
-		var timestamp time.Time
-		var open, high, low, close float64
-		var volume int64
-
-		if err := rows.Scan(&id, &timestamp, &open, &high, &low, &close, &volume); err != nil {
-			return nil, fmt.Errorf("scan row: %w", err)
+	for _, t := range allTrades {
+		totalR += t.PnLR
+		stat := symbolStats[t.Symbol]
+		stat.pnl += t.PnLR
+		if t.Outcome == "WIN" {
+			wins++
+			stat.wins++
+			if t.PatternType == "H&S" {
+				hsWins++
+			} else {
+				ihsWins++
+			}
+		} else {
+			losses++
+			stat.losses++
+			if t.PatternType == "H&S" {
+				hsLosses++
+			} else {
+				ihsLosses++
+			}
 		}
-
-		candles = append(candles, patterns.Candle{
-			Index:     idx,
-			Timestamp: timestamp,
-			Open:      open,
-			High:      high,
-			Low:       low,
-			Close:     close,
-			Volume:    volume,
-		})
-		idx++
+		symbolStats[t.Symbol] = stat
 	}
 
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("rows iteration: %w", err)
+	fmt.Printf("\nTRADING RESULTS:\n")
+	fmt.Printf("  Total Trades: %d\n", len(allTrades))
+	fmt.Printf("  Winners: %d (%.1f%%)\n", wins, float64(wins)/float64(len(allTrades))*100)
+	fmt.Printf("  Losers: %d (%.1f%%)\n", losses, float64(losses)/float64(len(allTrades))*100)
+	fmt.Printf("\n  Total P&L: %.2fR\n", totalR)
+	fmt.Printf("  Expectancy: %.2fR per trade\n", totalR/float64(len(allTrades)))
+
+	fmt.Printf("\nPATTERN BREAKDOWN:\n")
+	if hsWins+hsLosses > 0 {
+		fmt.Printf("  H&S (Bearish): %d trades, %d wins (%.1f%%)\n", hsWins+hsLosses, hsWins, float64(hsWins)/float64(hsWins+hsLosses)*100)
+	}
+	if ihsWins+ihsLosses > 0 {
+		fmt.Printf("  IHS (Bullish): %d trades, %d wins (%.1f%%)\n", ihsWins+ihsLosses, ihsWins, float64(ihsWins)/float64(ihsWins+ihsLosses)*100)
 	}
 
-	return candles, nil
-}
-
-func init() {
-	// Set working directory if running from a different location
-	if envDir := os.Getenv("APP_DIR"); envDir != "" {
-		os.Chdir(envDir)
+	// Show top 5 best and worst symbols
+	if len(symbols) > 1 {
+		fmt.Printf("\nTOP PERFORMING SYMBOLS:\n")
+		type symbolResult struct {
+			symbol string
+			wins   int
+			losses int
+			pnl    float64
+		}
+		var results []symbolResult
+		for sym, stat := range symbolStats {
+			results = append(results, symbolResult{sym, stat.wins, stat.losses, stat.pnl})
+		}
+		// Sort by P&L
+		for i := 0; i < len(results)-1; i++ {
+			for j := i + 1; j < len(results); j++ {
+				if results[j].pnl > results[i].pnl {
+					results[i], results[j] = results[j], results[i]
+				}
+			}
+		}
+		shown := 5
+		if len(results) < 5 {
+			shown = len(results)
+		}
+		for i := 0; i < shown; i++ {
+			r := results[i]
+			total := r.wins + r.losses
+			fmt.Printf("  %s: %d trades, %.1f%% win, %.2fR\n", r.symbol, total, float64(r.wins)/float64(total)*100, r.pnl)
+		}
+		fmt.Printf("\nWORST PERFORMING SYMBOLS:\n")
+		for i := len(results) - 1; i >= len(results)-shown && i >= 0; i-- {
+			r := results[i]
+			total := r.wins + r.losses
+			if total > 0 {
+				fmt.Printf("  %s: %d trades, %.1f%% win, %.2fR\n", r.symbol, total, float64(r.wins)/float64(total)*100, r.pnl)
+			}
+		}
 	}
+
+	fmt.Println("\nNO-LOOKAHEAD VERIFICATION:")
+	fmt.Println("  - Bot only sees GetVisibleWindow() data (past bars)")
+	fmt.Println("  - Orders are pending until next bar fills them")
+	fmt.Println("  - If SL and TP both hit same bar, SL assumed first (conservative)")
+	fmt.Println("  - Entry slippage: if bar opens past entry, fill at open")
+
+	fmt.Println("\n===============================================================================")
 }

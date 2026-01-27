@@ -69,3 +69,12 @@ func IsHighlyCorrelated(symbol1, symbol2 string, threshold float64) bool {
 	}
 	return corr >= threshold
 }
+
+// GetAllSymbols returns a list of all available symbols
+func GetAllSymbols() []string {
+	symbols := make([]string, 0, len(SymbolConfig))
+	for sym := range SymbolConfig {
+		symbols = append(symbols, sym)
+	}
+	return symbols
+}
