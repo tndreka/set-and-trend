@@ -19,6 +19,7 @@ type CreateTradeInput struct {
 	PlannedSL      float64
 	PlannedTP      float64
 	PlannedRiskPct float64
+        Symbol      string
 }
 
 // ============================================================================
