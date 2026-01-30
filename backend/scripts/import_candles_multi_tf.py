@@ -1,119 +1,79 @@
-#!/usr/bin/env python3
-"""
-Import multi-timeframe candle data into PostgreSQL
-"""
-
-import pandas as pd
 import psycopg2
-from psycopg2.extras import execute_values
-import sys
+import pandas as pd
 import os
+from dotenv import load_dotenv
+from pathlib import Path
 
-# Database connection
+# Load environment variables from .env file
+env_path = Path(__file__).parent / '.env'
+load_dotenv(dotenv_path=env_path)
+
+# Build DB config from environment
 DB_CONFIG = {
-    'host': 'localhost',
-    'port': 5432,
-    'user': 'stt_user',
-    'password': 'lantidhe42H@$@',
-    'dbname': 'set_the_trend'
+    'host': os.getenv('DB_HOST', 'localhost'),
+    'port': os.getenv('DB_PORT', '5433'),
+    'database': os.getenv('DB_NAME', 'set_the_trend'),
+    'user': os.getenv('DB_USER', 'stt_user'),
+    'password': os.getenv('DB_PASSWORD')
 }
 
-DATA_DIR = '/home/set-and-trend/backend/mt4_ready'
+def connect_db():
+    """Connect to PostgreSQL database"""
+    if not DB_CONFIG['password']:
+        raise ValueError("DB_PASSWORD not set in .env file!")
+    
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        print(f"✓ Connected to {DB_CONFIG['database']} on port {DB_CONFIG['port']}")
+        return conn
+    except Exception as e:
+        print(f"✗ Connection failed: {e}")
+        raise
 
-TIMEFRAMES = {
-    'H1': ('EURUSD_H1_2015_2025.csv', 'candles_h1'),
-    'H4': ('EURUSD_H4_2015_2025.csv', 'candles_h4'),
-    'D1': ('EURUSD_D1_2015_2025.csv', 'candles_d1'),
-}
-
-def import_candles(conn, timeframe, csv_file, table_name):
-    """Import candles from CSV to database table"""
-    filepath = os.path.join(DATA_DIR, csv_file)
-    
-    print(f"\n{'='*50}")
-    print(f"Importing {timeframe} from {csv_file}")
-    
-    # Read CSV
-    df = pd.read_csv(filepath)
-    df['DateTime'] = pd.to_datetime(df['DateTime'])
-    
-    print(f"  Loaded {len(df)} rows")
-    print(f"  Date range: {df['DateTime'].min()} to {df['DateTime'].max()}")
-    
-    # Prepare data for insertion
-    records = []
-    for _, row in df.iterrows():
-        records.append((
-            row['DateTime'],
-            float(row['Open']),
-            float(row['High']),
-            float(row['Low']),
-            float(row['Close']),
-            int(row['Volume']) if pd.notna(row['Volume']) else None
-        ))
-    
-    # Insert in batches
+def import_candles(df, timeframe='W1'):
+    """Import candles from DataFrame to database"""
+    conn = connect_db()
     cur = conn.cursor()
     
-    # Clear existing data
-    cur.execute(f"DELETE FROM {table_name}")
-    print(f"  Cleared existing data from {table_name}")
+    # Map timeframe to table name
+    table_map = {
+        'W1': 'candles_weekly',
+        'D1': 'candles_d1',
+        'H4': 'candles_h4',
+        'H1': 'candles_h1'
+    }
+    table = table_map.get(timeframe, 'candles_weekly')
     
-    # Insert new data
-    insert_query = f"""
-        INSERT INTO {table_name} (timestamp_utc, open, high, low, close, volume)
-        VALUES %s
-        ON CONFLICT (timestamp_utc) DO NOTHING
-    """
-    
-    batch_size = 5000
-    total_inserted = 0
-    
-    for i in range(0, len(records), batch_size):
-        batch = records[i:i+batch_size]
-        execute_values(cur, insert_query, batch)
-        total_inserted += len(batch)
-        print(f"  Inserted {total_inserted}/{len(records)} records...", end='\r')
+    inserted = 0
+    for _, row in df.iterrows():
+        try:
+            cur.execute(f"""
+                INSERT INTO {table} (timestamp_utc, open, high, low, close, volume)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ON CONFLICT (timestamp_utc) DO NOTHING
+            """, (
+                row['timestamp'],
+                row['open'],
+                row['high'],
+                row['low'],
+                row['close'],
+                row.get('volume', 0)
+            ))
+            inserted += 1
+        except Exception as e:
+            print(f"Error inserting row: {e}")
+            continue
     
     conn.commit()
-    print(f"  ✅ Inserted {total_inserted} records into {table_name}")
-    
-    # Verify
-    cur.execute(f"SELECT COUNT(*) FROM {table_name}")
-    count = cur.fetchone()[0]
-    print(f"  Verified: {count} records in {table_name}")
-    
     cur.close()
-    return count
-
-def main():
-    print("Multi-Timeframe Candle Importer")
-    print("="*50)
-    
-    # Connect to database
-    print("\nConnecting to database...")
-    conn = psycopg2.connect(**DB_CONFIG)
-    print("✅ Connected")
-    
-    results = {}
-    
-    for tf, (csv_file, table_name) in TIMEFRAMES.items():
-        try:
-            count = import_candles(conn, tf, csv_file, table_name)
-            results[tf] = count
-        except Exception as e:
-            print(f"❌ Error importing {tf}: {e}")
-            results[tf] = 0
-    
     conn.close()
-    
-    # Summary
-    print("\n" + "="*50)
-    print("IMPORT SUMMARY")
-    print("="*50)
-    for tf, count in results.items():
-        print(f"  {tf}: {count:,} candles")
-    print("="*50)
+    print(f"✓ Imported {inserted} candles to {table}")
 
-if __name__ == '__main__':
-    main()
+if __name__ == "__main__":
+    # Example usage
+    print("Script configured to use environment variables from .env file")
+    print(f"DB_HOST: {DB_CONFIG['host']}")
+    print(f"DB_PORT: {DB_CONFIG['port']}")
+    print(f"DB_USER: {DB_CONFIG['user']}")
+    print(f"DB_NAME: {DB_CONFIG['database']}")
+    print("Password: [REDACTED]" if DB_CONFIG['password'] else "Password: NOT SET!")
