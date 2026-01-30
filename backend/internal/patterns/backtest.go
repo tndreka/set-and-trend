@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"math"
 	"time"
+	
+	"set-and-trend/backend/internal/constants"
 )
 
 // BacktestConfig holds backtesting parameters
@@ -111,7 +113,7 @@ func SimulateExit(signal *TradeSignal, futureCandles []Candle, maxBars int) *Exi
 					ExitBar:   i,
 					Reason:    "SL_HIT",
 					PnL:       signal.EntryPrice - signal.StopLoss,
-					PnLPips:   (signal.EntryPrice - signal.StopLoss) / PipSize,
+					PnLPips:   (signal.EntryPrice - signal.StopLoss) / constants.GetPipSizeForSymbol(signal.Symbol),
 				}
 			}
 			if candle.Low <= signal.TakeProfit {
@@ -121,7 +123,7 @@ func SimulateExit(signal *TradeSignal, futureCandles []Candle, maxBars int) *Exi
 					ExitBar:   i,
 					Reason:    "TP_HIT",
 					PnL:       signal.EntryPrice - signal.TakeProfit,
-					PnLPips:   (signal.EntryPrice - signal.TakeProfit) / PipSize,
+					PnLPips:   (signal.EntryPrice - signal.TakeProfit) / constants.GetPipSizeForSymbol(signal.Symbol),
 				}
 			}
 		} else if signal.Direction == DirectionLong {
@@ -133,7 +135,7 @@ func SimulateExit(signal *TradeSignal, futureCandles []Candle, maxBars int) *Exi
 					ExitBar:   i,
 					Reason:    "SL_HIT",
 					PnL:       signal.StopLoss - signal.EntryPrice,
-					PnLPips:   (signal.StopLoss - signal.EntryPrice) / PipSize,
+					PnLPips:   (signal.StopLoss - signal.EntryPrice) / constants.GetPipSizeForSymbol(signal.Symbol),
 				}
 			}
 			if candle.High >= signal.TakeProfit {
@@ -143,7 +145,7 @@ func SimulateExit(signal *TradeSignal, futureCandles []Candle, maxBars int) *Exi
 					ExitBar:   i,
 					Reason:    "TP_HIT",
 					PnL:       signal.TakeProfit - signal.EntryPrice,
-					PnLPips:   (signal.TakeProfit - signal.EntryPrice) / PipSize,
+					PnLPips:   (signal.TakeProfit - signal.EntryPrice) / constants.GetPipSizeForSymbol(signal.Symbol),
 				}
 			}
 		}
@@ -164,7 +166,7 @@ func SimulateExit(signal *TradeSignal, futureCandles []Candle, maxBars int) *Exi
 		ExitBar:   barsToCheck - 1,
 		Reason:    "TIMEOUT",
 		PnL:       pnl,
-		PnLPips:   pnl / PipSize,
+		PnLPips:   pnl / constants.GetPipSizeForSymbol(signal.Symbol),
 	}
 }
 
@@ -419,7 +421,8 @@ func calculateMaxDrawdown(trades []BacktestTrade) (float64, float64) {
 	return maxDD, maxDDR
 }
 
-func PrintBacktestReport(metrics *BacktestMetrics, trades []BacktestTrade) string {
+func PrintBacktestReport(metrics *BacktestMetrics, trades []BacktestTrade, symbol string) string {
+        reportPipSize := constants.GetPipSizeForSymbol(symbol)
 	report := fmt.Sprintf(`
 ================================================================================
                          BACKTEST REPORT - H&S PATTERN DETECTION
@@ -477,17 +480,17 @@ Avg Bars in Trade:          %.1f
 		metrics.BreakevenTrades,
 		metrics.TimeoutTrades,
 		metrics.WinRate*100,
-		metrics.AvgWin, metrics.AvgWin/PipSize,
-		metrics.AvgLoss, metrics.AvgLoss/PipSize,
+		metrics.AvgWin, metrics.AvgWin/reportPipSize,
+		metrics.AvgLoss, metrics.AvgLoss/reportPipSize,
 		metrics.AvgRR,
-		metrics.Expectancy, metrics.Expectancy/PipSize,
+		metrics.Expectancy, metrics.Expectancy/reportPipSize,
 		metrics.ExpectancyR,
 		metrics.ProfitFactor,
 		metrics.TotalPnL, metrics.TotalPnLPips,
 		metrics.TotalPnLR,
 		metrics.MaxDrawdown, metrics.MaxDrawdownR,
-		metrics.LargestWin, metrics.LargestWin/PipSize,
-		metrics.LargestLoss, metrics.LargestLoss/PipSize,
+		metrics.LargestWin, metrics.LargestWin/reportPipSize,
+		metrics.LargestLoss, metrics.LargestLoss/reportPipSize,
 		metrics.ConsecutiveWins,
 		metrics.ConsecutiveLosses,
 		metrics.AvgBarsInTrade,
