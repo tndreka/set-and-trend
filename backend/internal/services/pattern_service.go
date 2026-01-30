@@ -134,9 +134,6 @@ func (s *PatternService) processDetectedStructure(ctx context.Context, structure
 	signal := patterns.GenerateTradeSignal(structure, "EURUSD", finalConfidence)
 
 	// Validate signal
-	if !patterns.ValidateSignal(signal, minRR, minConfidence) {
-		return nil, nil
-	}
 
 	// Save pattern detection to DB
 	patternID, err := s.savePatternDetection(ctx, structure, marketCtx, tf, len(candles)-1)
