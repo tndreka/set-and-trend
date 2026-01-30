@@ -1,7 +1,8 @@
 package patterns
 
-// PipSize for EURUSD
-const PipSize = 0.0001
+import (
+	"set-and-trend/backend/internal/constants"
+)
 
 // GenerateTradeSignal creates entry/exit parameters from detected structure
 func GenerateTradeSignal(s *DetectedStructure, symbol string, confidence float64) *TradeSignal {
@@ -20,14 +21,17 @@ func GenerateTradeSignal(s *DetectedStructure, symbol string, confidence float64
 
 // generateHSSignal creates a SHORT signal for bearish H&S
 func generateHSSignal(s *DetectedStructure, symbol string, confidence float64) *TradeSignal {
+	// Get pip size for this symbol (JPY pairs use 0.01, others 0.0001)
+	pipSize := constants.GetPipSizeForSymbol(symbol)
+	
 	// Pattern height = Head - Neckline
 	patternHeight := s.HeadPrice - s.NecklinePrice
 
 	// Entry: Neckline break (with buffer)
-	entryPrice := s.NecklinePrice - (10 * PipSize)
+	entryPrice := s.NecklinePrice - (10 * pipSize)
 
 	// Stop Loss: Above right shoulder (with buffer)
-	stopLoss := s.RightShoulderPrice + (20 * PipSize)
+	stopLoss := s.RightShoulderPrice + (20 * pipSize)
 
 	// Take Profit: Pattern height projected below neckline
 	takeProfit := s.NecklinePrice - patternHeight
@@ -48,20 +52,22 @@ func generateHSSignal(s *DetectedStructure, symbol string, confidence float64) *
 		TakeProfit:  takeProfit,
 		RiskReward:  riskReward,
 		Confidence:  confidence,
-		PatternType: PatternHS,
 	}
 }
 
-// generateIHSSignal creates a LONG signal for bullish IHS
+// generateIHSSignal creates a LONG signal for bullish inverse H&S
 func generateIHSSignal(s *DetectedStructure, symbol string, confidence float64) *TradeSignal {
-	// Pattern height = Neckline - Head (head is lower in IHS)
+	// Get pip size for this symbol
+	pipSize := constants.GetPipSizeForSymbol(symbol)
+	
+	// Pattern height = Neckline - Head (inverse)
 	patternHeight := s.NecklinePrice - s.HeadPrice
 
 	// Entry: Neckline break (with buffer)
-	entryPrice := s.NecklinePrice + (10 * PipSize)
+	entryPrice := s.NecklinePrice + (10 * pipSize)
 
 	// Stop Loss: Below right shoulder (with buffer)
-	stopLoss := s.RightShoulderPrice - (20 * PipSize)
+	stopLoss := s.RightShoulderPrice - (20 * pipSize)
 
 	// Take Profit: Pattern height projected above neckline
 	takeProfit := s.NecklinePrice + patternHeight
@@ -82,36 +88,5 @@ func generateIHSSignal(s *DetectedStructure, symbol string, confidence float64) 
 		TakeProfit:  takeProfit,
 		RiskReward:  riskReward,
 		Confidence:  confidence,
-		PatternType: PatternIHS,
 	}
-}
-
-// ValidateSignal checks if a signal meets minimum criteria
-func ValidateSignal(signal *TradeSignal, minRR float64, minConfidence float64) bool {
-	if signal == nil {
-		return false
-	}
-
-	if signal.RiskReward < minRR {
-		return false
-	}
-
-	if signal.Confidence < minConfidence {
-		return false
-	}
-
-	// Sanity checks
-	if signal.Direction == DirectionShort {
-		// For SHORT: SL > Entry > TP
-		if signal.StopLoss <= signal.EntryPrice || signal.EntryPrice <= signal.TakeProfit {
-			return false
-		}
-	} else if signal.Direction == DirectionLong {
-		// For LONG: TP > Entry > SL
-		if signal.TakeProfit <= signal.EntryPrice || signal.EntryPrice <= signal.StopLoss {
-			return false
-		}
-	}
-
-	return true
 }
