@@ -11,6 +11,7 @@ import (
 	"github.com/gin-contrib/cors"
 	"set-and-trend/backend/internal/config"
 	"set-and-trend/backend/internal/handlers"
+	"set-and-trend/backend/internal/middleware"
 	"set-and-trend/backend/internal/repositories"
 	"set-and-trend/backend/internal/services"
 	"set-and-trend/backend/internal/services/auth"
@@ -68,32 +69,45 @@ func main() {
 
 	api := r.Group("/api")
 	{
-		// api.POST("/users", userHandler.CreateUser)
+		// PUBLIC ROUTES (No auth required)
 		api.POST("/auth/signup", userHandler.SignUp)
 		api.POST("/auth/login", userHandler.Login)
-		api.POST("/accounts", accountHandler.CreateAccount)
-		api.POST("/candles", candleHandler.CreateCandle)
-		api.GET("/candles/latest", candleHandler.GetLatestCandles)
-		api.GET("/indicators/latest", indicatorHandler.GetLatestIndicators)
-		api.POST("/indicators/compute", indicatorHandler.ComputeIndicator)
-		api.POST("/trades", tradeHandler.CreateTrade)
-		api.POST("/trades/:id/execute", executionHandler.ExecuteTrade)
-		api.POST("/trades/:id/close", executionHandler.CloseTrade)
-		api.POST("/trades/:id/cancel", executionHandler.CancelTrade)
-		api.GET("/trades/:id/state", executionHandler.GetTradeState)
-		api.GET("/trades/:id/executions", executionHandler.GetTradeExecutions)
 		
-		// Trade Feedback
-		api.POST("/trades/:id/feedback", feedbackHandler.CreateFeedback)
-		api.GET("/trades/:id/feedback", feedbackHandler.GetFeedback)
-		api.PUT("/trades/:id/feedback", feedbackHandler.UpdateFeedback)
-		api.DELETE("/trades/:id/feedback", feedbackHandler.DeleteFeedback)
-		
-		// Analytics
-		api.GET("/analytics/summary", analyticsHandler.GetSummary)
-		api.GET("/analytics/by-rule", analyticsHandler.GetByRule)
-		api.GET("/analytics/by-session", analyticsHandler.GetBySession)
-		api.GET("/analytics/by-emotion", analyticsHandler.GetByEmotion)
+		// PROTECTED ROUTES (Auth required)
+		protected := api.Group("/")
+		protected.Use(middleware.AuthMiddleware())
+		{
+			// Accounts
+			protected.POST("/accounts", accountHandler.CreateAccount)
+			
+			// Candles (read-only, could be public but safer protected)
+			protected.POST("/candles", candleHandler.CreateCandle)
+			protected.GET("/candles/latest", candleHandler.GetLatestCandles)
+			
+			// Indicators
+			protected.GET("/indicators/latest", indicatorHandler.GetLatestIndicators)
+			protected.POST("/indicators/compute", indicatorHandler.ComputeIndicator)
+			
+			// Trades
+			protected.POST("/trades", tradeHandler.CreateTrade)
+			protected.POST("/trades/:id/execute", executionHandler.ExecuteTrade)
+			protected.POST("/trades/:id/close", executionHandler.CloseTrade)
+			protected.POST("/trades/:id/cancel", executionHandler.CancelTrade)
+			protected.GET("/trades/:id/state", executionHandler.GetTradeState)
+			protected.GET("/trades/:id/executions", executionHandler.GetTradeExecutions)
+			
+			// Trade Feedback
+			protected.POST("/trades/:id/feedback", feedbackHandler.CreateFeedback)
+			protected.GET("/trades/:id/feedback", feedbackHandler.GetFeedback)
+			protected.PUT("/trades/:id/feedback", feedbackHandler.UpdateFeedback)
+			protected.DELETE("/trades/:id/feedback", feedbackHandler.DeleteFeedback)
+			
+			// Analytics
+			protected.GET("/analytics/summary", analyticsHandler.GetSummary)
+			protected.GET("/analytics/by-rule", analyticsHandler.GetByRule)
+			protected.GET("/analytics/by-session", analyticsHandler.GetBySession)
+			protected.GET("/analytics/by-emotion", analyticsHandler.GetByEmotion)
+		}
 	}
 
 	r.GET("/health", func(c *gin.Context) {
