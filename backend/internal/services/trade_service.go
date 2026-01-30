@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	//"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 	"set-and-trend/backend/internal/constants"
 	"set-and-trend/backend/internal/db"
@@ -34,6 +33,14 @@ func NewTradeService(
 func (s *TradeService) CreateTrade(ctx context.Context, input CreateTradeInput) (*Trade, error) {
 	// Normalize direction to uppercase for DB enum
 	direction := strings.ToUpper(input.Direction)
+	
+	// Validate symbol is supported
+	if !constants.ValidateSymbol(input.Symbol) {
+		return nil, fmt.Errorf("symbol %s not supported. Add to constants.SymbolRegistry", input.Symbol)
+	}
+	
+	// Get symbol configuration
+	symbolConfig := constants.MustGetSymbolConfig(input.Symbol)
 	
 	// 1. Load account
 	account, err := s.accountRepo.GetAccountByID(ctx, input.AccountID)
@@ -74,13 +81,14 @@ func (s *TradeService) CreateTrade(ctx context.Context, input CreateTradeInput) 
 		return nil, fmt.Errorf("stop distance: %w", err)
 	}
 
-	stopDistancePips, err := ComputeStopDistancePips(stopDistance, constants.PipValueEURUSD)
+	// Use symbol-specific pip size (0.0001 for EURUSD, 0.01 for JPY pairs)
+	stopDistancePips, err := ComputeStopDistancePips(stopDistance, symbolConfig.PipSize)
 	if err != nil {
 		return nil, fmt.Errorf("pip conversion: %w", err)
 	}
 
-	// Position sizing (assuming $10 per pip for standard lot)
-	const pipValuePerLot = 10.0
+	// Position sizing using symbol-specific contract size
+	pipValuePerLot := symbolConfig.PipSize * symbolConfig.ContractSize // $10 for EURUSD, ~$8-9 for JPY
 	positionSize, err := ComputePositionSize(riskAmount, stopDistancePips, pipValuePerLot)
 	if err != nil {
 		return nil, fmt.Errorf("position sizing: %w", err)
@@ -109,8 +117,8 @@ func (s *TradeService) CreateTrade(ctx context.Context, input CreateTradeInput) 
 		return nil, fmt.Errorf("trade rejected: RR %.2f is below minimum %.2f", rr, constants.MinimumRR)
 	}
 
-	// 5.7. Validate position size against leverage
-	maxPositionSize, err := ComputeMaxPositionSize(balance, int(account.Leverage), constants.ContractSizeEURUSD)
+	// 5.7. Validate position size against leverage (using symbol-specific contract size)
+	maxPositionSize, err := ComputeMaxPositionSize(balance, int(account.Leverage), symbolConfig.ContractSize)
 	if err != nil {
 		return nil, fmt.Errorf("leverage check: %w", err)
 	}
@@ -124,7 +132,7 @@ func (s *TradeService) CreateTrade(ctx context.Context, input CreateTradeInput) 
 		UserID:       account.UserID,
 		AccountID:    input.AccountID,
 		CandleID:     input.CandleID,
-		Symbol:       constants.SymbolEURUSD,
+		Symbol:       input.Symbol,  // <-- USE INPUT SYMBOL, not hardcoded EURUSD
 		Timeframe:    constants.TimeframeW1,
 		Direction:    db.TradeDirection(direction),
 		PlannedEntry: decimal.NewFromFloat(input.PlannedEntry),
