@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math" 
 	"strconv"
 	
 	"github.com/shopspring/decimal" 
@@ -49,6 +50,11 @@ func main() {
 	// Update indicators for each candle
 	successCount := 0
 	for i, candle := range candles {
+		// Skip if any EMA is NaN (insufficient data)
+		if math.IsNaN(ema20Values[i]) || math.IsNaN(ema50Values[i]) || math.IsNaN(ema200Values[i]) {
+			continue
+		}
+
 		// Get indicator for this candle
 		indicator, err := queries.GetIndicatorByCandleID(ctx, candle.ID)
 		if err != nil {
@@ -91,7 +97,7 @@ func computeEMA(prices []float64, period int) []float64 {
 
 	// Not enough data for first candles
 	for i := 0; i < period && i < len(prices); i++ {
-		emas[i] = 0 // Insufficient data
+		emas[i] = math.NaN() // Insufficient data - mark as invalid
 	}
 
 	// Calculate initial SMA as first EMA

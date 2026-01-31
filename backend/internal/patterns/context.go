@@ -9,19 +9,24 @@ func DetermineMarketContext(candles []Candle) MarketContext {
 		VolatilityRegime: VolatilityNormal,
 	}
 
-	if len(candles) < 50 {
+	if len(candles) < 51 {
 		return ctx
 	}
 
-	// Calculate EMAs
-	ema50 := CalculateEMA(candles, 50)
+	// Exclude current candle to prevent look-ahead bias
+	// Use only confirmed/historical data for context
+	historicalCandles := candles[:len(candles)-1]
+	
+	// Calculate EMAs on historical data only
+	ema50 := CalculateEMA(historicalCandles, 50)
 	ema200 := 0.0
-	if len(candles) >= 200 {
-		ema200 = CalculateEMA(candles, 200)
-	} else {
+	if len(historicalCandles) >= 200 {
+		ema200 = CalculateEMA(historicalCandles, 200)
+	} else if len(historicalCandles) >= 50 {
 		ema200 = ema50 // Fallback if not enough data
 	}
 
+	// Current candle is the one we're analyzing (not used for context calc)
 	current := candles[len(candles)-1]
 
 	// Determine trend
@@ -37,14 +42,14 @@ func DetermineMarketContext(candles []Candle) MarketContext {
 		ctx.Trend = TrendSideways
 	}
 
-	// Determine volatility regime
-	recentVolatility := CalculateVolatility(candles[len(candles)-20:], 20)
+	// Determine volatility regime (use historical only)
+	recentVolatility := CalculateVolatility(historicalCandles[len(historicalCandles)-20:], 20)
 	
-	historicalStart := len(candles) - 100
+	historicalStart := len(historicalCandles) - 100
 	if historicalStart < 0 {
 		historicalStart = 0
 	}
-	historicalVolatility := CalculateVolatility(candles[historicalStart:], 20)
+	historicalVolatility := CalculateVolatility(historicalCandles[historicalStart:], 20)
 
 	if historicalVolatility > 0 {
 		ratio := recentVolatility / historicalVolatility
@@ -62,10 +67,10 @@ func DetermineMarketContext(candles []Candle) MarketContext {
 		ctx.DistanceFromEMA200 = (current.Close - ema200) / ema200
 	}
 
-	// Count recent swings
-	recentCandles := candles
-	if len(candles) > 20 {
-		recentCandles = candles[len(candles)-20:]
+	// Count recent swings (use historical only)
+	recentCandles := historicalCandles
+	if len(historicalCandles) > 20 {
+		recentCandles = historicalCandles[len(historicalCandles)-20:]
 	}
 	recentHighs := FindSwingHighs(recentCandles, 2)
 	recentLows := FindSwingLows(recentCandles, 2)
