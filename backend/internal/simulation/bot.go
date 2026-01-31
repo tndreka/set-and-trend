@@ -4,6 +4,7 @@ import (
 	"math"
 
 	"set-and-trend/backend/internal/patterns"
+	"set-and-trend/backend/internal/constants"
 )
 
 // TradingBot makes trading decisions based only on visible data
@@ -248,9 +249,6 @@ func (b *TradingBot) processStructure(structure *patterns.DetectedStructure, win
 		return nil
 	}
 
-	if !patterns.ValidateSignal(signal, b.config.MinRR, b.config.ConfidenceThreshold) {
-		return nil
-	}
 
 	return signal
 }
@@ -276,7 +274,7 @@ func (b *TradingBot) closePosition(exitPrice float64, exitTime interface{}, reas
 		pnl = exitPrice - pos.EntryPrice
 	}
 
-	pnlPips := pnl / patterns.PipSize
+	    pnlPips := pnl / constants.GetPipSizeForSymbol(b.config.Symbol)
 
 	risk := math.Abs(pos.StopLoss - pos.EntryPrice)
 	pnlR := 0.0
