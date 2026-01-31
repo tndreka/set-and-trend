@@ -5,7 +5,7 @@ type ExecutionEventType string
 
 const (
 	EventEntry        ExecutionEventType = "ENTRY_FILLED"
-	EventPartialClose ExecutionEventType = "PARTIAL_EXITe"
+	EventPartialClose ExecutionEventType = "PARTIAL_EXIT"
 	EventTPHit        ExecutionEventType = "TP_HIT"
 	EventSLHit        ExecutionEventType = "SL_HIT"
 	EventManualClose  ExecutionEventType = "MANUAL_CLOSE"
