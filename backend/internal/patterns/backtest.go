@@ -16,9 +16,14 @@ type BacktestConfig struct {
 	MaxBarsToExit       int
 	Lookback            int
 	CooldownBars        int // Minimum bars between trades to avoid duplicates
+	// Execution costs - CRITICAL for realistic backtesting
+	SpreadPips     float64 // e.g., 0.2 for EURUSD, 0.8 for GBPJPY
+	SlippagePips   float64 // Slippage on SL hits (conservative: 0.5)
+	TPSlippagePips float64 // Slippage on TP hits (lower: 0.2)
+	CommissionPips float64 // If applicable (e.g., 0.0 for spread-only, 0.3 for ECN)
 }
 
-// DefaultBacktestConfig returns sensible defaults
+// DefaultBacktestConfig returns sensible defaults with realistic costs
 func DefaultBacktestConfig() BacktestConfig {
 	return BacktestConfig{
 		WindowSize:          30,
@@ -26,7 +31,12 @@ func DefaultBacktestConfig() BacktestConfig {
 		MinRR:               1.5,
 		MaxBarsToExit:       20,
 		Lookback:            3,
-		CooldownBars:        10, // Don't take another trade for 10 bars
+		CooldownBars:        10,
+		// Realistic EURUSD costs - adjust for your symbol
+		SpreadPips:     0.2,  // Typical EURUSD spread
+		SlippagePips:   0.3,  // Conservative SL slippage in volatile H4
+		TPSlippagePips: 0.2,  // TP fills better than SL but still pay spread
+		CommissionPips: 0.0,  // Add if using raw spread + commission broker
 	}
 }
 
@@ -90,83 +100,133 @@ type ExitResult struct {
 	PnLPips   float64
 }
 
-// SimulateExit simulates trade exit on future candles
-func SimulateExit(signal *TradeSignal, futureCandles []Candle, maxBars int) *ExitResult {
+// SimulateExit simulates trade exit on future candles with realistic costs
+func SimulateExit(signal *TradeSignal, entryPrice float64, futureCandles []Candle, config BacktestConfig) *ExitResult {
 	if signal == nil || len(futureCandles) == 0 {
 		return nil
 	}
 
 	barsToCheck := len(futureCandles)
-	if maxBars > 0 && maxBars < barsToCheck {
-		barsToCheck = maxBars
+	if config.MaxBarsToExit > 0 && config.MaxBarsToExit < barsToCheck {
+		barsToCheck = config.MaxBarsToExit
 	}
+
+	pipSize := constants.GetPipSizeForSymbol(signal.Symbol)
+	spreadCost := config.SpreadPips * pipSize
+	slSlippage := config.SlippagePips * pipSize
+	tpSlippage := config.TPSlippagePips * pipSize
 
 	for i := 0; i < barsToCheck; i++ {
 		candle := futureCandles[i]
 
 		if signal.Direction == DirectionShort {
-			// SHORT: Check SL first (conservative)
+			// SHORT: Entry at Bid, Exit at Ask (worse by spread)
+			
+			// SL HIT: High >= StopLoss (Bid price hit SL)
+			// Actual fill: Buy at Ask = StopLoss + spread + slippage
 			if candle.High >= signal.StopLoss {
+				exitPrice := signal.StopLoss + spreadCost + slSlippage
+				// Cap at candle high (can't fill worse than the bar's extreme + slippage)
+				if exitPrice > candle.High+slSlippage {
+					exitPrice = candle.High + slSlippage
+				}
+				
+				pnl := entryPrice - exitPrice
 				return &ExitResult{
-					ExitPrice: signal.StopLoss,
+					ExitPrice: exitPrice,
 					ExitTime:  candle.Timestamp,
 					ExitBar:   i,
 					Reason:    "SL_HIT",
-					PnL:       signal.EntryPrice - signal.StopLoss,
-					PnLPips:   (signal.EntryPrice - signal.StopLoss) / constants.GetPipSizeForSymbol(signal.Symbol),
+					PnL:       pnl,
+					PnLPips:   pnl / pipSize,
 				}
 			}
+			
+			// TP HIT: Low <= TakeProfit (Bid price hit TP)
+			// Actual fill: Buy at Ask = TakeProfit + spread + small slippage
 			if candle.Low <= signal.TakeProfit {
+				exitPrice := signal.TakeProfit + spreadCost + tpSlippage
+				if exitPrice < candle.Low { // Sanity check
+					exitPrice = candle.Low + spreadCost
+				}
+				
+				pnl := entryPrice - exitPrice
 				return &ExitResult{
-					ExitPrice: signal.TakeProfit,
+					ExitPrice: exitPrice,
 					ExitTime:  candle.Timestamp,
 					ExitBar:   i,
 					Reason:    "TP_HIT",
-					PnL:       signal.EntryPrice - signal.TakeProfit,
-					PnLPips:   (signal.EntryPrice - signal.TakeProfit) / constants.GetPipSizeForSymbol(signal.Symbol),
+					PnL:       pnl,
+					PnLPips:   pnl / pipSize,
 				}
 			}
+			
 		} else if signal.Direction == DirectionLong {
-			// LONG: Check SL first
+			// LONG: Entry at Ask, Exit at Bid (worse by spread)
+			
+			// SL HIT: Low <= StopLoss (Bid price hit SL)
+			// Actual fill: Sell at Bid = StopLoss - spread - slippage
 			if candle.Low <= signal.StopLoss {
+				exitPrice := signal.StopLoss - spreadCost - slSlippage
+				if exitPrice < candle.Low-slSlippage {
+					exitPrice = candle.Low - slSlippage
+				}
+				
+				pnl := exitPrice - entryPrice
 				return &ExitResult{
-					ExitPrice: signal.StopLoss,
+					ExitPrice: exitPrice,
 					ExitTime:  candle.Timestamp,
 					ExitBar:   i,
 					Reason:    "SL_HIT",
-					PnL:       signal.StopLoss - signal.EntryPrice,
-					PnLPips:   (signal.StopLoss - signal.EntryPrice) / constants.GetPipSizeForSymbol(signal.Symbol),
+					PnL:       pnl,
+					PnLPips:   pnl / pipSize,
 				}
 			}
+			
+			// TP HIT: High >= TakeProfit (Bid price hit TP)
+			// Actual fill: Sell at Bid = TakeProfit - spread - small slippage  
 			if candle.High >= signal.TakeProfit {
+				exitPrice := signal.TakeProfit - spreadCost - tpSlippage
+				if exitPrice > candle.High {
+					exitPrice = candle.High - spreadCost
+				}
+				
+				pnl := exitPrice - entryPrice
 				return &ExitResult{
-					ExitPrice: signal.TakeProfit,
+					ExitPrice: exitPrice,
 					ExitTime:  candle.Timestamp,
 					ExitBar:   i,
 					Reason:    "TP_HIT",
-					PnL:       signal.TakeProfit - signal.EntryPrice,
-					PnLPips:   (signal.TakeProfit - signal.EntryPrice) / constants.GetPipSizeForSymbol(signal.Symbol),
+					PnL:       pnl,
+					PnLPips:   pnl / pipSize,
 				}
 			}
 		}
 	}
 
-	// Timeout exit
+	// TIMEOUT EXIT - Apply spread + slippage (market order at close)
 	lastCandle := futureCandles[barsToCheck-1]
 	var pnl float64
+	var exitPrice float64
+	exitSlippage := config.SlippagePips * pipSize * 0.5  // Half slippage on exit
+	
 	if signal.Direction == DirectionShort {
-		pnl = signal.EntryPrice - lastCandle.Close
+		// Close short by buying at Ask (Close + spread + slippage)
+		exitPrice = lastCandle.Close + spreadCost + exitSlippage
+		pnl = entryPrice - exitPrice
 	} else {
-		pnl = lastCandle.Close - signal.EntryPrice
+		// Close long by selling at Bid (Close - spread - slippage)
+		exitPrice = lastCandle.Close - spreadCost - exitSlippage
+		pnl = exitPrice - entryPrice
 	}
 
 	return &ExitResult{
-		ExitPrice: lastCandle.Close,
+		ExitPrice: exitPrice,
 		ExitTime:  lastCandle.Timestamp,
 		ExitBar:   barsToCheck - 1,
 		Reason:    "TIMEOUT",
 		PnL:       pnl,
-		PnLPips:   pnl / constants.GetPipSizeForSymbol(signal.Symbol),
+		PnLPips:   pnl / pipSize,
 	}
 }
 
@@ -174,6 +234,17 @@ func SimulateExit(signal *TradeSignal, futureCandles []Candle, maxBars int) *Exi
 func RunBacktest(candles []Candle, config BacktestConfig) (*BacktestMetrics, []BacktestTrade) {
 	if len(candles) < config.WindowSize+config.MaxBarsToExit {
 		return nil, nil
+	}
+
+	// Set default execution costs if not specified (backward compatibility)
+	if config.SpreadPips == 0 {
+		config.SpreadPips = 0.2  // Default EURUSD spread
+	}
+	if config.SlippagePips == 0 {
+		config.SlippagePips = 0.5  // Conservative default
+	}
+	if config.TPSlippagePips == 0 {
+		config.TPSlippagePips = 0.2  // TP fills better than SL
 	}
 
 	var trades []BacktestTrade
@@ -241,16 +312,60 @@ func processStructureForBacktest(structure *DetectedStructure, window []Candle, 
 		return nil
 	}
 
-	if signal.RiskReward < config.MinRR {
+		// Calculate realistic entry price with spread and slippage
+	pipSize := constants.GetPipSizeForSymbol(signal.Symbol)
+	spreadCost := config.SpreadPips * pipSize
+	entrySlippage := config.SlippagePips * pipSize * 0.5  // Half slippage on entry
+
+	var actualEntry float64
+
+	if signal.Direction == DirectionShort {
+		// SHORT: Sell at Bid, but we get filled slightly worse (slippage)
+		// Signal.EntryPrice is theoretical neckline break
+		// Actual fill is lower (worse) by slippage
+		actualEntry = signal.EntryPrice - entrySlippage
+	} else {
+		// LONG: Buy at Ask (Bid + spread) + slippage
+		// We pay spread AND get slippage against us
+		actualEntry = signal.EntryPrice + spreadCost + entrySlippage
+	}
+
+	// Recalculate Risk with ACTUAL entry vs original SL
+	// The SL level stays the same, but our risk amount changes based on fill
+	var risk float64
+	if signal.Direction == DirectionShort {
+		risk = signal.StopLoss - actualEntry  // SL is higher than entry for short
+	} else {
+		risk = actualEntry - signal.StopLoss  // SL is lower than entry for long
+	}
+
+	if risk <= 0 {
+		return nil  // Invalid: SL on wrong side or too tight after slippage
+	}
+
+	// Recalculate Reward based on actual entry vs original TP
+	var reward float64
+	if signal.Direction == DirectionShort {
+		reward = actualEntry - signal.TakeProfit
+	} else {
+		reward = signal.TakeProfit - actualEntry
+	}
+
+	actualRR := reward / risk
+	
+	// CRITICAL: Filter if spread/slippage killed the R:R ratio
+	// Example: Signal shows 1.5 RR, but after costs it's 1.2 -> Filter out
+	if actualRR < config.MinRR {
 		return nil
 	}
 
-	exit := SimulateExit(signal, futureData, config.MaxBarsToExit)
+	// Simulate exit with realistic costs
+	exit := SimulateExit(signal, actualEntry, futureData, config)
 	if exit == nil {
 		return nil
 	}
 
-	risk := math.Abs(signal.StopLoss - signal.EntryPrice)
+	// Calculate R-multiple based on actual risk
 	pnlR := 0.0
 	if risk > 0 {
 		pnlR = exit.PnL / risk
@@ -272,14 +387,14 @@ func processStructureForBacktest(structure *DetectedStructure, window []Candle, 
 	return &BacktestTrade{
 		EntryTime:   window[len(window)-1].Timestamp,
 		ExitTime:    exit.ExitTime,
-		EntryPrice:  signal.EntryPrice,
+		EntryPrice:  actualEntry, // Use the realistic fill price
 		ExitPrice:   exit.ExitPrice,
 		StopLoss:    signal.StopLoss,
 		TakeProfit:  signal.TakeProfit,
 		Direction:   signal.Direction,
 		PatternType: structure.PatternType,
 		Confidence:  finalConfidence,
-		RiskReward:  signal.RiskReward,
+		RiskReward:  actualRR, // Use realistic RR
 		PnL:         exit.PnL,
 		PnLPips:     exit.PnLPips,
 		PnLR:        pnlR,

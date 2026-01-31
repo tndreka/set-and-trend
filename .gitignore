@@ -21,7 +21,8 @@ backend/*.out
 # OS files
 .DS_Store
 Thumbs.db
-.env
+backend/.env
+backend/scripts/test_single_candle/.env
 
 # Docker
 .docker/

@@ -37,7 +37,7 @@ func main() {
 	accountRepo := repositories.NewAccountRepository(queries)
 	candleRepo := repositories.NewCandleRepository(queries)
 	indicatorRepo := repositories.NewIndicatorRepository(queries)
-	tradeRepo := repositories.NewTradeRepository(queries)
+	tradeRepo := repositories.NewTradeRepository(queries, pool)
 	executionRepo := repositories.NewExecutionRepository(pool)
 	intentRepo := repositories.NewIntentRepository(pool)
 	feedbackRepo := repositories.NewFeedbackRepository(queries)

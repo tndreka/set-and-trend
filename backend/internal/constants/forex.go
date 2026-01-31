@@ -18,7 +18,8 @@ const (
 type SymbolConfig struct {
     Symbol         string
     PipSize        float64
-    PipLocation    int // 4 or 2
+    SpreadPips     float64  // ADD THIS LINE - Typical spread for cost modeling
+    PipLocation    int      // 4 or 2
     ContractSize   float64
     PricePrecision int
     CurrencyBase   string
@@ -28,36 +29,35 @@ type SymbolConfig struct {
 // Registry - EXPLICITLY DEFINED, NOT AUTO-DETECTED
 var SymbolRegistry = map[string]SymbolConfig{
     "EURUSD": {
-        Symbol: "EURUSD", PipSize: 0.0001, PipLocation: 4,
+        Symbol: "EURUSD", PipSize: 0.0001, SpreadPips: 0.2, PipLocation: 4,
         ContractSize: 100000, PricePrecision: 5,
         CurrencyBase: "EUR", CurrencyQuote: "USD",
     },
     "GBPUSD": {
-        Symbol: "GBPUSD", PipSize: 0.0001, PipLocation: 4,
+        Symbol: "GBPUSD", PipSize: 0.0001, SpreadPips: 0.3, PipLocation: 4,
         ContractSize: 100000, PricePrecision: 5,
         CurrencyBase: "GBP", CurrencyQuote: "USD",
     },
     "USDJPY": {
-        Symbol: "USDJPY", PipSize: 0.01, PipLocation: 2,
+        Symbol: "USDJPY", PipSize: 0.01, SpreadPips: 0.2, PipLocation: 2,
         ContractSize: 100000, PricePrecision: 3,
         CurrencyBase: "USD", CurrencyQuote: "JPY",
     },
     "GBPJPY": {
-        Symbol: "GBPJPY", PipSize: 0.01, PipLocation: 2,
+        Symbol: "GBPJPY", PipSize: 0.01, SpreadPips: 0.8, PipLocation: 2,
         ContractSize: 100000, PricePrecision: 3,
         CurrencyBase: "GBP", CurrencyQuote: "JPY",
     },
     "AUDUSD": {
-        Symbol: "AUDUSD", PipSize: 0.0001, PipLocation: 4,
+        Symbol: "AUDUSD", PipSize: 0.0001, SpreadPips: 0.2, PipLocation: 4,
         ContractSize: 100000, PricePrecision: 5,
         CurrencyBase: "AUD", CurrencyQuote: "USD",
     },
     "USDCAD": {
-        Symbol: "USDCAD", PipSize: 0.0001, PipLocation: 4,
+        Symbol: "USDCAD", PipSize: 0.0001, SpreadPips: 0.3, PipLocation: 4,
         ContractSize: 100000, PricePrecision: 5,
         CurrencyBase: "USD", CurrencyQuote: "CAD",
     },
-    // Explicitly add more symbols here...
 }
 
 // GetSymbolConfig retrieves config for a symbol

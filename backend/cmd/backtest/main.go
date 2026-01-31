@@ -110,7 +110,7 @@ func runBacktestForTimeframe(queries *db.Queries, name string, tf patterns.Timef
 		return
 	}
 
-	report := patterns.PrintBacktestReport(metrics, trades)
+	report := patterns.PrintBacktestReport(metrics, trades, "EURUSD")
 	fmt.Println(report)
 	fmt.Printf("Backtest completed in %v\n", elapsed)
 
