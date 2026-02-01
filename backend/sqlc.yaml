@@ -7,6 +7,7 @@ sql:
       - "migrations/000006_add_user_auth_fields.up.sql"
       - "migrations/000007_add_trade_feedback.up.sql"
       - "migrations/000008_hns_pattern_detection.up.sql"
+      - "migrations/000012_add_symbol_to_candles.up.sql"
     queries: "internal/db/queries/"
     gen:
       go:

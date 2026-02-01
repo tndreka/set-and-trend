@@ -14,16 +14,19 @@ import (
 	"set-and-trend/backend/internal/patterns"
 )
 
+var MAJOR_PAIRS = []string{"EURUSD", "GBPUSD", "USDJPY", "USDCHF", "AUDUSD"}
+
 func main() {
-	fmt.Println("H&S Pattern Detection Backtester")
-	fmt.Println("================================")
+	fmt.Println("================================================================================")
+	fmt.Println("           H&S PATTERN BACKTEST - 5 MAJOR PAIRS")
+	fmt.Println("================================================================================")
 	fmt.Println()
 
 	connStr := os.Getenv("DATABASE_URL")
 	if connStr == "" {
-		connStr = "postgres://stt_user:lantidhe42H@@localhost:5432/set_the_trend?sslmode=disable"
+		connStr = "postgres://stt_user:taulantdhe42H%40%24D@localhost:5432/set_the_trend?sslmode=disable"
 	}
-	
+
 	pool, err := pgxpool.New(context.Background(), connStr)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
@@ -31,52 +34,65 @@ func main() {
 	defer pool.Close()
 
 	queries := db.New(pool)
+	ctx := context.Background()
 
-	runBacktestForTimeframe(queries, "D1", patterns.TF_D1)
-	runBacktestForTimeframe(queries, "H4", patterns.TF_H4)
-	runBacktestForTimeframe(queries, "W1", patterns.TF_W1)
+	// Aggregate results across all pairs
+	totalResults := AggResults{}
+
+	// Run backtest for each pair and timeframe
+	for _, symbol := range MAJOR_PAIRS {
+		fmt.Printf("\n\n========== %s ==========\n", symbol)
+
+		for _, tf := range []patterns.Timeframe{patterns.TF_W1, patterns.TF_D1, patterns.TF_H4} {
+			runBacktestForSymbolAndTF(ctx, queries, symbol, tf, &totalResults)
+		}
+	}
+
+	// Print summary
+	fmt.Println("\n\n================================================================================")
+	fmt.Println("           AGGREGATE RESULTS - ALL PAIRS")
+	fmt.Println("================================================================================")
+	fmt.Printf("Total Trades: %d\n", totalResults.Trades)
+	fmt.Printf("Wins: %d (%.1f%%)\n", totalResults.Wins, float64(totalResults.Wins)/float64(maxInt(totalResults.Trades, 1))*100)
+	fmt.Printf("Losses: %d\n", totalResults.Losses)
+	fmt.Printf("Total P&L: %.2fR (%.1f pips)\n", totalResults.TotalPnLR, totalResults.TotalPips)
+	fmt.Printf("Avg per trade: %.2fR\n", totalResults.TotalPnLR/float64(maxInt(totalResults.Trades, 1)))
+
+	// Trades per year estimate
+	yearsOfData := 10.0
+	tradesPerYear := float64(totalResults.Trades) / yearsOfData
+	tradesPerWeek := tradesPerYear / 52
+	fmt.Printf("\nTrades/Year: %.1f\n", tradesPerYear)
+	fmt.Printf("Trades/Week: %.2f\n", tradesPerWeek)
 }
 
-func runBacktestForTimeframe(queries *db.Queries, name string, tf patterns.Timeframe) {
-	fmt.Printf("\n\n========== %s TIMEFRAME BACKTEST ==========\n", name)
-	
-	ctx := context.Background()
-	
-	var candles []patterns.Candle
-	var err error
+type AggResults struct {
+	Trades    int
+	Wins      int
+	Losses    int
+	TotalPnLR float64
+	TotalPips float64
+}
 
-	switch tf {
-	case patterns.TF_D1:
-		candles, err = loadD1Candles(ctx, queries)
-	case patterns.TF_H4:
-		candles, err = loadH4Candles(ctx, queries)
-	case patterns.TF_W1:
-		candles, err = loadWeeklyCandles(ctx, queries)
-	default:
-		fmt.Printf("Unsupported timeframe: %s\n", tf)
-		return
-	}
-
+func runBacktestForSymbolAndTF(ctx context.Context, queries *db.Queries, symbol string, tf patterns.Timeframe, results *AggResults) {
+	candles, err := loadCandlesBySymbol(ctx, queries, symbol, tf)
 	if err != nil {
-		fmt.Printf("Error loading candles: %v\n", err)
+		fmt.Printf("  %s %s: Error loading candles: %v\n", symbol, tf, err)
 		return
 	}
 
-	fmt.Printf("Loaded %d candles\n", len(candles))
-	if len(candles) > 0 {
-		fmt.Printf("Date range: %s to %s\n", 
-			candles[0].Timestamp.Format("2006-01-02"),
-			candles[len(candles)-1].Timestamp.Format("2006-01-02"))
+	if len(candles) < 60 {
+		fmt.Printf("  %s %s: Insufficient data (%d candles)\n", symbol, tf, len(candles))
+		return
 	}
 
-	// Configure backtest based on timeframe
 	config := patterns.BacktestConfig{
 		WindowSize:          30,
-		ConfidenceThreshold: 0.55,
+		ConfidenceThreshold: 0.35, // Lowered from 0.55 to get more signals
 		MinRR:               1.5,
 		MaxBarsToExit:       20,
 		Lookback:            patterns.LookbackByTimeframe(tf),
-		CooldownBars:        15, // Prevent duplicate trades
+		CooldownBars:        10, // Reduced cooldown
 	}
 
 	// Timeframe-specific adjustments
@@ -84,67 +100,88 @@ func runBacktestForTimeframe(queries *db.Queries, name string, tf patterns.Timef
 	case patterns.TF_W1:
 		config.WindowSize = 20
 		config.MaxBarsToExit = 10
-		config.CooldownBars = 8
+		config.CooldownBars = 6
 	case patterns.TF_H4:
 		config.WindowSize = 40
-		config.Lookback = 5 // Lower lookback for H4
-		config.CooldownBars = 20
+		config.Lookback = 5
+		config.CooldownBars = 12
 	case patterns.TF_D1:
-		config.CooldownBars = 15
+		config.CooldownBars = 8
 	}
 
-	fmt.Printf("\nBacktest Config:\n")
-	fmt.Printf("  Window Size: %d\n", config.WindowSize)
-	fmt.Printf("  Confidence Threshold: %.2f\n", config.ConfidenceThreshold)
-	fmt.Printf("  Min R:R: %.1f\n", config.MinRR)
-	fmt.Printf("  Max Bars to Exit: %d\n", config.MaxBarsToExit)
-	fmt.Printf("  Lookback: %d\n", config.Lookback)
-	fmt.Printf("  Cooldown Bars: %d\n", config.CooldownBars)
-
-	startTime := time.Now()
 	metrics, trades := patterns.RunBacktest(candles, config)
-	elapsed := time.Since(startTime)
-
-	if metrics == nil {
-		fmt.Println("Backtest returned no results (insufficient data)")
+	if metrics == nil || len(trades) == 0 {
+		fmt.Printf("  %s %s: No trades (%d candles)\n", symbol, tf, len(candles))
 		return
 	}
 
-	report := patterns.PrintBacktestReport(metrics, trades, "EURUSD")
-	fmt.Println(report)
-	fmt.Printf("Backtest completed in %v\n", elapsed)
-
-	if len(trades) > 0 {
-		fmt.Println("\nSAMPLE TRADES (first 15):")
-		fmt.Println("-------------------------")
-		maxTrades := 15
-		if len(trades) < maxTrades {
-			maxTrades = len(trades)
-		}
-		for i := 0; i < maxTrades; i++ {
-			t := trades[i]
-			fmt.Printf("%d. %s %s %s | Conf: %.2f | Entry: %.5f | SL: %.5f | TP: %.5f | Exit: %.5f | PnL: %.1f pips (%.2fR) | %s\n",
-				i+1, t.EntryTime.Format("2006-01-02"), t.PatternType, t.Direction,
-				t.Confidence, t.EntryPrice, t.StopLoss, t.TakeProfit, t.ExitPrice, 
-				t.PnLPips, t.PnLR, t.Result)
+	// Count H&S vs IHS trades
+	hsCount, ihsCount := 0, 0
+	for _, t := range trades {
+		if t.PatternType == "HS" || t.Direction == "SHORT" {
+			hsCount++
+		} else {
+			ihsCount++
 		}
 	}
+
+	fmt.Printf("  %s %s: %d trades (H&S:%d IHS:%d) | Win: %.0f%% | P&L: %.2fR\n",
+		symbol, tf, len(trades), hsCount, ihsCount, metrics.WinRate, metrics.TotalPnLR)
+
+	// Aggregate
+	results.Trades += len(trades)
+	results.Wins += int(metrics.WinningTrades)
+	results.Losses += int(metrics.LosingTrades)
+	results.TotalPnLR += metrics.TotalPnLR
+	results.TotalPips += metrics.TotalPnLPips
 }
 
-func loadD1Candles(ctx context.Context, queries *db.Queries) ([]patterns.Candle, error) {
+func loadCandlesBySymbol(ctx context.Context, queries *db.Queries, symbol string, tf patterns.Timeframe) ([]patterns.Candle, error) {
 	startTime := pgtype.Timestamptz{}
 	startTime.Scan(time.Date(2015, 1, 1, 0, 0, 0, 0, time.UTC))
 	endTime := pgtype.Timestamptz{}
 	endTime.Scan(time.Date(2025, 12, 31, 0, 0, 0, 0, time.UTC))
 
-	dbCandles, err := queries.GetCandlesD1ByRange(ctx, db.GetCandlesD1ByRangeParams{
-		TimestampUtc:   startTime,
-		TimestampUtc_2: endTime,
-	})
-	if err != nil {
-		return nil, err
-	}
+	switch tf {
+	case patterns.TF_W1:
+		dbCandles, err := queries.GetCandlesWeeklyBySymbolAndRange(ctx, db.GetCandlesWeeklyBySymbolAndRangeParams{
+			Symbol:         symbol,
+			TimestampUtc:   startTime,
+			TimestampUtc_2: endTime,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return convertWeeklyCandles(dbCandles), nil
 
+	case patterns.TF_D1:
+		dbCandles, err := queries.GetCandlesD1BySymbolAndRange(ctx, db.GetCandlesD1BySymbolAndRangeParams{
+			Symbol:         symbol,
+			TimestampUtc:   startTime,
+			TimestampUtc_2: endTime,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return convertD1Candles(dbCandles), nil
+
+	case patterns.TF_H4:
+		dbCandles, err := queries.GetCandlesH4BySymbolAndRange(ctx, db.GetCandlesH4BySymbolAndRangeParams{
+			Symbol:         symbol,
+			TimestampUtc:   startTime,
+			TimestampUtc_2: endTime,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return convertH4Candles(dbCandles), nil
+
+	default:
+		return nil, fmt.Errorf("unsupported timeframe: %s", tf)
+	}
+}
+
+func convertWeeklyCandles(dbCandles []db.CandlesWeekly) []patterns.Candle {
 	candles := make([]patterns.Candle, len(dbCandles))
 	for i, c := range dbCandles {
 		candles[i] = patterns.Candle{
@@ -157,23 +194,10 @@ func loadD1Candles(ctx context.Context, queries *db.Queries) ([]patterns.Candle,
 			Volume:    volumeToInt64(c.Volume),
 		}
 	}
-	return candles, nil
+	return candles
 }
 
-func loadH4Candles(ctx context.Context, queries *db.Queries) ([]patterns.Candle, error) {
-	startTime := pgtype.Timestamptz{}
-	startTime.Scan(time.Date(2015, 1, 1, 0, 0, 0, 0, time.UTC))
-	endTime := pgtype.Timestamptz{}
-	endTime.Scan(time.Date(2025, 12, 31, 0, 0, 0, 0, time.UTC))
-
-	dbCandles, err := queries.GetCandlesH4ByRange(ctx, db.GetCandlesH4ByRangeParams{
-		TimestampUtc:   startTime,
-		TimestampUtc_2: endTime,
-	})
-	if err != nil {
-		return nil, err
-	}
-
+func convertD1Candles(dbCandles []db.CandlesD1) []patterns.Candle {
 	candles := make([]patterns.Candle, len(dbCandles))
 	for i, c := range dbCandles {
 		candles[i] = patterns.Candle{
@@ -186,23 +210,10 @@ func loadH4Candles(ctx context.Context, queries *db.Queries) ([]patterns.Candle,
 			Volume:    volumeToInt64(c.Volume),
 		}
 	}
-	return candles, nil
+	return candles
 }
 
-func loadWeeklyCandles(ctx context.Context, queries *db.Queries) ([]patterns.Candle, error) {
-	startTime := pgtype.Timestamptz{}
-	startTime.Scan(time.Date(2015, 1, 1, 0, 0, 0, 0, time.UTC))
-	endTime := pgtype.Timestamptz{}
-	endTime.Scan(time.Date(2025, 12, 31, 0, 0, 0, 0, time.UTC))
-
-	dbCandles, err := queries.GetCandlesWeeklyByRange(ctx, db.GetCandlesWeeklyByRangeParams{
-		TimestampUtc:   startTime,
-		TimestampUtc_2: endTime,
-	})
-	if err != nil {
-		return nil, err
-	}
-
+func convertH4Candles(dbCandles []db.CandlesH4) []patterns.Candle {
 	candles := make([]patterns.Candle, len(dbCandles))
 	for i, c := range dbCandles {
 		candles[i] = patterns.Candle{
@@ -215,7 +226,7 @@ func loadWeeklyCandles(ctx context.Context, queries *db.Queries) ([]patterns.Can
 			Volume:    volumeToInt64(c.Volume),
 		}
 	}
-	return candles, nil
+	return candles
 }
 
 func volumeToInt64(v pgtype.Int8) int64 {
@@ -223,4 +234,11 @@ func volumeToInt64(v pgtype.Int8) int64 {
 		return v.Int64
 	}
 	return 0
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }

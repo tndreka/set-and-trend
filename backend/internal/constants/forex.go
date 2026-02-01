@@ -53,6 +53,11 @@ var SymbolRegistry = map[string]SymbolConfig{
         ContractSize: 100000, PricePrecision: 5,
         CurrencyBase: "AUD", CurrencyQuote: "USD",
     },
+    "USDCHF": {
+        Symbol: "USDCHF", PipSize: 0.0001, SpreadPips: 0.3, PipLocation: 4,
+        ContractSize: 100000, PricePrecision: 5,
+        CurrencyBase: "USD", CurrencyQuote: "CHF",
+    },
     "USDCAD": {
         Symbol: "USDCAD", PipSize: 0.0001, SpreadPips: 0.3, PipLocation: 4,
         ContractSize: 100000, PricePrecision: 5,

@@ -4,14 +4,15 @@ type CostModel struct {
     Symbol string
     FixedSpreadPips float64    // EURUSD: 0.2, GBPJPY: 0.8
     SlippageModel string       // "fixed", "volatility"
+    PipSize float64           // 0.0001 for most pairs, 0.01 for JPY
 }
 
 func (cm *CostModel) GetAsk(bid float64) float64 {
-    return bid + (cm.FixedSpreadPips * cm.pipSize())
+    return bid + (cm.FixedSpreadPips * cm.PipSize)
 }
 
 func (cm *CostModel) GetBid(ask float64) float64 {
-    return ask - (cm.FixedSpreadPips * cm.pipSize())
+    return ask - (cm.FixedSpreadPips * cm.PipSize)
 }
 
 // Entry price after spread applied
@@ -30,7 +31,7 @@ func (cm *CostModel) ApplyExitCost(price float64, direction string, isSL bool) f
     }
     
     if direction == "SHORT" {
-        return price + (cm.FixedSpreadPips * cm.pipSize()) + slippage // Cover at ask
+        return price + (cm.FixedSpreadPips * cm.PipSize) + slippage // Cover at ask
     }
-    return price - (cm.FixedSpreadPips * cm.pipSize()) - slippage // Sell at bid
+    return price - (cm.FixedSpreadPips * cm.PipSize) - slippage // Sell at bid
 }

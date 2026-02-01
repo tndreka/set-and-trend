@@ -86,3 +86,23 @@ SELECT COUNT(*) FROM candles_h1;
 SELECT * FROM candles_weekly 
 WHERE timestamp_utc >= $1 AND timestamp_utc <= $2
 ORDER BY timestamp_utc ASC;
+
+-- name: GetCandlesWeeklyBySymbolAndRange :many
+SELECT * FROM candles_weekly 
+WHERE symbol = $1 AND timestamp_utc >= $2 AND timestamp_utc <= $3
+ORDER BY timestamp_utc ASC;
+
+-- name: GetCandlesD1BySymbolAndRange :many
+SELECT * FROM candles_d1 
+WHERE symbol = $1 AND timestamp_utc >= $2 AND timestamp_utc <= $3
+ORDER BY timestamp_utc ASC;
+
+-- name: GetCandlesH4BySymbolAndRange :many
+SELECT * FROM candles_h4 
+WHERE symbol = $1 AND timestamp_utc >= $2 AND timestamp_utc <= $3
+ORDER BY timestamp_utc ASC;
+
+-- name: GetCandlesH1BySymbolAndRange :many
+SELECT * FROM candles_h1 
+WHERE symbol = $1 AND timestamp_utc >= $2 AND timestamp_utc <= $3
+ORDER BY timestamp_utc ASC;

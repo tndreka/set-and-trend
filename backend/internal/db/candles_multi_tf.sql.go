@@ -46,7 +46,7 @@ func (q *Queries) CountCandlesH4(ctx context.Context) (int64, error) {
 }
 
 const getCandleD1ByTimestamp = `-- name: GetCandleD1ByTimestamp :one
-SELECT id, timestamp_utc, open, high, low, close, volume, created_at FROM candles_d1 
+SELECT id, timestamp_utc, open, high, low, close, volume, created_at, symbol FROM candles_d1 
 WHERE timestamp_utc = $1
 `
 
@@ -62,12 +62,13 @@ func (q *Queries) GetCandleD1ByTimestamp(ctx context.Context, timestampUtc pgtyp
 		&i.Close,
 		&i.Volume,
 		&i.CreatedAt,
+		&i.Symbol,
 	)
 	return i, err
 }
 
 const getCandleH1ByTimestamp = `-- name: GetCandleH1ByTimestamp :one
-SELECT id, timestamp_utc, open, high, low, close, volume, created_at FROM candles_h1 
+SELECT id, timestamp_utc, open, high, low, close, volume, created_at, symbol FROM candles_h1 
 WHERE timestamp_utc = $1
 `
 
@@ -83,12 +84,13 @@ func (q *Queries) GetCandleH1ByTimestamp(ctx context.Context, timestampUtc pgtyp
 		&i.Close,
 		&i.Volume,
 		&i.CreatedAt,
+		&i.Symbol,
 	)
 	return i, err
 }
 
 const getCandleH4ByTimestamp = `-- name: GetCandleH4ByTimestamp :one
-SELECT id, timestamp_utc, open, high, low, close, volume, created_at FROM candles_h4 
+SELECT id, timestamp_utc, open, high, low, close, volume, created_at, symbol FROM candles_h4 
 WHERE timestamp_utc = $1
 `
 
@@ -104,12 +106,13 @@ func (q *Queries) GetCandleH4ByTimestamp(ctx context.Context, timestampUtc pgtyp
 		&i.Close,
 		&i.Volume,
 		&i.CreatedAt,
+		&i.Symbol,
 	)
 	return i, err
 }
 
 const getCandlesD1ByRange = `-- name: GetCandlesD1ByRange :many
-SELECT id, timestamp_utc, open, high, low, close, volume, created_at FROM candles_d1 
+SELECT id, timestamp_utc, open, high, low, close, volume, created_at, symbol FROM candles_d1 
 WHERE timestamp_utc >= $1 AND timestamp_utc <= $2
 ORDER BY timestamp_utc ASC
 `
@@ -137,6 +140,49 @@ func (q *Queries) GetCandlesD1ByRange(ctx context.Context, arg GetCandlesD1ByRan
 			&i.Close,
 			&i.Volume,
 			&i.CreatedAt,
+			&i.Symbol,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getCandlesD1BySymbolAndRange = `-- name: GetCandlesD1BySymbolAndRange :many
+SELECT id, timestamp_utc, open, high, low, close, volume, created_at, symbol FROM candles_d1 
+WHERE symbol = $1 AND timestamp_utc >= $2 AND timestamp_utc <= $3
+ORDER BY timestamp_utc ASC
+`
+
+type GetCandlesD1BySymbolAndRangeParams struct {
+	Symbol         string             `json:"symbol"`
+	TimestampUtc   pgtype.Timestamptz `json:"timestamp_utc"`
+	TimestampUtc_2 pgtype.Timestamptz `json:"timestamp_utc_2"`
+}
+
+func (q *Queries) GetCandlesD1BySymbolAndRange(ctx context.Context, arg GetCandlesD1BySymbolAndRangeParams) ([]CandlesD1, error) {
+	rows, err := q.db.Query(ctx, getCandlesD1BySymbolAndRange, arg.Symbol, arg.TimestampUtc, arg.TimestampUtc_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CandlesD1
+	for rows.Next() {
+		var i CandlesD1
+		if err := rows.Scan(
+			&i.ID,
+			&i.TimestampUtc,
+			&i.Open,
+			&i.High,
+			&i.Low,
+			&i.Close,
+			&i.Volume,
+			&i.CreatedAt,
+			&i.Symbol,
 		); err != nil {
 			return nil, err
 		}
@@ -149,7 +195,7 @@ func (q *Queries) GetCandlesD1ByRange(ctx context.Context, arg GetCandlesD1ByRan
 }
 
 const getCandlesD1Last = `-- name: GetCandlesD1Last :many
-SELECT id, timestamp_utc, open, high, low, close, volume, created_at FROM candles_d1 
+SELECT id, timestamp_utc, open, high, low, close, volume, created_at, symbol FROM candles_d1 
 ORDER BY timestamp_utc DESC
 LIMIT $1
 `
@@ -172,6 +218,7 @@ func (q *Queries) GetCandlesD1Last(ctx context.Context, limit int32) ([]CandlesD
 			&i.Close,
 			&i.Volume,
 			&i.CreatedAt,
+			&i.Symbol,
 		); err != nil {
 			return nil, err
 		}
@@ -184,7 +231,7 @@ func (q *Queries) GetCandlesD1Last(ctx context.Context, limit int32) ([]CandlesD
 }
 
 const getCandlesH1ByRange = `-- name: GetCandlesH1ByRange :many
-SELECT id, timestamp_utc, open, high, low, close, volume, created_at FROM candles_h1 
+SELECT id, timestamp_utc, open, high, low, close, volume, created_at, symbol FROM candles_h1 
 WHERE timestamp_utc >= $1 AND timestamp_utc <= $2
 ORDER BY timestamp_utc ASC
 `
@@ -212,6 +259,49 @@ func (q *Queries) GetCandlesH1ByRange(ctx context.Context, arg GetCandlesH1ByRan
 			&i.Close,
 			&i.Volume,
 			&i.CreatedAt,
+			&i.Symbol,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getCandlesH1BySymbolAndRange = `-- name: GetCandlesH1BySymbolAndRange :many
+SELECT id, timestamp_utc, open, high, low, close, volume, created_at, symbol FROM candles_h1 
+WHERE symbol = $1 AND timestamp_utc >= $2 AND timestamp_utc <= $3
+ORDER BY timestamp_utc ASC
+`
+
+type GetCandlesH1BySymbolAndRangeParams struct {
+	Symbol         string             `json:"symbol"`
+	TimestampUtc   pgtype.Timestamptz `json:"timestamp_utc"`
+	TimestampUtc_2 pgtype.Timestamptz `json:"timestamp_utc_2"`
+}
+
+func (q *Queries) GetCandlesH1BySymbolAndRange(ctx context.Context, arg GetCandlesH1BySymbolAndRangeParams) ([]CandlesH1, error) {
+	rows, err := q.db.Query(ctx, getCandlesH1BySymbolAndRange, arg.Symbol, arg.TimestampUtc, arg.TimestampUtc_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CandlesH1
+	for rows.Next() {
+		var i CandlesH1
+		if err := rows.Scan(
+			&i.ID,
+			&i.TimestampUtc,
+			&i.Open,
+			&i.High,
+			&i.Low,
+			&i.Close,
+			&i.Volume,
+			&i.CreatedAt,
+			&i.Symbol,
 		); err != nil {
 			return nil, err
 		}
@@ -224,7 +314,7 @@ func (q *Queries) GetCandlesH1ByRange(ctx context.Context, arg GetCandlesH1ByRan
 }
 
 const getCandlesH1Last = `-- name: GetCandlesH1Last :many
-SELECT id, timestamp_utc, open, high, low, close, volume, created_at FROM candles_h1 
+SELECT id, timestamp_utc, open, high, low, close, volume, created_at, symbol FROM candles_h1 
 ORDER BY timestamp_utc DESC
 LIMIT $1
 `
@@ -247,6 +337,7 @@ func (q *Queries) GetCandlesH1Last(ctx context.Context, limit int32) ([]CandlesH
 			&i.Close,
 			&i.Volume,
 			&i.CreatedAt,
+			&i.Symbol,
 		); err != nil {
 			return nil, err
 		}
@@ -259,7 +350,7 @@ func (q *Queries) GetCandlesH1Last(ctx context.Context, limit int32) ([]CandlesH
 }
 
 const getCandlesH4ByRange = `-- name: GetCandlesH4ByRange :many
-SELECT id, timestamp_utc, open, high, low, close, volume, created_at FROM candles_h4 
+SELECT id, timestamp_utc, open, high, low, close, volume, created_at, symbol FROM candles_h4 
 WHERE timestamp_utc >= $1 AND timestamp_utc <= $2
 ORDER BY timestamp_utc ASC
 `
@@ -287,6 +378,49 @@ func (q *Queries) GetCandlesH4ByRange(ctx context.Context, arg GetCandlesH4ByRan
 			&i.Close,
 			&i.Volume,
 			&i.CreatedAt,
+			&i.Symbol,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getCandlesH4BySymbolAndRange = `-- name: GetCandlesH4BySymbolAndRange :many
+SELECT id, timestamp_utc, open, high, low, close, volume, created_at, symbol FROM candles_h4 
+WHERE symbol = $1 AND timestamp_utc >= $2 AND timestamp_utc <= $3
+ORDER BY timestamp_utc ASC
+`
+
+type GetCandlesH4BySymbolAndRangeParams struct {
+	Symbol         string             `json:"symbol"`
+	TimestampUtc   pgtype.Timestamptz `json:"timestamp_utc"`
+	TimestampUtc_2 pgtype.Timestamptz `json:"timestamp_utc_2"`
+}
+
+func (q *Queries) GetCandlesH4BySymbolAndRange(ctx context.Context, arg GetCandlesH4BySymbolAndRangeParams) ([]CandlesH4, error) {
+	rows, err := q.db.Query(ctx, getCandlesH4BySymbolAndRange, arg.Symbol, arg.TimestampUtc, arg.TimestampUtc_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CandlesH4
+	for rows.Next() {
+		var i CandlesH4
+		if err := rows.Scan(
+			&i.ID,
+			&i.TimestampUtc,
+			&i.Open,
+			&i.High,
+			&i.Low,
+			&i.Close,
+			&i.Volume,
+			&i.CreatedAt,
+			&i.Symbol,
 		); err != nil {
 			return nil, err
 		}
@@ -299,7 +433,7 @@ func (q *Queries) GetCandlesH4ByRange(ctx context.Context, arg GetCandlesH4ByRan
 }
 
 const getCandlesH4Last = `-- name: GetCandlesH4Last :many
-SELECT id, timestamp_utc, open, high, low, close, volume, created_at FROM candles_h4 
+SELECT id, timestamp_utc, open, high, low, close, volume, created_at, symbol FROM candles_h4 
 ORDER BY timestamp_utc DESC
 LIMIT $1
 `
@@ -322,6 +456,7 @@ func (q *Queries) GetCandlesH4Last(ctx context.Context, limit int32) ([]CandlesH
 			&i.Close,
 			&i.Volume,
 			&i.CreatedAt,
+			&i.Symbol,
 		); err != nil {
 			return nil, err
 		}
@@ -334,7 +469,7 @@ func (q *Queries) GetCandlesH4Last(ctx context.Context, limit int32) ([]CandlesH
 }
 
 const getCandlesWeeklyByRange = `-- name: GetCandlesWeeklyByRange :many
-SELECT id, timestamp_utc, open, high, low, close, volume, created_at FROM candles_weekly 
+SELECT id, timestamp_utc, open, high, low, close, volume, created_at, symbol FROM candles_weekly 
 WHERE timestamp_utc >= $1 AND timestamp_utc <= $2
 ORDER BY timestamp_utc ASC
 `
@@ -362,6 +497,49 @@ func (q *Queries) GetCandlesWeeklyByRange(ctx context.Context, arg GetCandlesWee
 			&i.Close,
 			&i.Volume,
 			&i.CreatedAt,
+			&i.Symbol,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getCandlesWeeklyBySymbolAndRange = `-- name: GetCandlesWeeklyBySymbolAndRange :many
+SELECT id, timestamp_utc, open, high, low, close, volume, created_at, symbol FROM candles_weekly 
+WHERE symbol = $1 AND timestamp_utc >= $2 AND timestamp_utc <= $3
+ORDER BY timestamp_utc ASC
+`
+
+type GetCandlesWeeklyBySymbolAndRangeParams struct {
+	Symbol         string             `json:"symbol"`
+	TimestampUtc   pgtype.Timestamptz `json:"timestamp_utc"`
+	TimestampUtc_2 pgtype.Timestamptz `json:"timestamp_utc_2"`
+}
+
+func (q *Queries) GetCandlesWeeklyBySymbolAndRange(ctx context.Context, arg GetCandlesWeeklyBySymbolAndRangeParams) ([]CandlesWeekly, error) {
+	rows, err := q.db.Query(ctx, getCandlesWeeklyBySymbolAndRange, arg.Symbol, arg.TimestampUtc, arg.TimestampUtc_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CandlesWeekly
+	for rows.Next() {
+		var i CandlesWeekly
+		if err := rows.Scan(
+			&i.ID,
+			&i.TimestampUtc,
+			&i.Open,
+			&i.High,
+			&i.Low,
+			&i.Close,
+			&i.Volume,
+			&i.CreatedAt,
+			&i.Symbol,
 		); err != nil {
 			return nil, err
 		}
@@ -382,7 +560,7 @@ ON CONFLICT (timestamp_utc) DO UPDATE SET
     low = EXCLUDED.low,
     close = EXCLUDED.close,
     volume = EXCLUDED.volume
-RETURNING id, timestamp_utc, open, high, low, close, volume, created_at
+RETURNING id, timestamp_utc, open, high, low, close, volume, created_at, symbol
 `
 
 type InsertCandleD1Params struct {
@@ -413,6 +591,7 @@ func (q *Queries) InsertCandleD1(ctx context.Context, arg InsertCandleD1Params) 
 		&i.Close,
 		&i.Volume,
 		&i.CreatedAt,
+		&i.Symbol,
 	)
 	return i, err
 }
@@ -426,7 +605,7 @@ ON CONFLICT (timestamp_utc) DO UPDATE SET
     low = EXCLUDED.low,
     close = EXCLUDED.close,
     volume = EXCLUDED.volume
-RETURNING id, timestamp_utc, open, high, low, close, volume, created_at
+RETURNING id, timestamp_utc, open, high, low, close, volume, created_at, symbol
 `
 
 type InsertCandleH1Params struct {
@@ -457,6 +636,7 @@ func (q *Queries) InsertCandleH1(ctx context.Context, arg InsertCandleH1Params) 
 		&i.Close,
 		&i.Volume,
 		&i.CreatedAt,
+		&i.Symbol,
 	)
 	return i, err
 }
@@ -470,7 +650,7 @@ ON CONFLICT (timestamp_utc) DO UPDATE SET
     low = EXCLUDED.low,
     close = EXCLUDED.close,
     volume = EXCLUDED.volume
-RETURNING id, timestamp_utc, open, high, low, close, volume, created_at
+RETURNING id, timestamp_utc, open, high, low, close, volume, created_at, symbol
 `
 
 type InsertCandleH4Params struct {
@@ -501,6 +681,7 @@ func (q *Queries) InsertCandleH4(ctx context.Context, arg InsertCandleH4Params) 
 		&i.Close,
 		&i.Volume,
 		&i.CreatedAt,
+		&i.Symbol,
 	)
 	return i, err
 }

@@ -390,6 +390,7 @@ type CandlesD1 struct {
 	Close        decimal.Decimal    `json:"close"`
 	Volume       pgtype.Int8        `json:"volume"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	Symbol       string             `json:"symbol"`
 }
 
 type CandlesH1 struct {
@@ -401,6 +402,7 @@ type CandlesH1 struct {
 	Close        decimal.Decimal    `json:"close"`
 	Volume       pgtype.Int8        `json:"volume"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	Symbol       string             `json:"symbol"`
 }
 
 type CandlesH4 struct {
@@ -412,6 +414,7 @@ type CandlesH4 struct {
 	Close        decimal.Decimal    `json:"close"`
 	Volume       pgtype.Int8        `json:"volume"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	Symbol       string             `json:"symbol"`
 }
 
 type CandlesWeekly struct {
@@ -423,6 +426,7 @@ type CandlesWeekly struct {
 	Close        decimal.Decimal    `json:"close"`
 	Volume       pgtype.Int8        `json:"volume"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	Symbol       string             `json:"symbol"`
 }
 
 type IndicatorsD1 struct {

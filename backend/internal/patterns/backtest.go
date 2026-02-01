@@ -254,6 +254,8 @@ func RunBacktest(candles []Candle, config BacktestConfig) (*BacktestMetrics, []B
 	// Track last trade bar for each direction to prevent duplicates
 	lastHSTradeBar := -config.CooldownBars - 1
 	lastIHSTradeBar := -config.CooldownBars - 1
+	lastDTTradeBar := -config.CooldownBars - 1  // Double Top
+	lastDBTradeBar := -config.CooldownBars - 1  // Double Bottom
 
 	for i := config.WindowSize; i < len(candles)-config.MaxBarsToExit; i++ {
 		window := candles[i-config.WindowSize : i]
@@ -283,6 +285,36 @@ func RunBacktest(candles []Candle, config BacktestConfig) (*BacktestMetrics, []B
 				if trade != nil {
 					trades = append(trades, *trade)
 					lastIHSTradeBar = i
+				} else {
+					filteredPatterns++
+				}
+			}
+		}
+
+		// Detect Double Top (bearish) - only if cooldown passed
+		if i-lastDTTradeBar > config.CooldownBars {
+			dtStructure := DetectDoubleTop(window, config.Lookback)
+			if dtStructure != nil {
+				totalPatterns++
+				trade := processStructureForBacktest(dtStructure, window, futureData, config, i)
+				if trade != nil {
+					trades = append(trades, *trade)
+					lastDTTradeBar = i
+				} else {
+					filteredPatterns++
+				}
+			}
+		}
+
+		// Detect Double Bottom (bullish) - only if cooldown passed
+		if i-lastDBTradeBar > config.CooldownBars {
+			dbStructure := DetectDoubleBottom(window, config.Lookback)
+			if dbStructure != nil {
+				totalPatterns++
+				trade := processStructureForBacktest(dbStructure, window, futureData, config, i)
+				if trade != nil {
+					trades = append(trades, *trade)
+					lastDBTradeBar = i
 				} else {
 					filteredPatterns++
 				}

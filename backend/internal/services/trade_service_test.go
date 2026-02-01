@@ -5,21 +5,19 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
+	"set-and-trend/backend/internal/db"
 	"set-and-trend/backend/internal/repositories"
 )
 
 // Mock repositories for testing
 type mockAccountRepo struct {
-	account *repositories.Account
+	account db.Account
 	err     error
 }
 
-func (m *mockAccountRepo) GetAccountByID(ctx context.Context, id uuid.UUID) (*repositories.Account, error) {
+func (m *mockAccountRepo) GetAccountByID(ctx context.Context, id uuid.UUID) (db.Account, error) {
 	return m.account, m.err
-}
-
-func (m *mockAccountRepo) CreateAccount(ctx context.Context, params repositories.AccountCreateParams) (*repositories.Account, error) {
-	return nil, nil
 }
 
 type mockCandleRepo struct {
@@ -31,29 +29,21 @@ func (m *mockCandleRepo) GetCandleByID(ctx context.Context, id uuid.UUID) (*repo
 	return m.candle, m.err
 }
 
-func (m *mockCandleRepo) CreateCandle(ctx context.Context, params repositories.CandleCreateParams) (*repositories.Candle, error) {
-	return nil, nil
-}
-
-func (m *mockCandleRepo) GetLatestCandles(ctx context.Context, limit int) ([]repositories.Candle, error) {
-	return nil, nil
-}
-
 type mockTradeRepo struct {
-	trade  *repositories.Trade
-	trades []*repositories.Trade
+	trade  db.Trade
+	trades []db.Trade
 	err    error
 }
 
-func (m *mockTradeRepo) CreateTrade(ctx context.Context, params repositories.TradeCreateParams) (*repositories.Trade, error) {
+func (m *mockTradeRepo) CreateTrade(ctx context.Context, params db.CreateTradeParams) (db.Trade, error) {
 	return m.trade, m.err
 }
 
-func (m *mockTradeRepo) GetTradeByID(ctx context.Context, id uuid.UUID) (*repositories.Trade, error) {
+func (m *mockTradeRepo) GetTradeByID(ctx context.Context, id uuid.UUID) (db.Trade, error) {
 	return m.trade, m.err
 }
 
-func (m *mockTradeRepo) GetTradesByAccountAndCandle(ctx context.Context, accountID, candleID uuid.UUID) ([]*repositories.Trade, error) {
+func (m *mockTradeRepo) GetTradesByAccountAndCandle(ctx context.Context, accountID, candleID uuid.UUID) ([]db.Trade, error) {
 	return m.trades, m.err
 }
 
@@ -61,12 +51,12 @@ func TestCreateTrade_ValidLongTrade(t *testing.T) {
 	ctx := context.Background()
 
 	accountRepo := &mockAccountRepo{
-		account: &repositories.Account{
+		account: db.Account{
 			ID:                 uuid.New(),
 			UserID:             uuid.New(),
-			Balance:            "10000.00",
+			Balance:            decimal.NewFromFloat(10000.00),
 			Leverage:           100,
-			MaxRiskPerTradePct: 2.0,
+			MaxRiskPerTradePct: decimal.NewFromFloat(2.0),
 			Timezone:           "UTC",
 		},
 	}
@@ -78,8 +68,8 @@ func TestCreateTrade_ValidLongTrade(t *testing.T) {
 	}
 
 	tradeRepo := &mockTradeRepo{
-		trades: []*repositories.Trade{}, // No duplicates
-		trade: &repositories.Trade{
+		trades: []db.Trade{}, // No duplicates
+		trade: db.Trade{
 			ID: uuid.New(),
 		},
 	}
@@ -89,12 +79,12 @@ func TestCreateTrade_ValidLongTrade(t *testing.T) {
 	input := CreateTradeInput{
 		AccountID:      accountRepo.account.ID,
 		CandleID:       candleRepo.candle.ID,
-		Bias:           "long",
+		Symbol:         "EURUSD",
+		Direction:      "LONG",
 		PlannedEntry:   1.1050,
 		PlannedSL:      1.1000,
 		PlannedTP:      1.1200, // 1:3 RR
 		PlannedRiskPct: 1.0,
-		ReasonForTrade: "Weekly bullish trend confirmed",
 	}
 
 	trade, err := service.CreateTrade(ctx, input)
@@ -110,12 +100,12 @@ func TestCreateTrade_RejectLowRR(t *testing.T) {
 	ctx := context.Background()
 
 	accountRepo := &mockAccountRepo{
-		account: &repositories.Account{
+		account: db.Account{
 			ID:                 uuid.New(),
 			UserID:             uuid.New(),
-			Balance:            "10000.00",
+			Balance:            decimal.NewFromFloat(10000.00),
 			Leverage:           100,
-			MaxRiskPerTradePct: 2.0,
+			MaxRiskPerTradePct: decimal.NewFromFloat(2.0),
 			Timezone:           "UTC",
 		},
 	}
@@ -125,7 +115,7 @@ func TestCreateTrade_RejectLowRR(t *testing.T) {
 	}
 
 	tradeRepo := &mockTradeRepo{
-		trades: []*repositories.Trade{},
+		trades: []db.Trade{},
 	}
 
 	service := NewTradeService(tradeRepo, accountRepo, candleRepo)
@@ -133,12 +123,11 @@ func TestCreateTrade_RejectLowRR(t *testing.T) {
 	input := CreateTradeInput{
 		AccountID:      accountRepo.account.ID,
 		CandleID:       candleRepo.candle.ID,
-		Bias:           "long",
+		Direction:      "LONG",
 		PlannedEntry:   1.1050,
 		PlannedSL:      1.1000,
 		PlannedTP:      1.1070, // Only 1:0.4 RR - should fail
 		PlannedRiskPct: 1.0,
-		ReasonForTrade: "Bad risk/reward",
 	}
 
 	_, err := service.CreateTrade(ctx, input)
@@ -154,12 +143,12 @@ func TestCreateTrade_RejectDuplicate(t *testing.T) {
 	candleID := uuid.New()
 
 	accountRepo := &mockAccountRepo{
-		account: &repositories.Account{
+		account: db.Account{
 			ID:                 accountID,
 			UserID:             uuid.New(),
-			Balance:            "10000.00",
+			Balance:            decimal.NewFromFloat(10000.00),
 			Leverage:           100,
-			MaxRiskPerTradePct: 2.0,
+			MaxRiskPerTradePct: decimal.NewFromFloat(2.0),
 			Timezone:           "UTC",
 		},
 	}
@@ -170,12 +159,12 @@ func TestCreateTrade_RejectDuplicate(t *testing.T) {
 
 	// Simulate existing trade
 	tradeRepo := &mockTradeRepo{
-		trades: []*repositories.Trade{
+		trades: []db.Trade{
 			{
 				ID:        uuid.New(),
 				AccountID: accountID,
 				CandleID:  candleID,
-				Bias:      "long",
+				Direction: "LONG",
 			},
 		},
 	}
@@ -185,12 +174,11 @@ func TestCreateTrade_RejectDuplicate(t *testing.T) {
 	input := CreateTradeInput{
 		AccountID:      accountID,
 		CandleID:       candleID,
-		Bias:           "long", // Same bias - should be rejected
+		Direction:      "LONG", // Same direction - should be rejected
 		PlannedEntry:   1.1050,
 		PlannedSL:      1.1000,
 		PlannedTP:      1.1200,
 		PlannedRiskPct: 1.0,
-		ReasonForTrade: "Duplicate attempt",
 	}
 
 	_, err := service.CreateTrade(ctx, input)
@@ -203,12 +191,12 @@ func TestCreateTrade_RejectExcessiveRisk(t *testing.T) {
 	ctx := context.Background()
 
 	accountRepo := &mockAccountRepo{
-		account: &repositories.Account{
+		account: db.Account{
 			ID:                 uuid.New(),
 			UserID:             uuid.New(),
-			Balance:            "10000.00",
+			Balance:            decimal.NewFromFloat(10000.00),
 			Leverage:           100,
-			MaxRiskPerTradePct: 2.0, // Max 2%
+			MaxRiskPerTradePct: decimal.NewFromFloat(2.0), // Max 2%
 			Timezone:           "UTC",
 		},
 	}
@@ -218,7 +206,7 @@ func TestCreateTrade_RejectExcessiveRisk(t *testing.T) {
 	}
 
 	tradeRepo := &mockTradeRepo{
-		trades: []*repositories.Trade{},
+		trades: []db.Trade{},
 	}
 
 	service := NewTradeService(tradeRepo, accountRepo, candleRepo)
@@ -226,12 +214,11 @@ func TestCreateTrade_RejectExcessiveRisk(t *testing.T) {
 	input := CreateTradeInput{
 		AccountID:      accountRepo.account.ID,
 		CandleID:       candleRepo.candle.ID,
-		Bias:           "long",
+		Direction:      "LONG",
 		PlannedEntry:   1.1050,
 		PlannedSL:      1.1000,
 		PlannedTP:      1.1200,
 		PlannedRiskPct: 3.0, // Exceeds account max of 2%
-		ReasonForTrade: "Excessive risk",
 	}
 
 	_, err := service.CreateTrade(ctx, input)
@@ -244,12 +231,12 @@ func TestCreateTrade_RejectInvalidGeometry(t *testing.T) {
 	ctx := context.Background()
 
 	accountRepo := &mockAccountRepo{
-		account: &repositories.Account{
+		account: db.Account{
 			ID:                 uuid.New(),
 			UserID:             uuid.New(),
-			Balance:            "10000.00",
+			Balance:            decimal.NewFromFloat(10000.00),
 			Leverage:           100,
-			MaxRiskPerTradePct: 2.0,
+			MaxRiskPerTradePct: decimal.NewFromFloat(2.0),
 			Timezone:           "UTC",
 		},
 	}
@@ -259,7 +246,7 @@ func TestCreateTrade_RejectInvalidGeometry(t *testing.T) {
 	}
 
 	tradeRepo := &mockTradeRepo{
-		trades: []*repositories.Trade{},
+		trades: []db.Trade{},
 	}
 
 	service := NewTradeService(tradeRepo, accountRepo, candleRepo)
@@ -267,12 +254,11 @@ func TestCreateTrade_RejectInvalidGeometry(t *testing.T) {
 	input := CreateTradeInput{
 		AccountID:      accountRepo.account.ID,
 		CandleID:       candleRepo.candle.ID,
-		Bias:           "long",
+		Direction:      "LONG",
 		PlannedEntry:   1.1050,
 		PlannedSL:      1.1100, // SL above entry for long - invalid!
 		PlannedTP:      1.1200,
 		PlannedRiskPct: 1.0,
-		ReasonForTrade: "Invalid geometry",
 	}
 
 	_, err := service.CreateTrade(ctx, input)
