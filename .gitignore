@@ -10,10 +10,26 @@ secrets/*.key
 
 # Backend build artifacts
 backend/api
+backend/api-new
+backend/backtest
+backend/confluence_sim
+backend/live_scanner
+backend/paper_sim
+backend/paper_trade
+backend/simulation
 backend/api.log
-backend/*. exe
+backend/*.exe
 backend/*.test
 backend/*.out
+
+# Database files
+backend/forex_prices.db
+*.db
+
+# Python virtual environments
+backend/scripts/.venv/
+.venv/
+__pycache__/
 
 # Logs
 *.log
