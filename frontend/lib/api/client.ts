@@ -11,6 +11,20 @@ export const api = axios.create({
   timeout: 10000,
 });
 
+// Request interceptor to add auth token
+api.interceptors.request.use(
+  (config) => {
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('auth_token');
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
 // Auth types
 export interface SignupRequest {
   username: string;
@@ -26,13 +40,16 @@ export interface LoginRequest {
 }
 
 export interface AuthResponse {
-  token: string;
-  user: {
-    id: string;
-    username: string;
-    email: string;
-    name?: string;
-    surname?: string;
+  status: string;
+  data: {
+    token: string;
+    user?: {
+      id: string;
+      username: string;
+      email: string;
+      name?: string;
+      surname?: string;
+    };
   };
 }
 
