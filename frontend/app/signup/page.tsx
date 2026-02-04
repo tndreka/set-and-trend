@@ -31,8 +31,10 @@ export default function SignupPage() {
       });
 
       // Save token to localStorage
-      localStorage.setItem('auth_token', response.data.token);
-      localStorage.setItem('user', JSON.stringify(response.data.user));
+      localStorage.setItem('auth_token', response.data.data.token);
+      if (response.data.data.user) {
+        localStorage.setItem('user', JSON.stringify(response.data.data.user));
+      }
 
       // Redirect to dashboard
       router.push('/dashboard');
