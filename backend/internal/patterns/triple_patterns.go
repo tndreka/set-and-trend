@@ -2,7 +2,6 @@ package patterns
 
 import (
 	"math"
-	"set-and-trend/backend/internal/constants"
 )
 
 // ================================================================================
@@ -84,7 +83,7 @@ func DetectTripleTop(candles []Candle, lookback int) *DetectedStructure {
 			PatternType:        "TRIPLE_TOP",
 			LeftShoulderPrice:  top1.Price,
 			LeftShoulderIdx:    top1.Index,
-			HeadPrice:          top2.Price,  // Middle top (not necessarily highest)
+			HeadPrice:          top2.Price, // Middle top (not necessarily highest)
 			HeadIdx:            top2.Index,
 			RightShoulderPrice: top3.Price,
 			RightShoulderIdx:   top3.Index,
@@ -205,8 +204,8 @@ func calculateTripleTopConfidence(top1, top2, top3 doublePatternSwing, trough1, 
 	confidence := 0.5
 
 	// Symmetry of the three tops (all similar height)
-	priceRange := math.Max(math.Max(top1.Price, top2.Price), top3.Price) - 
-				  math.Min(math.Min(top1.Price, top2.Price), top3.Price)
+	priceRange := math.Max(math.Max(top1.Price, top2.Price), top3.Price) -
+		math.Min(math.Min(top1.Price, top2.Price), top3.Price)
 	symmetry := 1.0 - (priceRange / avgTop)
 	confidence += symmetry * 0.15
 
@@ -217,7 +216,7 @@ func calculateTripleTopConfidence(top1, top2, top3 doublePatternSwing, trough1, 
 	confidence += timeSym * 0.1
 
 	// Neckline quality (horizontal)
-	necklineSlope := math.Abs(trough1 - trough2) / ((trough1 + trough2) / 2)
+	necklineSlope := math.Abs(trough1-trough2) / ((trough1 + trough2) / 2)
 	necklineQuality := 1.0 - necklineSlope
 	confidence += necklineQuality * 0.15
 
@@ -234,8 +233,8 @@ func calculateTripleBottomConfidence(bottom1, bottom2, bottom3 doublePatternSwin
 	confidence := 0.5
 
 	// Symmetry of the three bottoms
-	priceRange := math.Max(math.Max(bottom1.Price, bottom2.Price), bottom3.Price) - 
-				  math.Min(math.Min(bottom1.Price, bottom2.Price), bottom3.Price)
+	priceRange := math.Max(math.Max(bottom1.Price, bottom2.Price), bottom3.Price) -
+		math.Min(math.Min(bottom1.Price, bottom2.Price), bottom3.Price)
 	symmetry := 1.0 - (priceRange / avgBottom)
 	confidence += symmetry * 0.15
 
@@ -246,7 +245,7 @@ func calculateTripleBottomConfidence(bottom1, bottom2, bottom3 doublePatternSwin
 	confidence += timeSym * 0.1
 
 	// Neckline quality
-	necklineSlope := math.Abs(peak1 - peak2) / ((peak1 + peak2) / 2)
+	necklineSlope := math.Abs(peak1-peak2) / ((peak1 + peak2) / 2)
 	necklineQuality := 1.0 - necklineSlope
 	confidence += necklineQuality * 0.15
 
@@ -274,91 +273,4 @@ func calculateTripleTimeSymmetry(idx1, idx2, idx3 int) float64 {
 	}
 	ratio := float64(min(dist1, dist2)) / float64(max(dist1, dist2))
 	return ratio
-}
-
-// generateTripleTopSignal creates a SHORT signal for triple top
-func generateTripleTopSignal(s *DetectedStructure, symbol string, confidence float64) *TradeSignal {
-	pipSize := constants.GetPipSizeForSymbol(symbol)
-
-	// Entry: Below neckline
-	entryPrice := s.NecklinePrice - (10 * pipSize)
-
-	// Stop Loss: Above the highest top
-	highestTop := math.Max(math.Max(s.LeftShoulderPrice, s.HeadPrice), s.RightShoulderPrice)
-	stopLoss := highestTop + (20 * pipSize)
-
-	// Take Profit: Pattern height projected below neckline
-	patternHeight := highestTop - s.NecklinePrice
-	takeProfit := s.NecklinePrice - patternHeight
-
-	// Risk/Reward
-	risk := stopLoss - entryPrice
-	reward := entryPrice - takeProfit
-	riskReward := 0.0
-	if risk > 0 {
-		riskReward = reward / risk
-	}
-
-	return &TradeSignal{
-		Symbol:      symbol,
-		Direction:   DirectionShort,
-		EntryPrice:  entryPrice,
-		StopLoss:    stopLoss,
-		TakeProfit:  takeProfit,
-		RiskReward:  riskReward,
-		Confidence:  confidence,
-		PatternType: "TRIPLE_TOP",
-	}
-}
-
-// generateTripleBottomSignal creates a LONG signal for triple bottom
-func generateTripleBottomSignal(s *DetectedStructure, symbol string, confidence float64) *TradeSignal {
-	pipSize := constants.GetPipSizeForSymbol(symbol)
-
-	// Entry: Above neckline
-	entryPrice := s.NecklinePrice + (10 * pipSize)
-
-	// Stop Loss: Below the lowest bottom
-	lowestBottom := math.Min(math.Min(s.LeftShoulderPrice, s.HeadPrice), s.RightShoulderPrice)
-	stopLoss := lowestBottom - (20 * pipSize)
-
-	// Take Profit: Pattern height projected above neckline
-	patternHeight := s.NecklinePrice - lowestBottom
-	takeProfit := s.NecklinePrice + patternHeight
-
-	risk := entryPrice - stopLoss
-	reward := takeProfit - entryPrice
-	riskReward := 0.0
-	if risk > 0 {
-		riskReward = reward / risk
-	}
-
-	return &TradeSignal{
-		Symbol:      symbol,
-		Direction:   DirectionLong,
-		EntryPrice:  entryPrice,
-		StopLoss:    stopLoss,
-		TakeProfit:  takeProfit,
-		RiskReward:  riskReward,
-		Confidence:  confidence,
-		PatternType: "TRIPLE_BOTTOM",
-	}
-}
-
-// Add to GenerateTradeSignal in signals.go - but we'll integrate it there
-// For now, provide a standalone function
-
-// GenerateTriplePatternSignal creates signals for triple top/bottom
-func GenerateTriplePatternSignal(s *DetectedStructure, symbol string, confidence float64) *TradeSignal {
-	if s == nil {
-		return nil
-	}
-
-	if s.PatternType == "TRIPLE_TOP" {
-		return generateTripleTopSignal(s, symbol, confidence)
-	} else if s.PatternType == "TRIPLE_BOTTOM" {
-		return generateTripleBottomSignal(s, symbol, confidence)
-	}
-
-	return nil
 }

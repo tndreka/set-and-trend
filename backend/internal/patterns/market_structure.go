@@ -324,54 +324,54 @@ func calculateBreakStrength(candle Candle, breakLevel, breakPips float64, config
 // checkBreakRetest checks if price returned to retest the broken level
 // FIXED: Option to use ATR-based tolerance instead of price %
 func checkBreakRetest(candles []Candle, breakIdx int, breakLevel float64, direction string, config StructureConfig) (bool, int) {
-    // Option 1: Price-based tolerance (original)
-    // tolerance := breakLevel * config.RetestTolerance
-    
-    // Option 2: ATR-based tolerance (better for multi-asset)
-    var tolerance float64
-    if len(candles) >= 20 {
-        atr := calculateATRForRetest(candles[breakIdx-14:breakIdx], 14)
-        tolerance = atr * 0.3 // 30% of ATR
-    } else {
-        tolerance = breakLevel * config.RetestTolerance // Fallback
-    }
+	// Option 1: Price-based tolerance (original)
+	// tolerance := breakLevel * config.RetestTolerance
 
-    for i := breakIdx + 1; i < len(candles) && i <= breakIdx+10; i++ {
-        c := candles[i]
+	// Option 2: ATR-based tolerance (better for multi-asset)
+	var tolerance float64
+	if len(candles) >= 20 && breakIdx >= 14 {
+		atr := calculateATRForRetest(candles[breakIdx-14:breakIdx], 14)
+		tolerance = atr * 0.3 // 30% of ATR
+	} else {
+		tolerance = breakLevel * config.RetestTolerance // Fallback
+	}
 
-        if direction == "BULLISH" {
-            if c.Low <= breakLevel+tolerance && c.Low >= breakLevel-tolerance {
-                if c.Close > breakLevel {
-                    return true, i
-                }
-            }
-        } else {
-            if c.High >= breakLevel-tolerance && c.High <= breakLevel+tolerance {
-                if c.Close < breakLevel {
-                    return true, i
-                }
-            }
-        }
-    }
+	for i := breakIdx + 1; i < len(candles) && i <= breakIdx+10; i++ {
+		c := candles[i]
 
-    return false, 0
+		if direction == "BULLISH" {
+			if c.Low <= breakLevel+tolerance && c.Low >= breakLevel-tolerance {
+				if c.Close > breakLevel {
+					return true, i
+				}
+			}
+		} else {
+			if c.High >= breakLevel-tolerance && c.High <= breakLevel+tolerance {
+				if c.Close < breakLevel {
+					return true, i
+				}
+			}
+		}
+	}
+
+	return false, 0
 }
 
 // Add helper function
 func calculateATRForRetest(candles []Candle, period int) float64 {
-    if len(candles) < period+1 {
-        return 0
-    }
-    
-    var trSum float64
-    for i := 1; i < len(candles); i++ {
-        highLow := candles[i].High - candles[i].Low
-        highClose := math.Abs(candles[i].High - candles[i-1].Close)
-        lowClose := math.Abs(candles[i].Low - candles[i-1].Close)
-        trSum += math.Max(highLow, math.Max(highClose, lowClose))
-    }
-    
-    return trSum / float64(len(candles)-1)
+	if len(candles) < period+1 {
+		return 0
+	}
+
+	var trSum float64
+	for i := 1; i < len(candles); i++ {
+		highLow := candles[i].High - candles[i].Low
+		highClose := math.Abs(candles[i].High - candles[i-1].Close)
+		lowClose := math.Abs(candles[i].Low - candles[i-1].Close)
+		trSum += math.Max(highLow, math.Max(highClose, lowClose))
+	}
+
+	return trSum / float64(len(candles)-1)
 }
 
 // GetRecentBreaks returns breaks within the last N bars
