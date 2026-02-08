@@ -2,9 +2,10 @@ package simulation
 
 import (
 	"math"
+	"time"
 
-	"set-and-trend/backend/internal/patterns"
 	"set-and-trend/backend/internal/constants"
+	"set-and-trend/backend/internal/patterns"
 )
 
 // TradingBot makes trading decisions based only on visible data
@@ -261,7 +262,7 @@ func (b *TradingBot) ExecuteSignal(signal *patterns.TradeSignal) {
 }
 
 // closePosition closes the current position and calculates results
-func (b *TradingBot) closePosition(exitPrice float64, exitTime interface{}, reason string, barsHeld int) *TradeResult {
+func (b *TradingBot) closePosition(exitPrice float64, exitTime time.Time, reason string, barsHeld int) *TradeResult {
 	pos := b.state.OpenPosition
 	if pos == nil {
 		return nil
@@ -303,6 +304,7 @@ func (b *TradingBot) closePosition(exitPrice float64, exitTime interface{}, reas
 		PnLPips:   pnlPips,
 		PnLR:      pnlR,
 		Outcome:   outcome,
+		ExitReason: reason,
 		BarsHeld:  barsHeld,
 	}
 

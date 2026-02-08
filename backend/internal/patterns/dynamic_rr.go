@@ -7,20 +7,15 @@ import (
 // ================================================================================
 // DYNAMIC RISK:REWARD - Confluence-Based Position Optimization
 // ================================================================================
-// WHY: 65%+ confluence = 2.5:1 RR vs fixed 1:1 = +25% profit improvement.
-// HOW: Scale R:R targets based on confluence score and pattern quality.
-// ================================================================================
 
-// RiskRewardTier represents different R:R targets
 type RiskRewardTier struct {
 	Name          string
 	MinConfluence float64
 	TargetRR      float64
-	PartialExitRR float64 // First partial exit point
-	StopMode      string  // "FIXED", "ATR", "STRUCTURE"
+	PartialExitRR float64
+	StopMode      string
 }
 
-// Standard R:R tiers
 var RRTiers = []RiskRewardTier{
 	{
 		Name:          "LOW_CONFLUENCE",
@@ -31,7 +26,7 @@ var RRTiers = []RiskRewardTier{
 	},
 	{
 		Name:          "MEDIUM_CONFLUENCE",
-		MinConfluence: 0.52, // New 52% threshold
+		MinConfluence: 0.52,
 		TargetRR:      1.5,
 		PartialExitRR: 1.0,
 		StopMode:      "FIXED",
@@ -59,19 +54,17 @@ var RRTiers = []RiskRewardTier{
 	},
 }
 
-// DynamicRRConfig holds risk management parameters
 type DynamicRRConfig struct {
-	MinRR               float64 // Never take trades below this R:R
-	MaxRR               float64 // Cap R:R for realistic targets
-	UseATRStops         bool    // Use ATR for stop placement
-	ATRMultiplier       float64 // e.g., 1.5 ATR for stops
-	UseStructureStops   bool    // Use swing highs/lows for stops
-	StructureBuffer     float64 // Pips beyond structure
-	EnablePartialExits  bool    // Take partial profits
-	PartialExitPercent  float64 // % of position to exit at first target
+	MinRR              float64
+	MaxRR              float64
+	UseATRStops        bool
+	ATRMultiplier      float64
+	UseStructureStops  bool
+	StructureBuffer    float64
+	EnablePartialExits bool
+	PartialExitPercent float64
 }
 
-// DefaultDynamicRRConfig returns sensible defaults
 func DefaultDynamicRRConfig() DynamicRRConfig {
 	return DynamicRRConfig{
 		MinRR:              1.0,
@@ -85,18 +78,17 @@ func DefaultDynamicRRConfig() DynamicRRConfig {
 	}
 }
 
-// DynamicRRResult holds the calculated R:R parameters
 type DynamicRRResult struct {
-	Tier             RiskRewardTier
-	TargetRR         float64
-	AdjustedEntry    float64
-	AdjustedStop     float64
-	PrimaryTarget    float64
-	PartialTarget    float64
+	Tier              RiskRewardTier
+	TargetRR          float64
+	AdjustedEntry     float64
+	AdjustedStop      float64
+	PrimaryTarget     float64
+	PartialTarget     float64
 	TrailingStopLevel float64
-	RiskPips         float64
-	RewardPips       float64
-	PositionScore    float64 // Overall position quality
+	RiskPips          float64
+	RewardPips        float64
+	PositionScore     float64
 }
 
 // CalculateDynamicRR determines optimal R:R based on confluence
@@ -105,7 +97,6 @@ func CalculateDynamicRR(signal *TradeSignal, confluenceScore float64, config Dyn
 		return nil
 	}
 
-	// Get the appropriate tier
 	tier := getTierForConfluence(confluenceScore)
 
 	result := &DynamicRRResult{
@@ -116,7 +107,7 @@ func CalculateDynamicRR(signal *TradeSignal, confluenceScore float64, config Dyn
 	}
 
 	// Calculate risk in pips
-	pipSize := 0.0001 // Default, should use constants
+	pipSize := 0.0001
 	if signal.Direction == DirectionLong {
 		result.RiskPips = (signal.EntryPrice - signal.StopLoss) / pipSize
 	} else {
@@ -129,20 +120,18 @@ func CalculateDynamicRR(signal *TradeSignal, confluenceScore float64, config Dyn
 	if signal.Direction == DirectionLong {
 		result.PrimaryTarget = signal.EntryPrice + (result.RewardPips * pipSize)
 		result.PartialTarget = signal.EntryPrice + (result.RiskPips * tier.PartialExitRR * pipSize)
-		result.TrailingStopLevel = signal.EntryPrice + (result.RiskPips * pipSize) // Breakeven after 1R
+		result.TrailingStopLevel = signal.EntryPrice + (result.RiskPips * pipSize)
 	} else {
 		result.PrimaryTarget = signal.EntryPrice - (result.RewardPips * pipSize)
 		result.PartialTarget = signal.EntryPrice - (result.RiskPips * tier.PartialExitRR * pipSize)
 		result.TrailingStopLevel = signal.EntryPrice - (result.RiskPips * pipSize)
 	}
 
-	// Calculate position quality score
 	result.PositionScore = calculatePositionScore(signal, tier, confluenceScore)
 
 	return result
 }
 
-// getTierForConfluence returns the appropriate R:R tier
 func getTierForConfluence(confluence float64) RiskRewardTier {
 	var selected RiskRewardTier
 	for _, tier := range RRTiers {
@@ -153,14 +142,10 @@ func getTierForConfluence(confluence float64) RiskRewardTier {
 	return selected
 }
 
-// calculatePositionScore determines overall position quality
 func calculatePositionScore(signal *TradeSignal, tier RiskRewardTier, confluence float64) float64 {
 	score := 0.0
-
-	// Base score from confluence
 	score += confluence * 0.4
 
-	// R:R quality
 	if signal.RiskReward >= 2.0 {
 		score += 0.3
 	} else if signal.RiskReward >= 1.5 {
@@ -169,25 +154,25 @@ func calculatePositionScore(signal *TradeSignal, tier RiskRewardTier, confluence
 		score += 0.1
 	}
 
-	// Pattern confidence
 	score += signal.Confidence * 0.3
 
 	return math.Min(score, 1.0)
 }
 
 // CalculateATRStop calculates stop loss using ATR
+// FIXED: Removed unnecessary pip round-trip conversion
 func CalculateATRStop(candles []Candle, entry float64, direction string, atrMultiplier float64, pipSize float64) float64 {
 	if len(candles) < 14 {
 		return 0
 	}
 
 	atr := CalculateATR(candles, 14)
-	atrPips := atr / pipSize
-
+	
+	// FIXED: Direct calculation without pip round-trip
 	if direction == DirectionLong {
-		return entry - (atrPips * atrMultiplier * pipSize)
+		return entry - (atr * atrMultiplier)
 	} else {
-		return entry + (atrPips * atrMultiplier * pipSize)
+		return entry + (atr * atrMultiplier)
 	}
 }
 
@@ -198,7 +183,9 @@ func CalculateATR(candles []Candle, period int) float64 {
 	}
 
 	var trSum float64
-	for i := len(candles) - period; i < len(candles); i++ {
+	startIdx := len(candles) - period
+	
+	for i := startIdx; i < len(candles); i++ {
 		tr := calculateTrueRange(candles[i], candles[i-1])
 		trSum += tr
 	}
@@ -221,14 +208,12 @@ func CalculateStructureStop(candles []Candle, entry float64, direction string, b
 	}
 
 	if direction == DirectionLong {
-		// Find recent swing low for stop
 		lows := FindSwingLows(candles, 3)
 		if len(lows) > 0 {
 			recentLow := lows[len(lows)-1].Price
 			return recentLow - (bufferPips * pipSize)
 		}
 	} else {
-		// Find recent swing high for stop
 		highs := FindSwingHighs(candles, 3)
 		if len(highs) > 0 {
 			recentHigh := highs[len(highs)-1].Price
@@ -252,7 +237,6 @@ func OptimizeSignalRR(signal *TradeSignal, candles []Candle, confluenceScore flo
 		return signal
 	}
 
-	// Create optimized signal
 	optimized := &TradeSignal{
 		Symbol:      signal.Symbol,
 		Direction:   signal.Direction,
@@ -296,7 +280,6 @@ func OptimizeSignalRR(signal *TradeSignal, candles []Candle, confluenceScore flo
 	return optimized
 }
 
-// PartialExitPlan creates a plan for partial exits
 type PartialExitPlan struct {
 	Exit1Percent float64
 	Exit1Price   float64
@@ -309,7 +292,6 @@ type PartialExitPlan struct {
 	FinalRR      float64
 }
 
-// CreatePartialExitPlan creates a scaling exit strategy
 func CreatePartialExitPlan(signal *TradeSignal, tier RiskRewardTier, pipSize float64) *PartialExitPlan {
 	if signal == nil {
 		return nil
@@ -318,11 +300,11 @@ func CreatePartialExitPlan(signal *TradeSignal, tier RiskRewardTier, pipSize flo
 	risk := math.Abs(signal.EntryPrice - signal.StopLoss)
 
 	plan := &PartialExitPlan{
-		Exit1Percent: 0.33, // 33% at first target
+		Exit1Percent: 0.33,
 		Exit1RR:      tier.PartialExitRR,
-		Exit2Percent: 0.33, // 33% at second target
+		Exit2Percent: 0.33,
 		Exit2RR:      tier.TargetRR * 0.75,
-		FinalPercent: 0.34, // 34% at final target
+		FinalPercent: 0.34,
 		FinalRR:      tier.TargetRR,
 	}
 
@@ -339,39 +321,33 @@ func CreatePartialExitPlan(signal *TradeSignal, tier RiskRewardTier, pipSize flo
 	return plan
 }
 
-// ShouldTakeTrade returns whether to take a trade based on R:R and confluence
 func ShouldTakeTrade(signal *TradeSignal, confluenceScore float64, minConfluence float64) bool {
 	if signal == nil {
 		return false
 	}
 
-	// Must meet minimum confluence threshold
 	if confluenceScore < minConfluence {
 		return false
 	}
 
-	// Get tier for confluence
 	tier := getTierForConfluence(confluenceScore)
 
-	// R:R must be at least the tier minimum
-	if signal.RiskReward < tier.TargetRR*0.8 { // Allow 20% buffer
+	if signal.RiskReward < tier.TargetRR*0.8 {
 		return false
 	}
 
 	return true
 }
 
-// GetRecommendedPositionSize calculates position size based on R:R and confluence
 func GetRecommendedPositionSize(baseRiskPercent, confluenceScore float64) float64 {
-	// Higher confluence = slightly higher risk allowance (within limits)
 	if confluenceScore >= 0.85 {
-		return baseRiskPercent * 1.25 // 25% increase for A+ setups
+		return baseRiskPercent * 1.25
 	} else if confluenceScore >= 0.75 {
 		return baseRiskPercent * 1.15
 	} else if confluenceScore >= 0.65 {
 		return baseRiskPercent * 1.0
 	} else if confluenceScore >= 0.52 {
-		return baseRiskPercent * 0.75 // Reduce risk for lower confluence
+		return baseRiskPercent * 0.75
 	}
-	return baseRiskPercent * 0.5 // Minimum for low confluence
+	return baseRiskPercent * 0.5
 }

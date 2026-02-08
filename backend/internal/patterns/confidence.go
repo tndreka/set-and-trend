@@ -38,7 +38,8 @@ func CalculateStructureConfidence(s *DetectedStructure) float64 {
 	score += s.ShoulderSymmetry * w.ShoulderSymmetry
 	score += s.HeadProminence * w.HeadProminence
 	score += s.TimeSymmetry * w.TimeSymmetry
-	score += capValue(s.VolumeProfile+0.2, 0.0, 1.0) * w.VolumeProfile // Normalize volume from [-0.2, 0.8] to [0, 1]
+	//score += capValue(s.VolumeProfile+0.2, 0.0, 1.0) * w.VolumeProfile // Normalize volume from [-0.2, 0.8] to [0, 1]
+	score += math.Max(0.0, s.VolumeProfile) * w.VolumeProfile
 	score += s.NecklineQuality * w.NecklineQuality
 
 	return math.Min(score, 1.0)
@@ -54,7 +55,8 @@ func CalculateStructureConfidenceWithWeights(s *DetectedStructure, w ConfidenceW
 	score += s.ShoulderSymmetry * w.ShoulderSymmetry
 	score += s.HeadProminence * w.HeadProminence
 	score += s.TimeSymmetry * w.TimeSymmetry
-	score += capValue(s.VolumeProfile+0.2, 0.0, 1.0) * w.VolumeProfile
+	//score += capValue(s.VolumeProfile+0.2, 0.0, 1.0) * w.VolumeProfile
+	score += math.Max(0.0, s.VolumeProfile) * w.VolumeProfile
 	score += s.NecklineQuality * w.NecklineQuality
 
 	return math.Min(score, 1.0)
@@ -79,4 +81,31 @@ func capValue(val, min, max float64) float64 {
 		return max
 	}
 	return val
+}
+
+// ValidateWeights ensures weights sum to approximately 1.0
+func ValidateWeights(w ConfidenceWeights) bool {
+	sum := w.ShoulderSymmetry + w.HeadProminence + w.TimeSymmetry + 
+	       w.VolumeProfile + w.NecklineQuality
+	
+	// Allow 5% tolerance
+	return sum >= 0.95 && sum <= 1.05
+}
+
+// NormalizeWeights normalizes weights to sum to 1.0
+func NormalizeWeights(w ConfidenceWeights) ConfidenceWeights {
+	sum := w.ShoulderSymmetry + w.HeadProminence + w.TimeSymmetry + 
+	       w.VolumeProfile + w.NecklineQuality
+	
+	if sum == 0 {
+		return DefaultWeights()
+	}
+	
+	return ConfidenceWeights{
+		ShoulderSymmetry: w.ShoulderSymmetry / sum,
+		HeadProminence:   w.HeadProminence / sum,
+		TimeSymmetry:     w.TimeSymmetry / sum,
+		VolumeProfile:    w.VolumeProfile / sum,
+		NecklineQuality:  w.NecklineQuality / sum,
+	}
 }

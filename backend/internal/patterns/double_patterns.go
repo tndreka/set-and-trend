@@ -21,10 +21,10 @@ func DetectDoubleTop(candles []Candle, lookback int) *DetectedStructure {
 	top1 := highs[0]
 	top2 := highs[1]
 
-	// Ensure top1 is more recent than top2
-	if top1.Index < top2.Index {
-		top1, top2 = top2, top1
-	}
+	// // Ensure top1 is more recent than top2
+	// if top1.Index < top2.Index {
+	// 	top1, top2 = top2, top1
+	// }
 
 	// Check tops are within 0.5% price tolerance (similar height)
 	priceTolerance := 0.005
@@ -87,10 +87,10 @@ func DetectDoubleBottom(candles []Candle, lookback int) *DetectedStructure {
 	bottom1 := lows[0]
 	bottom2 := lows[1]
 
-	// Ensure bottom1 is more recent than bottom2
-	if bottom1.Index < bottom2.Index {
-		bottom1, bottom2 = bottom2, bottom1
-	}
+	// // Ensure bottom1 is more recent than bottom2
+	// if bottom1.Index < bottom2.Index {
+	// 	bottom1, bottom2 = bottom2, bottom1
+	// }
 
 	// Check bottoms are within 0.5% price tolerance (similar depth)
 	priceTolerance := 0.005
@@ -170,9 +170,13 @@ func findSwingHighsInRange(candles []Candle, lookback, windowSize int) []doubleP
 		}
 	}
 
-	// Sort by recency (most recent first)
-	for i := 0; i < len(highs)/2; i++ {
-		highs[i], highs[len(highs)-1-i] = highs[len(highs)-1-i], highs[i]
+	// Sort by Index DESC (most recent first) - CORRECT
+	for i := 0; i < len(highs)-1; i++ {
+		for j := i + 1; j < len(highs); j++ {
+			if highs[i].Index < highs[j].Index {
+				highs[i], highs[j] = highs[j], highs[i]
+			}
+		}
 	}
 
 	return highs
@@ -206,9 +210,13 @@ func findSwingLowsInRange(candles []Candle, lookback, windowSize int) []doublePa
 		}
 	}
 
-	// Sort by recency (most recent first)
-	for i := 0; i < len(lows)/2; i++ {
-		lows[i], lows[len(lows)-1-i] = lows[len(lows)-1-i], lows[i]
+	// Sort by Index DESC (most recent first) - CORRECT
+	for i := 0; i < len(lows)-1; i++ {
+		for j := i + 1; j < len(lows); j++ {
+			if lows[i].Index < lows[j].Index {
+				lows[i], lows[j] = lows[j], lows[i]
+			}
+		}
 	}
 
 	return lows

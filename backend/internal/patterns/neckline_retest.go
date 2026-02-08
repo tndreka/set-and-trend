@@ -138,10 +138,10 @@ func detectBearishRetest(c Candle, neckline float64, config RetestConfig) *Neckl
 	result := &NecklineRetest{Status: RetestPending}
 	
 	tolerance := neckline * config.RetestTolerance
-	maxPenetration := config.MaxRetestBreakPips * config.PipSize
+	// DELETED: maxPenetration := config.MaxRetestBreakPips * config.PipSize
 
-	// Check if high reached the neckline area
-	if c.High >= neckline-tolerance && c.High <= neckline+maxPenetration {
+	// FIXED: Use symmetric tolerance only (no maxPenetration)
+	if c.High >= neckline-tolerance && c.High <= neckline+tolerance {
 		result.RetestPrice = c.High
 
 		// Check for rejection (close well below high)
@@ -154,7 +154,7 @@ func detectBearishRetest(c Candle, neckline float64, config RetestConfig) *Neckl
 		} else if rejectionPips >= config.MinRejectionPips {
 			// Strong rejection below neckline = confirmed
 			result.Status = RetestConfirmed
-			result.RejectionStrength = math.Min(rejectionPips/30, 1.0) // Normalize
+			result.RejectionStrength = math.Min(rejectionPips/30, 1.0)
 		} else if c.High >= neckline-tolerance {
 			// Touched but weak rejection = in progress
 			result.Status = RetestInProgress
@@ -170,25 +170,21 @@ func detectBullishRetest(c Candle, neckline float64, config RetestConfig) *Neckl
 	result := &NecklineRetest{Status: RetestPending}
 	
 	tolerance := neckline * config.RetestTolerance
-	maxPenetration := config.MaxRetestBreakPips * config.PipSize
+	// DELETED: maxPenetration := config.MaxRetestBreakPips * config.PipSize
 
-	// Check if low reached the neckline area
-	if c.Low <= neckline+tolerance && c.Low >= neckline-maxPenetration {
+	// FIXED: Use symmetric tolerance only
+	if c.Low <= neckline+tolerance && c.Low >= neckline-tolerance {
 		result.RetestPrice = c.Low
 
-		// Check for rejection (close well above low)
 		rejectionPips := (c.Close - c.Low) / config.PipSize
 		
 		if c.Close < neckline {
-			// Closed below neckline = failed retest
 			result.Status = RetestFailed
 			result.RejectionStrength = 0.0
 		} else if rejectionPips >= config.MinRejectionPips {
-			// Strong rejection above neckline = confirmed
 			result.Status = RetestConfirmed
 			result.RejectionStrength = math.Min(rejectionPips/30, 1.0)
 		} else if c.Low <= neckline+tolerance {
-			// Touched but weak rejection = in progress
 			result.Status = RetestInProgress
 			result.RejectionStrength = rejectionPips / config.MinRejectionPips
 		}

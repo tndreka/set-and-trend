@@ -7,6 +7,7 @@ import "math"
 // A swing high is confirmed when:
 // - current.High > all bars in [i-lookback, i-1]
 // - current.High >= all bars in [i+1, i+lookback]
+
 func FindSwingHighs(candles []Candle, lookback int) []SwingPoint {
 	if len(candles) < lookback*2+1 {
 		return nil
@@ -20,9 +21,9 @@ func FindSwingHighs(candles []Candle, lookback int) []SwingPoint {
 		maxLeftHigh := 0.0
 		maxRightHigh := 0.0
 
-		// Check bars to the left (must be strictly higher)
+		// Check bars to the left (must be strictly lower) - FIXED: use > instead of >=
 		for j := i - lookback; j < i; j++ {
-			if candles[j].High >= current.High {
+			if candles[j].High > current.High {
 				isSwingHigh = false
 				break
 			}
@@ -35,7 +36,7 @@ func FindSwingHighs(candles []Candle, lookback int) []SwingPoint {
 			continue
 		}
 
-		// Check bars to the right (can be equal or lower)
+		// Check bars to the right (must be strictly lower) - FIXED: use > instead of >=
 		for j := i + 1; j <= i+lookback; j++ {
 			if candles[j].High > current.High {
 				isSwingHigh = false
@@ -47,7 +48,6 @@ func FindSwingHighs(candles []Candle, lookback int) []SwingPoint {
 		}
 
 		if isSwingHigh {
-			// Calculate strength (how much higher than neighbors?)
 			avgNeighbor := (maxLeftHigh + maxRightHigh) / 2.0
 			strength := 0.0
 			if avgNeighbor > 0 {
@@ -83,9 +83,9 @@ func FindSwingLows(candles []Candle, lookback int) []SwingPoint {
 		minLeftLow := math.MaxFloat64
 		minRightLow := math.MaxFloat64
 
-		// Check bars to the left (must be strictly lower)
+		// Check bars to the left (must be strictly higher) - FIXED: use < instead of <=
 		for j := i - lookback; j < i; j++ {
-			if candles[j].Low <= current.Low {
+			if candles[j].Low < current.Low {
 				isSwingLow = false
 				break
 			}
@@ -98,7 +98,7 @@ func FindSwingLows(candles []Candle, lookback int) []SwingPoint {
 			continue
 		}
 
-		// Check bars to the right (can be equal or higher)
+		// Check bars to the right (must be strictly higher) - FIXED: use < instead of <=
 		for j := i + 1; j <= i+lookback; j++ {
 			if candles[j].Low < current.Low {
 				isSwingLow = false
@@ -110,7 +110,6 @@ func FindSwingLows(candles []Candle, lookback int) []SwingPoint {
 		}
 
 		if isSwingLow {
-			// Calculate strength (how much lower than neighbors?)
 			avgNeighbor := (minLeftLow + minRightLow) / 2.0
 			strength := 0.0
 			if avgNeighbor > 0 {

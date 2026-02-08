@@ -9,71 +9,66 @@ import (
 // ================================================================================
 // MARKET STRUCTURE - Break of Structure (BOS) & Change of Character (CHoCH)
 // ================================================================================
-// WHY: H&S in wrong structure = 35% loss rate. Only trade when H4 BOS aligns with Weekly trend.
-// HOW: Track swing high/low sequences to detect structure breaks.
-// BOS = continuation break, CHoCH = reversal break
-// ================================================================================
 
-// StructureType represents the current market structure
 type StructureType string
 
 const (
-	StructureBullish  StructureType = "BULLISH"  // Higher highs, higher lows
-	StructureBearish  StructureType = "BEARISH"  // Lower highs, lower lows
-	StructureRanging  StructureType = "RANGING"  // No clear direction
+	StructureBullish StructureType = "BULLISH"
+	StructureBearish StructureType = "BEARISH"
+	StructureRanging StructureType = "RANGING"
 )
 
-// BreakType represents the type of structure break
 type BreakType string
 
 const (
-	BreakBOS   BreakType = "BOS"   // Break of Structure (continuation)
-	BreakCHoCH BreakType = "CHOCH" // Change of Character (reversal)
+	BreakBOS   BreakType = "BOS"
+	BreakCHoCH BreakType = "CHOCH"
 )
 
-// StructureBreak represents a detected structure break
 type StructureBreak struct {
-	Type              BreakType
-	Direction         string    // "BULLISH" or "BEARISH"
-	BreakLevel        float64   // The level that was broken
-	BreakPrice        float64   // Where price broke through
-	BreakIndex        int
-	BreakTime         time.Time
-	PriorStructure    StructureType
-	NewStructure      StructureType
-	Strength          float64   // 0.0-1.0
-	IsRetested        bool      // Did price return to retest the break?
-	RetestIndex       int
+	Type           BreakType
+	Direction      string
+	BreakLevel     float64
+	BreakPrice     float64
+	BreakIndex     int
+	BreakTime      time.Time
+	PriorStructure StructureType
+	NewStructure   StructureType
+	Strength       float64
+	IsRetested     bool
+	RetestIndex    int
 }
 
 // MarketStructure holds the current structure state
 type MarketStructure struct {
-	CurrentStructure  StructureType
-	LastSwingHigh     float64
-	LastSwingHighIdx  int
-	LastSwingLow      float64
-	LastSwingLowIdx   int
-	PreviousHigher    bool // Was last swing high higher than before?
-	PreviousLower     bool // Was last swing low lower than before?
-	RecentBreaks      []StructureBreak
-	Strength          float64 // How strong is the current structure
+	CurrentStructure StructureType
+	LastSwingHigh    float64
+	LastSwingHighIdx int
+	LastSwingLow     float64
+	LastSwingLowIdx  int
+	ProtectedHigh    float64 // ADDED: Last swing high that hasn't been broken
+	ProtectedHighIdx int     // ADDED
+	ProtectedLow     float64 // ADDED: Last swing low that hasn't been broken
+	ProtectedLowIdx  int     // ADDED
+	PreviousHigher   bool
+	PreviousLower    bool
+	RecentBreaks     []StructureBreak
+	Strength         float64
 }
 
-// StructureConfig holds detection parameters
 type StructureConfig struct {
-	SwingLookback      int     // Bars to confirm swing
-	MinBreakPips       float64 // Minimum break distance
-	RetestTolerance    float64 // How close price must be for retest
-	MaxBreakAge        int     // How recent must break be to count
-	PipSize            float64
+	SwingLookback   int
+	MinBreakPips    float64
+	RetestTolerance float64
+	MaxBreakAge     int
+	PipSize         float64
 }
 
-// DefaultStructureConfig returns sensible defaults
 func DefaultStructureConfig() StructureConfig {
 	return StructureConfig{
 		SwingLookback:   3,
 		MinBreakPips:    5,
-		RetestTolerance: 0.002, // 0.2%
+		RetestTolerance: 0.002,
 		MaxBreakAge:     20,
 		PipSize:         0.0001,
 	}
@@ -85,16 +80,15 @@ func AnalyzeMarketStructure(candles []Candle, config StructureConfig) *MarketStr
 		return nil
 	}
 
-	ms := &MarketStructure{
-		CurrentStructure: StructureRanging,
-	}
-
 	// Find swing points
 	highs := FindSwingHighs(candles, config.SwingLookback)
 	lows := FindSwingLows(candles, config.SwingLookback)
 
 	if len(highs) < 2 || len(lows) < 2 {
-		return ms
+		return &MarketStructure{
+			CurrentStructure: StructureRanging,
+			Strength:         0.3,
+		}
 	}
 
 	// Get the two most recent swing highs and lows
@@ -103,33 +97,42 @@ func AnalyzeMarketStructure(candles []Candle, config StructureConfig) *MarketStr
 	lastLow := lows[len(lows)-1]
 	prevLow := lows[len(lows)-2]
 
-	ms.LastSwingHigh = lastHigh.Price
-	ms.LastSwingHighIdx = lastHigh.Index
-	ms.LastSwingLow = lastLow.Price
-	ms.LastSwingLowIdx = lastLow.Index
-	ms.PreviousHigher = lastHigh.Price > prevHigh.Price
-	ms.PreviousLower = lastLow.Price < prevLow.Price
-
 	// Determine structure
+	currentStructure := StructureRanging
+	strength := 0.3
+
 	if lastHigh.Price > prevHigh.Price && lastLow.Price > prevLow.Price {
-		ms.CurrentStructure = StructureBullish
-		ms.Strength = calculateStructureStrength(highs, lows, true)
+		currentStructure = StructureBullish
+		strength = calculateStructureStrength(highs, lows, true)
 	} else if lastHigh.Price < prevHigh.Price && lastLow.Price < prevLow.Price {
-		ms.CurrentStructure = StructureBearish
-		ms.Strength = calculateStructureStrength(highs, lows, false)
-	} else {
-		ms.CurrentStructure = StructureRanging
-		ms.Strength = 0.3 // Weak ranging structure
+		currentStructure = StructureBearish
+		strength = calculateStructureStrength(highs, lows, false)
+	}
+
+	ms := &MarketStructure{
+		CurrentStructure: currentStructure,
+		LastSwingHigh:    lastHigh.Price,
+		LastSwingHighIdx: lastHigh.Index,
+		LastSwingLow:     lastLow.Price,
+		LastSwingLowIdx:  lastLow.Index,
+		ProtectedHigh:    lastHigh.Price, // ADDED: Initialize protected levels
+		ProtectedHighIdx: lastHigh.Index, // ADDED
+		ProtectedLow:     lastLow.Price,  // ADDED
+		ProtectedLowIdx:  lastLow.Index,  // ADDED
+		PreviousHigher:   lastHigh.Price > prevHigh.Price,
+		PreviousLower:    lastLow.Price < prevLow.Price,
+		Strength:         strength,
 	}
 
 	// Detect structure breaks
-	ms.RecentBreaks = detectStructureBreaks(candles, highs, lows, config)
+	ms.RecentBreaks = detectStructureBreaks(candles, highs, lows, config, currentStructure)
 
 	return ms
 }
 
 // detectStructureBreaks finds BOS and CHoCH events
-func detectStructureBreaks(candles []Candle, highs, lows []SwingPoint, config StructureConfig) []StructureBreak {
+// FIXED: Correct BOS/CHoCH logic + protected level tracking + RANGING handling
+func detectStructureBreaks(candles []Candle, highs, lows []SwingPoint, config StructureConfig, initialStructure StructureType) []StructureBreak {
 	var breaks []StructureBreak
 	n := len(candles)
 
@@ -138,91 +141,128 @@ func detectStructureBreaks(candles []Candle, highs, lows []SwingPoint, config St
 	}
 
 	// Track structure state as we iterate
-	priorStructure := StructureRanging
-	
-	// Determine initial structure from first swings
-	if len(highs) >= 2 && len(lows) >= 2 {
-		if highs[1].Price > highs[0].Price && lows[1].Price > lows[0].Price {
-			priorStructure = StructureBullish
-		} else if highs[1].Price < highs[0].Price && lows[1].Price < lows[0].Price {
-			priorStructure = StructureBearish
+	priorStructure := initialStructure
+
+	// Track protected levels (last swing that hasn't been broken)
+	protectedHigh := highs[len(highs)-1]
+	protectedLow := lows[len(lows)-1]
+
+	// Track which direction was last broken to prevent conflicting signals
+	lastBreakDirection := ""
+
+	// Look for breaks of protected swing lows
+	for j := protectedLow.Index + 1; j < n && j <= protectedLow.Index+config.MaxBreakAge; j++ {
+		c := candles[j]
+
+		breakPips := (protectedLow.Price - c.Low) / config.PipSize
+		if breakPips < config.MinBreakPips || c.Close >= protectedLow.Price {
+			continue
 		}
-	}
 
-	// Look for breaks of swing lows in bullish structure (bearish BOS/CHoCH)
-	for i := 2; i < len(lows); i++ {
-		swingLow := lows[i-1]
-		
-		// Find the candle that broke this low
-		for j := swingLow.Index + 1; j < n && j <= swingLow.Index+config.MaxBreakAge; j++ {
-			c := candles[j]
-			
-			breakPips := (swingLow.Price - c.Low) / config.PipSize
-			if breakPips >= config.MinBreakPips && c.Close < swingLow.Price {
-				// This is a break of the swing low
-				breakType := BreakBOS
-				newStructure := StructureBearish
+		// VALID BREAK OF LOW DETECTED
+		// Determine break type based on prior structure (FIXED LOGIC)
+		var breakType BreakType
+		var newStructure StructureType
 
-				if priorStructure == StructureBullish {
-					breakType = BreakCHoCH // Reversal from bullish to bearish
-				}
-
-				brk := StructureBreak{
-					Type:           breakType,
-					Direction:      "BEARISH",
-					BreakLevel:     swingLow.Price,
-					BreakPrice:     c.Low,
-					BreakIndex:     j,
-					BreakTime:      c.Timestamp,
-					PriorStructure: priorStructure,
-					NewStructure:   newStructure,
-					Strength:       calculateBreakStrength(c, swingLow.Price, breakPips, config),
-				}
-
-				// Check for retest
-				brk.IsRetested, brk.RetestIndex = checkBreakRetest(candles, j, swingLow.Price, "BEARISH", config)
-
-				breaks = append(breaks, brk)
-				priorStructure = newStructure
-				break // Only count first break of this level
-			}
+		if priorStructure == StructureBullish {
+			// Breaking low in bullish structure = REVERSAL (CHoCH)
+			breakType = BreakCHoCH
+			newStructure = StructureBearish
+		} else if priorStructure == StructureBearish {
+			// Breaking low in bearish structure = CONTINUATION (BOS)
+			breakType = BreakBOS
+			newStructure = StructureBearish
+		} else { // RANGING
+			// First break from ranging = CHoCH (not BOS)
+			breakType = BreakCHoCH
+			newStructure = StructureBearish
 		}
-	}
 
-	// Look for breaks of swing highs in bearish structure (bullish BOS/CHoCH)
-	for i := 2; i < len(highs); i++ {
-		swingHigh := highs[i-1]
-		
-		for j := swingHigh.Index + 1; j < n && j <= swingHigh.Index+config.MaxBreakAge; j++ {
-			c := candles[j]
-			
-			breakPips := (c.High - swingHigh.Price) / config.PipSize
-			if breakPips >= config.MinBreakPips && c.Close > swingHigh.Price {
-				breakType := BreakBOS
-				newStructure := StructureBullish
+		brk := StructureBreak{
+			Type:           breakType,
+			Direction:      "BEARISH",
+			BreakLevel:     protectedLow.Price,
+			BreakPrice:     c.Low,
+			BreakIndex:     j,
+			BreakTime:      c.Timestamp,
+			PriorStructure: priorStructure,
+			NewStructure:   newStructure,
+			Strength:       calculateBreakStrength(c, protectedLow.Price, breakPips, config),
+		}
 
-				if priorStructure == StructureBearish {
-					breakType = BreakCHoCH // Reversal from bearish to bullish
-				}
+		brk.IsRetested, brk.RetestIndex = checkBreakRetest(candles, j, protectedLow.Price, "BEARISH", config)
 
-				brk := StructureBreak{
-					Type:           breakType,
-					Direction:      "BULLISH",
-					BreakLevel:     swingHigh.Price,
-					BreakPrice:     c.High,
-					BreakIndex:     j,
-					BreakTime:      c.Timestamp,
-					PriorStructure: priorStructure,
-					NewStructure:   newStructure,
-					Strength:       calculateBreakStrength(c, swingHigh.Price, breakPips, config),
-				}
+		breaks = append(breaks, brk)
+		priorStructure = newStructure
+		lastBreakDirection = "BEARISH"
 
-				brk.IsRetested, brk.RetestIndex = checkBreakRetest(candles, j, swingHigh.Price, "BULLISH", config)
-
-				breaks = append(breaks, brk)
-				priorStructure = newStructure
+		// Update protected low to next swing low
+		for i := len(lows) - 2; i >= 0; i-- {
+			if lows[i].Index < protectedLow.Index {
+				protectedLow = lows[i]
 				break
 			}
+		}
+
+		break // Only count first break of this level
+	}
+
+	// Look for breaks of protected swing highs
+	// Skip if we already had a bearish break (prevent conflicting signals)
+	if lastBreakDirection != "BEARISH" {
+		for j := protectedHigh.Index + 1; j < n && j <= protectedHigh.Index+config.MaxBreakAge; j++ {
+			c := candles[j]
+
+			breakPips := (c.High - protectedHigh.Price) / config.PipSize
+			if breakPips < config.MinBreakPips || c.Close <= protectedHigh.Price {
+				continue
+			}
+
+			// VALID BREAK OF HIGH DETECTED
+			// Determine break type based on prior structure (FIXED LOGIC)
+			var breakType BreakType
+			var newStructure StructureType
+
+			if priorStructure == StructureBearish {
+				// Breaking high in bearish structure = REVERSAL (CHoCH)
+				breakType = BreakCHoCH
+				newStructure = StructureBullish
+			} else if priorStructure == StructureBullish {
+				// Breaking high in bullish structure = CONTINUATION (BOS)
+				breakType = BreakBOS
+				newStructure = StructureBullish
+			} else { // RANGING
+				// First break from ranging = CHoCH (not BOS)
+				breakType = BreakCHoCH
+				newStructure = StructureBullish
+			}
+
+			brk := StructureBreak{
+				Type:           breakType,
+				Direction:      "BULLISH",
+				BreakLevel:     protectedHigh.Price,
+				BreakPrice:     c.High,
+				BreakIndex:     j,
+				BreakTime:      c.Timestamp,
+				PriorStructure: priorStructure,
+				NewStructure:   newStructure,
+				Strength:       calculateBreakStrength(c, protectedHigh.Price, breakPips, config),
+			}
+
+			brk.IsRetested, brk.RetestIndex = checkBreakRetest(candles, j, protectedHigh.Price, "BULLISH", config)
+
+			breaks = append(breaks, brk)
+			priorStructure = newStructure
+
+			// Update protected high to next swing high
+			for i := len(highs) - 2; i >= 0; i-- {
+				if highs[i].Index < protectedHigh.Index {
+					protectedHigh = highs[i]
+					break
+				}
+			}
+
+			break // Only count first break of this level
 		}
 	}
 
@@ -251,13 +291,12 @@ func calculateStructureStrength(highs, lows []SwingPoint, isBullish bool) float6
 		}
 	}
 
-	// More consecutive = stronger structure
 	strength += float64(consecutiveValid) * 0.1
-
 	return math.Min(strength, 1.0)
 }
 
 // calculateBreakStrength determines break quality
+// FIXED: Use pips instead of price percentage for close distance
 func calculateBreakStrength(candle Candle, breakLevel, breakPips float64, config StructureConfig) float64 {
 	strength := 0.5
 
@@ -265,9 +304,10 @@ func calculateBreakStrength(candle Candle, breakLevel, breakPips float64, config
 	breakScore := breakPips / (config.MinBreakPips * 3)
 	strength += math.Min(breakScore*0.2, 0.2)
 
-	// Close strongly beyond break level
+	// Close strongly beyond break level - FIXED: use pips not price %
 	closeDistance := math.Abs(candle.Close - breakLevel)
-	if closeDistance > breakLevel*0.001 { // 0.1% beyond
+	minCloseDistancePips := config.MinBreakPips * config.PipSize
+	if closeDistance > minCloseDistancePips {
 		strength += 0.15
 	}
 
@@ -282,31 +322,56 @@ func calculateBreakStrength(candle Candle, breakLevel, breakPips float64, config
 }
 
 // checkBreakRetest checks if price returned to retest the broken level
+// FIXED: Option to use ATR-based tolerance instead of price %
 func checkBreakRetest(candles []Candle, breakIdx int, breakLevel float64, direction string, config StructureConfig) (bool, int) {
-	tolerance := breakLevel * config.RetestTolerance
+    // Option 1: Price-based tolerance (original)
+    // tolerance := breakLevel * config.RetestTolerance
+    
+    // Option 2: ATR-based tolerance (better for multi-asset)
+    var tolerance float64
+    if len(candles) >= 20 {
+        atr := calculateATRForRetest(candles[breakIdx-14:breakIdx], 14)
+        tolerance = atr * 0.3 // 30% of ATR
+    } else {
+        tolerance = breakLevel * config.RetestTolerance // Fallback
+    }
 
-	for i := breakIdx + 1; i < len(candles) && i <= breakIdx+10; i++ {
-		c := candles[i]
+    for i := breakIdx + 1; i < len(candles) && i <= breakIdx+10; i++ {
+        c := candles[i]
 
-		if direction == "BULLISH" {
-			// Retest = price pulls back to the broken high (now support)
-			if c.Low <= breakLevel+tolerance && c.Low >= breakLevel-tolerance {
-				// Retest confirmed if it holds above
-				if c.Close > breakLevel {
-					return true, i
-				}
-			}
-		} else {
-			// Retest = price pulls back to the broken low (now resistance)
-			if c.High >= breakLevel-tolerance && c.High <= breakLevel+tolerance {
-				if c.Close < breakLevel {
-					return true, i
-				}
-			}
-		}
-	}
+        if direction == "BULLISH" {
+            if c.Low <= breakLevel+tolerance && c.Low >= breakLevel-tolerance {
+                if c.Close > breakLevel {
+                    return true, i
+                }
+            }
+        } else {
+            if c.High >= breakLevel-tolerance && c.High <= breakLevel+tolerance {
+                if c.Close < breakLevel {
+                    return true, i
+                }
+            }
+        }
+    }
 
-	return false, 0
+    return false, 0
+}
+
+// Add helper function
+func calculateATRForRetest(candles []Candle, period int) float64 {
+    if len(candles) < period+1 {
+        return 0
+    }
+    
+    var trSum float64
+    for i := 1; i < len(candles); i++ {
+        highLow := candles[i].High - candles[i].Low
+        highClose := math.Abs(candles[i].High - candles[i-1].Close)
+        lowClose := math.Abs(candles[i].Low - candles[i-1].Close)
+        trSum += math.Max(highLow, math.Max(highClose, lowClose))
+    }
+    
+    return trSum / float64(len(candles)-1)
 }
 
 // GetRecentBreaks returns breaks within the last N bars
@@ -314,7 +379,7 @@ func GetRecentBreaks(ms *MarketStructure, currentBar, lookback int) []StructureB
 	if ms == nil {
 		return nil
 	}
-	
+
 	var recent []StructureBreak
 	for _, brk := range ms.RecentBreaks {
 		if currentBar-brk.BreakIndex <= lookback {
@@ -328,16 +393,16 @@ func GetRecentBreaks(ms *MarketStructure, currentBar, lookback int) []StructureB
 func HasRecentBullishBOS(candles []Candle, lookback int) bool {
 	config := DefaultStructureConfig()
 	ms := AnalyzeMarketStructure(candles, config)
-	
+
 	if ms == nil {
 		return false
 	}
 
 	currentBar := len(candles) - 1
 	for _, brk := range ms.RecentBreaks {
-		if brk.Direction == "BULLISH" && 
-		   brk.Type == BreakBOS && 
-		   currentBar-brk.BreakIndex <= lookback {
+		if brk.Direction == "BULLISH" &&
+			brk.Type == BreakBOS &&
+			currentBar-brk.BreakIndex <= lookback {
 			return true
 		}
 	}
@@ -348,16 +413,16 @@ func HasRecentBullishBOS(candles []Candle, lookback int) bool {
 func HasRecentBearishBOS(candles []Candle, lookback int) bool {
 	config := DefaultStructureConfig()
 	ms := AnalyzeMarketStructure(candles, config)
-	
+
 	if ms == nil {
 		return false
 	}
 
 	currentBar := len(candles) - 1
 	for _, brk := range ms.RecentBreaks {
-		if brk.Direction == "BEARISH" && 
-		   brk.Type == BreakBOS && 
-		   currentBar-brk.BreakIndex <= lookback {
+		if brk.Direction == "BEARISH" &&
+			brk.Type == BreakBOS &&
+			currentBar-brk.BreakIndex <= lookback {
 			return true
 		}
 	}
@@ -368,16 +433,16 @@ func HasRecentBearishBOS(candles []Candle, lookback int) bool {
 func HasRecentCHoCH(candles []Candle, lookback int, direction string) bool {
 	config := DefaultStructureConfig()
 	ms := AnalyzeMarketStructure(candles, config)
-	
+
 	if ms == nil {
 		return false
 	}
 
 	currentBar := len(candles) - 1
 	for _, brk := range ms.RecentBreaks {
-		if brk.Type == BreakCHoCH && 
-		   brk.Direction == direction && 
-		   currentBar-brk.BreakIndex <= lookback {
+		if brk.Type == BreakCHoCH &&
+			brk.Direction == direction &&
+			currentBar-brk.BreakIndex <= lookback {
 			return true
 		}
 	}
@@ -397,7 +462,7 @@ func CalculateBOSScoreDebug(candles []Candle, direction string, debug bool) floa
 
 	config := DefaultStructureConfig()
 	ms := AnalyzeMarketStructure(candles, config)
-	
+
 	if ms == nil {
 		if debug {
 			fmt.Printf("      [BOS] AnalyzeMarketStructure returned nil\n")
@@ -414,23 +479,23 @@ func CalculateBOSScoreDebug(candles []Candle, direction string, debug bool) floa
 
 	// Base score from structure alignment
 	if direction == DirectionLong && ms.CurrentStructure == StructureBullish {
-		score += 0.5 // Boosted from 0.4
+		score += 0.5
 		if debug {
 			fmt.Printf("      [BOS] +0.5 for bullish structure alignment\n")
 		}
 	} else if direction == DirectionLong && ms.CurrentStructure == StructureRanging {
-		score += 0.35 // Boosted from 0.2 - pattern might be forming breakout
+		score += 0.35
 		if debug {
 			fmt.Printf("      [BOS] +0.35 for ranging structure (potential breakout)\n")
 		}
 	}
 	if direction == DirectionShort && ms.CurrentStructure == StructureBearish {
-		score += 0.5 // Boosted from 0.4
+		score += 0.5
 		if debug {
 			fmt.Printf("      [BOS] +0.5 for bearish structure alignment\n")
 		}
 	} else if direction == DirectionShort && ms.CurrentStructure == StructureRanging {
-		score += 0.35 // Boosted from 0.2
+		score += 0.35
 		if debug {
 			fmt.Printf("      [BOS] +0.35 for ranging structure (potential breakout)\n")
 		}
@@ -444,14 +509,14 @@ func CalculateBOSScoreDebug(candles []Candle, direction string, debug bool) floa
 		}
 
 		if debug {
-			fmt.Printf("      [BOS] Break: direction=%s, barsAgo=%d, strength=%.2f\n", 
-				brk.Direction, barsAgo, brk.Strength)
+			fmt.Printf("      [BOS] Break: direction=%s, type=%s, barsAgo=%d, strength=%.2f\n",
+				brk.Direction, brk.Type, barsAgo, brk.Strength)
 		}
 
 		if direction == DirectionLong && brk.Direction == "BULLISH" {
 			bosScore := brk.Strength * 0.4
 			if brk.IsRetested {
-				bosScore *= 1.2 // Retested breaks are stronger
+				bosScore *= 1.2
 			}
 			recencyBonus := 1.0 - (float64(barsAgo) / 15.0)
 			bosScore *= (1.0 + recencyBonus*0.2)
@@ -494,14 +559,13 @@ func CalculateBOSScoreDebug(candles []Candle, direction string, debug bool) floa
 func CheckMultiTFStructureAlignment(htfStructure, ltfStructure StructureType, direction string) float64 {
 	score := 0.0
 
-	// Perfect alignment
 	if direction == DirectionLong {
 		if htfStructure == StructureBullish && ltfStructure == StructureBullish {
 			score = 1.0
 		} else if htfStructure == StructureBullish && ltfStructure == StructureRanging {
-			score = 0.6 // HTF bullish, LTF ranging = okay
+			score = 0.6
 		} else if htfStructure == StructureRanging && ltfStructure == StructureBullish {
-			score = 0.4 // Less confident
+			score = 0.4
 		}
 	} else if direction == DirectionShort {
 		if htfStructure == StructureBearish && ltfStructure == StructureBearish {

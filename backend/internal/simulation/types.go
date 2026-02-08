@@ -71,6 +71,7 @@ type TradeResult struct {
 	PnLPips     float64
 	PnLR        float64  // P&L in R multiples
 	Outcome     string   // "WIN", "LOSS", "TIMEOUT"
+	ExitReason string  // ADD THIS: SL_HIT, TP_HIT, TIMEOUT
 	BarsHeld    int
 }
 

@@ -113,7 +113,7 @@ func detectSupplyZones(candles []Candle, config ZoneDetectionConfig) []SupplyDem
 		// The zone is the base candle's range (or just upper portion)
 		zoneHigh := current.High
 		zoneLow := math.Max(current.Open, current.Close) // Body top
-		zoneWidth := (zoneHigh - zoneLow) / current.High
+		zoneWidth := (zoneHigh - zoneLow) / zoneHigh
 
 		// Skip if zone too wide
 		if zoneWidth > config.MaxZoneWidthPercent {
@@ -167,7 +167,7 @@ func detectDemandZones(candles []Candle, config ZoneDetectionConfig) []SupplyDem
 		// The zone is the base candle's range (or just lower portion)
 		zoneLow := current.Low
 		zoneHigh := math.Min(current.Open, current.Close) // Body bottom
-		zoneWidth := (zoneHigh - zoneLow) / current.Low
+		zoneWidth := (zoneHigh - zoneLow) / zoneLow
 
 		// Skip if zone too wide
 		if zoneWidth > config.MaxZoneWidthPercent {

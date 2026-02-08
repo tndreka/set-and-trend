@@ -169,19 +169,52 @@ func calculateIHSContextBonus(ctx MarketContext) float64 {
 	return bonus
 }
 
+// // CalculateEMA calculates Exponential Moving Average
+// func CalculateEMA(candles []Candle, period int) float64 {
+// 	if len(candles) < period {
+// 		return 0
+// 	}
+
+// 	// Step 1: SMA initialization
+// 	var sma float64
+// 	for i := 0; i < period; i++ {
+// 		sma += candles[i].Close
+// 	}
+// 	ema := sma / float64(period)
+
+// 	// Step 2: EMA recursion
+// 	multiplier := 2.0 / float64(period+1)
+// 	for i := period; i < len(candles); i++ {
+// 		ema = (candles[i].Close * multiplier) + (ema * (1 - multiplier))
+// 	}
+
+// 	return ema
+// }
+
 // CalculateEMA calculates Exponential Moving Average
 func CalculateEMA(candles []Candle, period int) float64 {
 	if len(candles) < period {
 		if len(candles) == 0 {
 			return 0.0
 		}
-		return candles[len(candles)-1].Close
+		// Return SMA of available data as fallback
+		var sum float64
+		for i := 0; i < len(candles); i++ {
+			sum += candles[i].Close
+		}
+		return sum / float64(len(candles))
 	}
 
-	multiplier := 2.0 / float64(period+1)
-	ema := candles[0].Close
+	// Step 1: Initialize with SMA of first N periods
+	var sma float64
+	for i := 0; i < period; i++ {
+		sma += candles[i].Close
+	}
+	ema := sma / float64(period)
 
-	for i := 1; i < len(candles); i++ {
+	// Step 2: Apply EMA formula for remaining candles
+	multiplier := 2.0 / float64(period+1)
+	for i := period; i < len(candles); i++ {
 		ema = (candles[i].Close * multiplier) + (ema * (1 - multiplier))
 	}
 

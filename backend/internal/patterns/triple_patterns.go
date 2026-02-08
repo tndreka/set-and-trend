@@ -2,6 +2,7 @@ package patterns
 
 import (
 	"math"
+	"set-and-trend/backend/internal/constants"
 )
 
 // ================================================================================
@@ -277,10 +278,7 @@ func calculateTripleTimeSymmetry(idx1, idx2, idx3 int) float64 {
 
 // generateTripleTopSignal creates a SHORT signal for triple top
 func generateTripleTopSignal(s *DetectedStructure, symbol string, confidence float64) *TradeSignal {
-	pipSize := 0.0001 // Should use constants.GetPipSizeForSymbol
-	if len(symbol) >= 6 && symbol[3:6] == "JPY" {
-		pipSize = 0.01
-	}
+	pipSize := constants.GetPipSizeForSymbol(symbol)
 
 	// Entry: Below neckline
 	entryPrice := s.NecklinePrice - (10 * pipSize)
@@ -315,10 +313,7 @@ func generateTripleTopSignal(s *DetectedStructure, symbol string, confidence flo
 
 // generateTripleBottomSignal creates a LONG signal for triple bottom
 func generateTripleBottomSignal(s *DetectedStructure, symbol string, confidence float64) *TradeSignal {
-	pipSize := 0.0001
-	if len(symbol) >= 6 && symbol[3:6] == "JPY" {
-		pipSize = 0.01
-	}
+	pipSize := constants.GetPipSizeForSymbol(symbol)
 
 	// Entry: Above neckline
 	entryPrice := s.NecklinePrice + (10 * pipSize)

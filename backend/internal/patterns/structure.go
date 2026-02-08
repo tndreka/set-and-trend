@@ -92,10 +92,16 @@ func validateHSStructure(candles []Candle, ls, head, rs SwingPoint) *DetectedStr
 		return nil // Pattern too small (< 2%)
 	}
 
-	// Step 4: Calculate time symmetry
+	// Step 4: Calculate time symmetry (FIXED - division by zero protection)
 	distLS := head.Index - ls.Index
 	distRS := rs.Index - head.Index
-	timeSymmetry := 1.0 - (math.Abs(float64(distLS-distRS)) / float64(max(distLS, distRS)))
+	maxDist := max(distLS, distRS)
+	var timeSymmetry float64
+	if maxDist == 0 {
+		timeSymmetry = 0.5 // Neutral if no distance
+	} else {
+		timeSymmetry = 1.0 - (math.Abs(float64(distLS-distRS)) / float64(maxDist))
+	}
 
 	// Step 5: Volume analysis
 	volumeScore := calculateVolumeScore(candles, ls.Index, head.Index, rs.Index)
@@ -131,6 +137,7 @@ func validateHSStructure(candles []Candle, ls, head, rs SwingPoint) *DetectedStr
 	return structure
 }
 
+
 // validateIHSStructure validates a bullish Inverse H&S pattern
 func validateIHSStructure(candles []Candle, ls, head, rs SwingPoint) *DetectedStructure {
 	// Rule 1: Head must be the lowest
@@ -162,10 +169,16 @@ func validateIHSStructure(candles []Candle, ls, head, rs SwingPoint) *DetectedSt
 		return nil
 	}
 
-	// Step 4: Calculate time symmetry
+	// Step 4: Calculate time symmetry (FIXED - division by zero protection)
 	distLS := head.Index - ls.Index
 	distRS := rs.Index - head.Index
-	timeSymmetry := 1.0 - (math.Abs(float64(distLS-distRS)) / float64(max(distLS, distRS)))
+	maxDist := max(distLS, distRS)
+	var timeSymmetry float64
+	if maxDist == 0 {
+		timeSymmetry = 0.5
+	} else {
+		timeSymmetry = 1.0 - (math.Abs(float64(distLS-distRS)) / float64(maxDist))
+	}
 
 	// Step 5: Volume analysis (inverse: volume should increase on RS)
 	volumeScore := calculateVolumeScoreIHS(candles, ls.Index, head.Index, rs.Index)

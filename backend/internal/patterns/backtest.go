@@ -344,35 +344,34 @@ func processStructureForBacktest(structure *DetectedStructure, window []Candle, 
 		return nil
 	}
 
-		// Calculate realistic entry price with spread and slippage
+	// Calculate realistic entry price with spread and slippage
 	pipSize := constants.GetPipSizeForSymbol(signal.Symbol)
 	spreadCost := config.SpreadPips * pipSize
-	entrySlippage := config.SlippagePips * pipSize * 0.5  // Half slippage on entry
+	entrySlippage := config.SlippagePips * pipSize * 0.5
 
 	var actualEntry float64
 
+	// FIXED: Apply spread cost to BOTH directions
 	if signal.Direction == DirectionShort {
-		// SHORT: Sell at Bid, but we get filled slightly worse (slippage)
+		// SHORT: Sell at Bid, but we pay spread AND slippage
 		// Signal.EntryPrice is theoretical neckline break
-		// Actual fill is lower (worse) by slippage
-		actualEntry = signal.EntryPrice - entrySlippage
+		// Actual fill is worse by spread + slippage
+		actualEntry = signal.EntryPrice - spreadCost - entrySlippage
 	} else {
 		// LONG: Buy at Ask (Bid + spread) + slippage
-		// We pay spread AND get slippage against us
 		actualEntry = signal.EntryPrice + spreadCost + entrySlippage
 	}
 
 	// Recalculate Risk with ACTUAL entry vs original SL
-	// The SL level stays the same, but our risk amount changes based on fill
 	var risk float64
 	if signal.Direction == DirectionShort {
-		risk = signal.StopLoss - actualEntry  // SL is higher than entry for short
+		risk = signal.StopLoss - actualEntry
 	} else {
-		risk = actualEntry - signal.StopLoss  // SL is lower than entry for long
+		risk = actualEntry - signal.StopLoss
 	}
 
 	if risk <= 0 {
-		return nil  // Invalid: SL on wrong side or too tight after slippage
+		return nil
 	}
 
 	// Recalculate Reward based on actual entry vs original TP
@@ -385,8 +384,6 @@ func processStructureForBacktest(structure *DetectedStructure, window []Candle, 
 
 	actualRR := reward / risk
 	
-	// CRITICAL: Filter if spread/slippage killed the R:R ratio
-	// Example: Signal shows 1.5 RR, but after costs it's 1.2 -> Filter out
 	if actualRR < config.MinRR {
 		return nil
 	}
@@ -397,7 +394,6 @@ func processStructureForBacktest(structure *DetectedStructure, window []Candle, 
 		return nil
 	}
 
-	// Calculate R-multiple based on actual risk
 	pnlR := 0.0
 	if risk > 0 {
 		pnlR = exit.PnL / risk
@@ -419,14 +415,14 @@ func processStructureForBacktest(structure *DetectedStructure, window []Candle, 
 	return &BacktestTrade{
 		EntryTime:   window[len(window)-1].Timestamp,
 		ExitTime:    exit.ExitTime,
-		EntryPrice:  actualEntry, // Use the realistic fill price
+		EntryPrice:  actualEntry,
 		ExitPrice:   exit.ExitPrice,
 		StopLoss:    signal.StopLoss,
 		TakeProfit:  signal.TakeProfit,
 		Direction:   signal.Direction,
 		PatternType: structure.PatternType,
 		Confidence:  finalConfidence,
-		RiskReward:  actualRR, // Use realistic RR
+		RiskReward:  actualRR,
 		PnL:         exit.PnL,
 		PnLPips:     exit.PnLPips,
 		PnLR:        pnlR,
