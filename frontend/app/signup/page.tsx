@@ -21,8 +21,9 @@ export default function SignupPage() {
     setError('');
     setLoading(true);
 
-    try {
-      const response = await apiClient.signup({
+ try {
+      // First signup
+      await apiClient.signup({
         username,
         email,
         password,
@@ -30,11 +31,14 @@ export default function SignupPage() {
         surname: surname || undefined,
       });
 
+      // Then auto-login to get token
+      const loginResponse = await apiClient.login({
+        username_or_email: username,
+        password,
+      });
+
       // Save token to localStorage
-      localStorage.setItem('auth_token', response.data.data.token);
-      if (response.data.data.user) {
-        localStorage.setItem('user', JSON.stringify(response.data.data.user));
-      }
+      localStorage.setItem('auth_token', loginResponse.data.data.token);
 
       // Redirect to dashboard
       router.push('/dashboard');
