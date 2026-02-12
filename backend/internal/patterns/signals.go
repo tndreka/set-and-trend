@@ -29,8 +29,9 @@ func GenerateTradeSignal(s *DetectedStructure, symbol string, confidence float64
 
 // generateHSSignal creates a SHORT signal for bearish H&S
 func generateHSSignal(s *DetectedStructure, symbol string, confidence float64) *TradeSignal {
-	// Get pip size for this symbol (JPY pairs use 0.01, others 0.0001)
-	pipSize := constants.GetPipSizeForSymbol(symbol)
+	// Get pip size for this symbol from registry
+	sym := constants.MustGet(symbol)
+	pipSize := sym.PipSize
 
 	// Pattern height = Head - Neckline
 	patternHeight := s.HeadPrice - s.NecklinePrice
@@ -65,8 +66,9 @@ func generateHSSignal(s *DetectedStructure, symbol string, confidence float64) *
 
 // generateIHSSignal creates a LONG signal for bullish inverse H&S
 func generateIHSSignal(s *DetectedStructure, symbol string, confidence float64) *TradeSignal {
-	// Get pip size for this symbol
-	pipSize := constants.GetPipSizeForSymbol(symbol)
+	// Get pip size for this symbol from registry
+	sym := constants.MustGet(symbol)
+	pipSize := sym.PipSize
 
 	// Pattern height = Neckline - Head (inverse)
 	patternHeight := s.NecklinePrice - s.HeadPrice
@@ -109,7 +111,8 @@ func ValidateSignal(signal *TradeSignal, minRR float64, minConfidence float64) b
 
 // generateDoubleTopSignal creates a SHORT signal for bearish double top
 func generateDoubleTopSignal(s *DetectedStructure, symbol string, confidence float64) *TradeSignal {
-	pipSize := constants.GetPipSizeForSymbol(symbol)
+	sym := constants.MustGet(symbol)
+	pipSize := sym.PipSize
 
 	// Entry: Neckline break (trough level)
 	entryPrice := s.NecklinePrice - (10 * pipSize)
@@ -143,7 +146,8 @@ func generateDoubleTopSignal(s *DetectedStructure, symbol string, confidence flo
 
 // generateDoubleBottomSignal creates a LONG signal for bullish double bottom
 func generateDoubleBottomSignal(s *DetectedStructure, symbol string, confidence float64) *TradeSignal {
-	pipSize := constants.GetPipSizeForSymbol(symbol)
+	sym := constants.MustGet(symbol)
+	pipSize := sym.PipSize
 
 	// Entry: Neckline break (peak level)
 	entryPrice := s.NecklinePrice + (10 * pipSize)
@@ -177,7 +181,8 @@ func generateDoubleBottomSignal(s *DetectedStructure, symbol string, confidence 
 
 // generateTripleTopSignal creates a SHORT signal for bearish triple top
 func generateTripleTopSignal(s *DetectedStructure, symbol string, confidence float64) *TradeSignal {
-	pipSize := constants.GetPipSizeForSymbol(symbol)
+	sym := constants.MustGet(symbol)
+	pipSize := sym.PipSize
 
 	// Entry: Neckline break
 	entryPrice := s.NecklinePrice - (10 * pipSize)
@@ -211,7 +216,8 @@ func generateTripleTopSignal(s *DetectedStructure, symbol string, confidence flo
 
 // generateTripleBottomSignal creates a LONG signal for bullish triple bottom
 func generateTripleBottomSignal(s *DetectedStructure, symbol string, confidence float64) *TradeSignal {
-	pipSize := constants.GetPipSizeForSymbol(symbol)
+	sym := constants.MustGet(symbol)
+	pipSize := sym.PipSize
 
 	// Entry: Neckline break
 	entryPrice := s.NecklinePrice + (10 * pipSize)

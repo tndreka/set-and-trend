@@ -2,6 +2,8 @@ package patterns
 
 import (
 	"math"
+
+	"set-and-trend/backend/internal/constants"
 )
 
 // ================================================================================
@@ -13,16 +15,27 @@ import (
 
 // DetectTripleTop finds triple top patterns (bearish reversal)
 // Three peaks at similar price levels with two troughs between them
-func DetectTripleTop(candles []Candle, lookback int) *DetectedStructure {
+func DetectTripleTop(candles []Candle, lookback int, symbol string) *DetectedStructure {
 	if len(candles) < lookback || len(candles) < 30 {
 		return nil
 	}
+
+	// Get symbol config for pip-based tolerance
+	sym := constants.MustGet(symbol)
 
 	// Find swing highs in the window
 	highs := findSwingHighsInRange(candles, lookback, 5)
 	if len(highs) < 3 {
 		return nil
 	}
+
+	// Tolerance in pips for matching price levels
+	priceTolerancePips := 80.0 // 80 pips for triple patterns (wider tolerance)
+	priceTolerance := sym.PipsToPrice(priceTolerancePips)
+	troughTolerancePips := 100.0
+	troughTolerance := sym.PipsToPrice(troughTolerancePips)
+	minHeightPips := 150.0 // Minimum pattern height
+	minHeight := sym.PipsToPrice(minHeightPips)
 
 	// Try to find 3 highs at similar levels
 	for i := 0; i <= len(highs)-3; i++ {
@@ -35,17 +48,16 @@ func DetectTripleTop(candles []Candle, lookback int) *DetectedStructure {
 			continue
 		}
 
-		// Check all three tops are within price tolerance (0.8%)
+		// Check all three tops are within pip tolerance (similar height)
 		avgPrice := (top1.Price + top2.Price + top3.Price) / 3.0
-		priceTolerance := 0.008
 
-		if math.Abs(top1.Price-avgPrice)/avgPrice > priceTolerance {
+		if math.Abs(top1.Price-avgPrice) > priceTolerance {
 			continue
 		}
-		if math.Abs(top2.Price-avgPrice)/avgPrice > priceTolerance {
+		if math.Abs(top2.Price-avgPrice) > priceTolerance {
 			continue
 		}
-		if math.Abs(top3.Price-avgPrice)/avgPrice > priceTolerance {
+		if math.Abs(top3.Price-avgPrice) > priceTolerance {
 			continue
 		}
 
@@ -64,14 +76,13 @@ func DetectTripleTop(candles []Candle, lookback int) *DetectedStructure {
 
 		// Troughs should also be at similar levels (neckline)
 		neckline := (trough1Price + trough2Price) / 2.0
-		troughTolerance := 0.01
-		if math.Abs(trough1Price-trough2Price)/neckline > troughTolerance {
+		if math.Abs(trough1Price-trough2Price) > troughTolerance {
 			continue
 		}
 
-		// Pattern must have meaningful height (at least 1.5%)
+		// Pattern must have meaningful height
 		patternHeight := avgPrice - neckline
-		if patternHeight/avgPrice < 0.015 {
+		if patternHeight < minHeight {
 			continue
 		}
 
@@ -108,16 +119,27 @@ func DetectTripleTop(candles []Candle, lookback int) *DetectedStructure {
 
 // DetectTripleBottom finds triple bottom patterns (bullish reversal)
 // Three troughs at similar price levels with two peaks between them
-func DetectTripleBottom(candles []Candle, lookback int) *DetectedStructure {
+func DetectTripleBottom(candles []Candle, lookback int, symbol string) *DetectedStructure {
 	if len(candles) < lookback || len(candles) < 30 {
 		return nil
 	}
+
+	// Get symbol config for pip-based tolerance
+	sym := constants.MustGet(symbol)
 
 	// Find swing lows in the window
 	lows := findSwingLowsInRange(candles, lookback, 5)
 	if len(lows) < 3 {
 		return nil
 	}
+
+	// Tolerance in pips for matching price levels
+	priceTolerancePips := 80.0 // 80 pips for triple patterns
+	priceTolerance := sym.PipsToPrice(priceTolerancePips)
+	peakTolerancePips := 100.0
+	peakTolerance := sym.PipsToPrice(peakTolerancePips)
+	minHeightPips := 150.0
+	minHeight := sym.PipsToPrice(minHeightPips)
 
 	// Try to find 3 lows at similar levels
 	for i := 0; i <= len(lows)-3; i++ {
@@ -130,17 +152,16 @@ func DetectTripleBottom(candles []Candle, lookback int) *DetectedStructure {
 			continue
 		}
 
-		// Check all three bottoms are within price tolerance (0.8%)
+		// Check all three bottoms are within pip tolerance (similar depth)
 		avgPrice := (bottom1.Price + bottom2.Price + bottom3.Price) / 3.0
-		priceTolerance := 0.008
 
-		if math.Abs(bottom1.Price-avgPrice)/avgPrice > priceTolerance {
+		if math.Abs(bottom1.Price-avgPrice) > priceTolerance {
 			continue
 		}
-		if math.Abs(bottom2.Price-avgPrice)/avgPrice > priceTolerance {
+		if math.Abs(bottom2.Price-avgPrice) > priceTolerance {
 			continue
 		}
-		if math.Abs(bottom3.Price-avgPrice)/avgPrice > priceTolerance {
+		if math.Abs(bottom3.Price-avgPrice) > priceTolerance {
 			continue
 		}
 
@@ -159,14 +180,13 @@ func DetectTripleBottom(candles []Candle, lookback int) *DetectedStructure {
 
 		// Peaks should be at similar levels
 		neckline := (peak1Price + peak2Price) / 2.0
-		peakTolerance := 0.01
-		if math.Abs(peak1Price-peak2Price)/neckline > peakTolerance {
+		if math.Abs(peak1Price-peak2Price) > peakTolerance {
 			continue
 		}
 
 		// Pattern must have meaningful height
 		patternHeight := neckline - avgPrice
-		if patternHeight/avgPrice < 0.015 {
+		if patternHeight < minHeight {
 			continue
 		}
 

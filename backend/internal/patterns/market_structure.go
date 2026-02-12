@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"math"
 	"time"
+
+	"set-and-trend/backend/internal/constants"
 )
 
 // ================================================================================
@@ -64,13 +66,15 @@ type StructureConfig struct {
 	PipSize         float64
 }
 
-func DefaultStructureConfig() StructureConfig {
+// DefaultStructureConfig returns symbol-aware config
+func DefaultStructureConfig(symbol string) StructureConfig {
+	sym := constants.MustGet(symbol)
 	return StructureConfig{
 		SwingLookback:   3,
-		MinBreakPips:    5,
+		MinBreakPips:    5 * sym.ATRMultiplier,
 		RetestTolerance: 0.002,
 		MaxBreakAge:     20,
-		PipSize:         0.0001,
+		PipSize:         sym.PipSize,
 	}
 }
 
@@ -390,8 +394,8 @@ func GetRecentBreaks(ms *MarketStructure, currentBar, lookback int) []StructureB
 }
 
 // HasRecentBullishBOS checks for bullish BOS in recent bars
-func HasRecentBullishBOS(candles []Candle, lookback int) bool {
-	config := DefaultStructureConfig()
+func HasRecentBullishBOS(candles []Candle, lookback int, symbol string) bool {
+	config := DefaultStructureConfig(symbol)
 	ms := AnalyzeMarketStructure(candles, config)
 
 	if ms == nil {
@@ -410,8 +414,8 @@ func HasRecentBullishBOS(candles []Candle, lookback int) bool {
 }
 
 // HasRecentBearishBOS checks for bearish BOS in recent bars
-func HasRecentBearishBOS(candles []Candle, lookback int) bool {
-	config := DefaultStructureConfig()
+func HasRecentBearishBOS(candles []Candle, lookback int, symbol string) bool {
+	config := DefaultStructureConfig(symbol)
 	ms := AnalyzeMarketStructure(candles, config)
 
 	if ms == nil {
@@ -430,8 +434,8 @@ func HasRecentBearishBOS(candles []Candle, lookback int) bool {
 }
 
 // HasRecentCHoCH checks for change of character (reversal)
-func HasRecentCHoCH(candles []Candle, lookback int, direction string) bool {
-	config := DefaultStructureConfig()
+func HasRecentCHoCH(candles []Candle, lookback int, direction string, symbol string) bool {
+	config := DefaultStructureConfig(symbol)
 	ms := AnalyzeMarketStructure(candles, config)
 
 	if ms == nil {
@@ -450,17 +454,17 @@ func HasRecentCHoCH(candles []Candle, lookback int, direction string) bool {
 }
 
 // CalculateBOSScore returns confluence score (0.0-1.0) for structure alignment
-func CalculateBOSScore(candles []Candle, direction string) float64 {
-	return CalculateBOSScoreDebug(candles, direction, false)
+func CalculateBOSScore(candles []Candle, direction string, symbol string) float64 {
+	return CalculateBOSScoreDebug(candles, direction, symbol, false)
 }
 
 // CalculateBOSScoreDebug with optional debug output
-func CalculateBOSScoreDebug(candles []Candle, direction string, debug bool) float64 {
+func CalculateBOSScoreDebug(candles []Candle, direction string, symbol string, debug bool) float64 {
 	if len(candles) < 20 {
 		return 0.0
 	}
 
-	config := DefaultStructureConfig()
+	config := DefaultStructureConfig(symbol)
 	ms := AnalyzeMarketStructure(candles, config)
 
 	if ms == nil {

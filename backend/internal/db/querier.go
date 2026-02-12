@@ -12,22 +12,16 @@ import (
 )
 
 type Querier interface {
-	CountBacktestTradesByResult(ctx context.Context, arg CountBacktestTradesByResultParams) (int64, error)
 	CountCandlesD1(ctx context.Context) (int64, error)
 	CountCandlesH1(ctx context.Context) (int64, error)
 	CountCandlesH4(ctx context.Context) (int64, error)
 	CountPatternDetections(ctx context.Context, arg CountPatternDetectionsParams) (int64, error)
 	CountSignalsByStatus(ctx context.Context, status string) (int64, error)
-	CountWalkforwardValidationsByStatus(ctx context.Context, arg CountWalkforwardValidationsByStatusParams) (int64, error)
 	CreateTrade(ctx context.Context, arg CreateTradeParams) (Trade, error)
 	CreateTradeExecution(ctx context.Context, arg CreateTradeExecutionParams) (TradeExecution, error)
 	CreateTradeFeedback(ctx context.Context, arg CreateTradeFeedbackParams) (TradeFeedback, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
 	DeleteTradeFeedback(ctx context.Context, tradeID uuid.UUID) error
-	GetBacktestRunByID(ctx context.Context, id uuid.UUID) (BacktestRun, error)
-	GetBacktestRunsByStrategy(ctx context.Context, arg GetBacktestRunsByStrategyParams) ([]BacktestRun, error)
-	GetBacktestTradesByResult(ctx context.Context, arg GetBacktestTradesByResultParams) ([]BacktestTrade, error)
-	GetBacktestTradesByRun(ctx context.Context, backtestRunID pgtype.UUID) ([]BacktestTrade, error)
 	GetCandleD1ByTimestamp(ctx context.Context, timestampUtc pgtype.Timestamptz) (CandlesD1, error)
 	GetCandleH1ByTimestamp(ctx context.Context, timestampUtc pgtype.Timestamptz) (CandlesH1, error)
 	GetCandleH4ByTimestamp(ctx context.Context, timestampUtc pgtype.Timestamptz) (CandlesH4, error)
@@ -42,10 +36,10 @@ type Querier interface {
 	GetCandlesH4Last(ctx context.Context, limit int32) ([]CandlesH4, error)
 	GetCandlesWeeklyByRange(ctx context.Context, arg GetCandlesWeeklyByRangeParams) ([]CandlesWeekly, error)
 	GetCandlesWeeklyBySymbolAndRange(ctx context.Context, arg GetCandlesWeeklyBySymbolAndRangeParams) ([]CandlesWeekly, error)
+	GetDistinctSymbolsFromWeekly(ctx context.Context) ([]string, error)
 	GetIndicatorD1ByCandleID(ctx context.Context, candleID uuid.UUID) (IndicatorsD1, error)
 	GetIndicatorH1ByCandleID(ctx context.Context, candleID uuid.UUID) (IndicatorsH1, error)
 	GetIndicatorH4ByCandleID(ctx context.Context, candleID uuid.UUID) (IndicatorsH4, error)
-	GetLatestBacktestRun(ctx context.Context, arg GetLatestBacktestRunParams) (BacktestRun, error)
 	GetPatternDetectionByID(ctx context.Context, id uuid.UUID) (PatternDetection, error)
 	GetPatternDetectionsByConfidence(ctx context.Context, arg GetPatternDetectionsByConfidenceParams) ([]PatternDetection, error)
 	GetPatternDetectionsByTimeframe(ctx context.Context, arg GetPatternDetectionsByTimeframeParams) ([]PatternDetection, error)
@@ -60,10 +54,6 @@ type Querier interface {
 	GetUserByEmail(ctx context.Context, email string) (GetUserByEmailRow, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (GetUserByIDRow, error)
 	GetUserByUsername(ctx context.Context, username string) (GetUserByUsernameRow, error)
-	GetWalkforwardValidationsByStatus(ctx context.Context, arg GetWalkforwardValidationsByStatusParams) ([]WalkforwardValidation, error)
-	GetWalkforwardValidationsByStrategy(ctx context.Context, strategyName string) ([]WalkforwardValidation, error)
-	InsertBacktestRun(ctx context.Context, arg InsertBacktestRunParams) (BacktestRun, error)
-	InsertBacktestTrade(ctx context.Context, arg InsertBacktestTradeParams) (BacktestTrade, error)
 	InsertCandleD1(ctx context.Context, arg InsertCandleD1Params) (CandlesD1, error)
 	InsertCandleH1(ctx context.Context, arg InsertCandleH1Params) (CandlesH1, error)
 	InsertCandleH4(ctx context.Context, arg InsertCandleH4Params) (CandlesH4, error)
@@ -72,7 +62,6 @@ type Querier interface {
 	InsertIndicatorH4(ctx context.Context, arg InsertIndicatorH4Params) (IndicatorsH4, error)
 	InsertPatternDetection(ctx context.Context, arg InsertPatternDetectionParams) (PatternDetection, error)
 	InsertSignal(ctx context.Context, arg InsertSignalParams) (Signal, error)
-	InsertWalkforwardValidation(ctx context.Context, arg InsertWalkforwardValidationParams) (WalkforwardValidation, error)
 	ResetPassword(ctx context.Context, arg ResetPasswordParams) error
 	SetEmailVerificationToken(ctx context.Context, arg SetEmailVerificationTokenParams) error
 	SetPasswordResetToken(ctx context.Context, arg SetPasswordResetTokenParams) error

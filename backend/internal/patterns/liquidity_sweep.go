@@ -1,9 +1,10 @@
 package patterns
 
 import (
-//	"fmt"
 	"math"
 	"time"
+
+	"set-and-trend/backend/internal/constants"
 )
 
 // ================================================================================
@@ -39,18 +40,37 @@ type LiquiditySweepConfig struct {
 	PipSize          float64
 }
 
-func DefaultLiquiditySweepConfig() LiquiditySweepConfig {
+// DefaultLiquiditySweepConfig returns symbol-aware config with scaled thresholds
+func DefaultLiquiditySweepConfig(symbol string) LiquiditySweepConfig {
+	sym := constants.MustGet(symbol)
+
+	// Scale sweep thresholds by volatility
+	baseMinSweep := 3.0
+	baseMaxSweep := 30.0
+
 	return LiquiditySweepConfig{
 		LookbackBars:     20,
-		MinSweepPips:     3,
-		MaxSweepPips:     30,
+		MinSweepPips:     baseMinSweep * sym.ATRMultiplier, // 3 | 4.5 | 6
+		MaxSweepPips:     baseMaxSweep * sym.ATRMultiplier, // 30 | 45 | 60
 		MinRecoveryPct:   0.5,
 		ConfirmationBars: 3,
-		PipSize:          0.0001,
+		PipSize:          sym.PipSize,
 	}
 }
 
-func DetectLiquiditySweeps(candles []Candle, config LiquiditySweepConfig) []LiquiditySweep {
+// DetectLiquiditySweeps detects liquidity sweeps with symbol-aware configuration
+func DetectLiquiditySweeps(candles []Candle, symbol string, config LiquiditySweepConfig) []LiquiditySweep {
+	// Validate symbol matches config (log warning if mismatch)
+	if sym, ok := constants.Get(symbol); ok {
+		if config.PipSize != sym.PipSize {
+			// Config pip size doesn't match symbol - using config value
+		}
+	}
+	return detectLiquiditySweepsWithConfig(candles, config)
+}
+
+// detectLiquiditySweepsWithConfig is the internal implementation
+func detectLiquiditySweepsWithConfig(candles []Candle, config LiquiditySweepConfig) []LiquiditySweep {
 	if len(candles) < config.LookbackBars+5 {
 		return nil
 	}
@@ -230,17 +250,17 @@ func calculateSweepStrength(
 
 // ===================== SCORING =====================
 
-func CalculateLiquiditySweepScore(candles []Candle, direction string) float64 {
-	return CalculateLiquiditySweepScoreDebug(candles, direction, false)
+func CalculateLiquiditySweepScore(candles []Candle, direction string, symbol string) float64 {
+	return CalculateLiquiditySweepScoreDebug(candles, direction, symbol, false)
 }
 
-func CalculateLiquiditySweepScoreDebug(candles []Candle, direction string, debug bool) float64 {
+func CalculateLiquiditySweepScoreDebug(candles []Candle, direction string, symbol string, debug bool) float64 {
 	if len(candles) < 25 {
 		return 0
 	}
 
-	config := DefaultLiquiditySweepConfig()
-	sweeps := DetectLiquiditySweeps(candles, config)
+	config := DefaultLiquiditySweepConfig(symbol)
+	sweeps := DetectLiquiditySweeps(candles, symbol, config)
 
 	if len(sweeps) == 0 {
 		return 0

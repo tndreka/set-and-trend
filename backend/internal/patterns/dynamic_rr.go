@@ -2,6 +2,8 @@ package patterns
 
 import (
 	"math"
+
+	"set-and-trend/backend/internal/constants"
 )
 
 // ================================================================================
@@ -106,8 +108,9 @@ func CalculateDynamicRR(signal *TradeSignal, confluenceScore float64, config Dyn
 		AdjustedStop:  signal.StopLoss,
 	}
 
-	// Calculate risk in pips
-	pipSize := 0.0001
+	// Calculate risk in pips using symbol-aware pip size
+	sym := constants.MustGet(signal.Symbol)
+	pipSize := sym.PipSize
 	if signal.Direction == DirectionLong {
 		result.RiskPips = (signal.EntryPrice - signal.StopLoss) / pipSize
 	} else {
@@ -159,21 +162,38 @@ func calculatePositionScore(signal *TradeSignal, tier RiskRewardTier, confluence
 	return math.Min(score, 1.0)
 }
 
-// CalculateATRStop calculates stop loss using ATR
-// FIXED: Removed unnecessary pip round-trip conversion
-func CalculateATRStop(candles []Candle, entry float64, direction string, atrMultiplier float64, pipSize float64) float64 {
+// CalculateATRStop calculates stop loss using ATR in PRICE units
+// Note: ATR is calculated in price units, not pips, so we don't convert
+// The result is a price level directly usable for orders
+func CalculateATRStop(candles []Candle, entry float64, direction string, atrMultiplier float64, symbol string) float64 {
 	if len(candles) < 14 {
 		return 0
 	}
 
+	// We fetch symbol info for validation only - ATR is price-based
+	sym := constants.MustGet(symbol)
+	_ = sym // Used for validation; ATR calculation doesn't need pip conversion
+
 	atr := CalculateATR(candles, 14)
-	
-	// FIXED: Direct calculation without pip round-trip
+
+	// ATR is in price units, entry is in price units
+	// Result is directly a price level
 	if direction == DirectionLong {
 		return entry - (atr * atrMultiplier)
-	} else {
-		return entry + (atr * atrMultiplier)
 	}
+	return entry + (atr * atrMultiplier)
+}
+
+// CalculateATRStopInPips returns the stop distance in pips (for logging/RR calc)
+func CalculateATRStopInPips(candles []Candle, entry float64, direction string, atrMultiplier float64, symbol string) float64 {
+	stopPrice := CalculateATRStop(candles, entry, direction, atrMultiplier, symbol)
+	if stopPrice == 0 {
+		return 0
+	}
+
+	sym := constants.MustGet(symbol)
+	distance := math.Abs(entry - stopPrice)
+	return sym.PriceToPips(distance)
 }
 
 // CalculateATR calculates Average True Range
@@ -184,7 +204,7 @@ func CalculateATR(candles []Candle, period int) float64 {
 
 	var trSum float64
 	startIdx := len(candles) - period
-	
+
 	for i := startIdx; i < len(candles); i++ {
 		tr := calculateTrueRange(candles[i], candles[i-1])
 		trSum += tr
@@ -253,7 +273,7 @@ func OptimizeSignalRR(signal *TradeSignal, candles []Candle, confluenceScore flo
 			optimized.StopLoss = signal.StopLoss
 		}
 	} else if dynamicRR.Tier.StopMode == "ATR" && len(candles) > 14 {
-		atrStop := CalculateATRStop(candles, signal.EntryPrice, signal.Direction, config.ATRMultiplier, pipSize)
+		atrStop := CalculateATRStop(candles, signal.EntryPrice, signal.Direction, config.ATRMultiplier, signal.Symbol)
 		if atrStop > 0 {
 			optimized.StopLoss = atrStop
 		} else {

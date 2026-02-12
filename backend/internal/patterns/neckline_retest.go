@@ -3,6 +3,8 @@ package patterns
 import (
 	"math"
 	"time"
+
+	"set-and-trend/backend/internal/constants"
 )
 
 // ================================================================================
@@ -16,46 +18,53 @@ import (
 type RetestType string
 
 const (
-	RetestPending   RetestType = "PENDING"   // Waiting for retest
+	RetestPending    RetestType = "PENDING"     // Waiting for retest
 	RetestInProgress RetestType = "IN_PROGRESS" // Price at neckline
-	RetestConfirmed RetestType = "CONFIRMED" // Retest complete, rejected
-	RetestFailed    RetestType = "FAILED"    // Price broke back through
-	RetestMissed    RetestType = "MISSED"    // Price continued without retest
+	RetestConfirmed  RetestType = "CONFIRMED"   // Retest complete, rejected
+	RetestFailed     RetestType = "FAILED"      // Price broke back through
+	RetestMissed     RetestType = "MISSED"      // Price continued without retest
 )
 
 // NecklineRetest represents a neckline retest event
 type NecklineRetest struct {
-	PatternType     string     // Original pattern (H&S, IHS, etc.)
-	Direction       string     // Trade direction
-	NecklineLevel   float64    // The neckline price
-	BreakPrice      float64    // Where the break occurred
-	BreakIndex      int        // Candle that broke the neckline
-	BreakTime       time.Time
-	RetestPrice     float64    // Where price retested
-	RetestIndex     int        // Candle that retested
-	RetestTime      time.Time
-	Status          RetestType
-	RejectionStrength float64  // How strong was the rejection (0.0-1.0)
-	Confidence      float64    // Overall retest quality
+	PatternType       string  // Original pattern (H&S, IHS, etc.)
+	Direction         string  // Trade direction
+	NecklineLevel     float64 // The neckline price
+	BreakPrice        float64 // Where the break occurred
+	BreakIndex        int     // Candle that broke the neckline
+	BreakTime         time.Time
+	RetestPrice       float64 // Where price retested
+	RetestIndex       int     // Candle that retested
+	RetestTime        time.Time
+	Status            RetestType
+	RejectionStrength float64 // How strong was the rejection (0.0-1.0)
+	Confidence        float64 // Overall retest quality
 }
 
 // RetestConfig holds detection parameters
 type RetestConfig struct {
-	MaxBarsToRetest    int     // How long to wait for retest
-	RetestTolerance    float64 // How close price must get (as % of neckline)
-	MinRejectionPips   float64 // Minimum rejection distance
-	MaxRetestBreakPips float64 // Max penetration allowed (else it's a fail)
-	PipSize            float64
+	MaxBarsToRetest     int     // How long to wait for retest
+	RetestTolerancePips float64 // How close price must get (in pips)
+	MinRejectionPips    float64 // Minimum rejection distance
+	MaxRetestBreakPips  float64 // Max penetration allowed (else it's a fail)
+	PipSize             float64
 }
 
-// DefaultRetestConfig returns sensible defaults
-func DefaultRetestConfig() RetestConfig {
+// DefaultRetestConfig returns volatility-aware config for a specific symbol
+func DefaultRetestConfig(symbol string) RetestConfig {
+	sym := constants.MustGet(symbol)
+
+	// Base pips scaled by asset volatility
+	// FX: 20 pips | Metals: 30 pips | Indices: 40 pips
+	baseTolerancePips := 20.0
+	tolerancePips := sym.GetScaledPips(baseTolerancePips)
+
 	return RetestConfig{
-		MaxBarsToRetest:    10,
-		RetestTolerance:    0.002, // 0.2%
-		MinRejectionPips:   10,
-		MaxRetestBreakPips: 15, // Can penetrate 15 pips max
-		PipSize:            0.0001,
+		MaxBarsToRetest:     10,
+		RetestTolerancePips: tolerancePips, // Volatility-adjusted
+		MinRejectionPips:    10 * sym.ATRMultiplier,
+		MaxRetestBreakPips:  15 * sym.ATRMultiplier,
+		PipSize:             sym.PipSize,
 	}
 }
 
@@ -114,7 +123,7 @@ func DetectNecklineRetest(structure *DetectedStructure, candles []Candle, breakI
 	if retest.Status == RetestPending && len(candles) > breakIdx+config.MaxBarsToRetest {
 		// Check if price moved away significantly without retest
 		lastCandle := candles[len(candles)-1]
-		
+
 		if direction == DirectionShort {
 			// Price kept going down without coming back
 			if lastCandle.Close < neckline-(50*config.PipSize) {
@@ -136,8 +145,8 @@ func DetectNecklineRetest(structure *DetectedStructure, candles []Candle, breakI
 // detectBearishRetest checks for bearish pattern retest (price comes up to neckline, rejects)
 func detectBearishRetest(c Candle, neckline float64, config RetestConfig) *NecklineRetest {
 	result := &NecklineRetest{Status: RetestPending}
-	
-	tolerance := neckline * config.RetestTolerance
+
+	tolerance := config.RetestTolerancePips * config.PipSize
 	// DELETED: maxPenetration := config.MaxRetestBreakPips * config.PipSize
 
 	// FIXED: Use symmetric tolerance only (no maxPenetration)
@@ -146,7 +155,7 @@ func detectBearishRetest(c Candle, neckline float64, config RetestConfig) *Neckl
 
 		// Check for rejection (close well below high)
 		rejectionPips := (c.High - c.Close) / config.PipSize
-		
+
 		if c.Close > neckline {
 			// Closed above neckline = failed retest
 			result.Status = RetestFailed
@@ -168,8 +177,8 @@ func detectBearishRetest(c Candle, neckline float64, config RetestConfig) *Neckl
 // detectBullishRetest checks for bullish pattern retest (price comes down to neckline, rejects)
 func detectBullishRetest(c Candle, neckline float64, config RetestConfig) *NecklineRetest {
 	result := &NecklineRetest{Status: RetestPending}
-	
-	tolerance := neckline * config.RetestTolerance
+
+	tolerance := config.RetestTolerancePips * config.PipSize
 	// DELETED: maxPenetration := config.MaxRetestBreakPips * config.PipSize
 
 	// FIXED: Use symmetric tolerance only
@@ -177,7 +186,7 @@ func detectBullishRetest(c Candle, neckline float64, config RetestConfig) *Neckl
 		result.RetestPrice = c.Low
 
 		rejectionPips := (c.Close - c.Low) / config.PipSize
-		
+
 		if c.Close < neckline {
 			result.Status = RetestFailed
 			result.RejectionStrength = 0.0
@@ -225,7 +234,7 @@ func calculateRetestConfidence(retest *NecklineRetest, config RetestConfig) floa
 }
 
 // CalculateRetestScore returns confluence score (0.0-1.0) for retest alignment
-func CalculateRetestScore(structure *DetectedStructure, candles []Candle) float64 {
+func CalculateRetestScore(structure *DetectedStructure, candles []Candle, symbol string) float64 {
 	if structure == nil || len(candles) < 10 {
 		return 0.0
 	}
@@ -236,7 +245,7 @@ func CalculateRetestScore(structure *DetectedStructure, candles []Candle) float6
 		return 0.0
 	}
 
-	config := DefaultRetestConfig()
+	config := DefaultRetestConfig(symbol)
 	retest := DetectNecklineRetest(structure, candles, breakIdx, config)
 
 	if retest == nil {
@@ -276,7 +285,7 @@ func findNecklineBreakIndex(structure *DetectedStructure, candles []Candle) int 
 }
 
 // HasConfirmedRetest checks if pattern has a confirmed retest
-func HasConfirmedRetest(structure *DetectedStructure, candles []Candle) bool {
+func HasConfirmedRetest(structure *DetectedStructure, candles []Candle, symbol string) bool {
 	if structure == nil {
 		return false
 	}
@@ -286,7 +295,7 @@ func HasConfirmedRetest(structure *DetectedStructure, candles []Candle) bool {
 		return false
 	}
 
-	config := DefaultRetestConfig()
+	config := DefaultRetestConfig(symbol)
 	retest := DetectNecklineRetest(structure, candles, breakIdx, config)
 
 	return retest != nil && retest.Status == RetestConfirmed
@@ -337,14 +346,14 @@ func GenerateRetestSignal(structure *DetectedStructure, retest *NecklineRetest, 
 		signal.Direction = DirectionShort
 		signal.EntryPrice = structure.NecklinePrice - (5 * pipSize)
 		signal.StopLoss = retest.RetestPrice + (15 * pipSize)
-		
+
 		patternHeight := structure.HeadPrice - structure.NecklinePrice
 		signal.TakeProfit = structure.NecklinePrice - patternHeight
 	} else {
 		signal.Direction = DirectionLong
 		signal.EntryPrice = structure.NecklinePrice + (5 * pipSize)
 		signal.StopLoss = retest.RetestPrice - (15 * pipSize)
-		
+
 		patternHeight := structure.NecklinePrice - structure.HeadPrice
 		signal.TakeProfit = structure.NecklinePrice + patternHeight
 	}

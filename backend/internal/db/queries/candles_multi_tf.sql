@@ -106,3 +106,8 @@ ORDER BY timestamp_utc ASC;
 SELECT * FROM candles_h1 
 WHERE symbol = $1 AND timestamp_utc >= $2 AND timestamp_utc <= $3
 ORDER BY timestamp_utc ASC;
+
+-- name: GetDistinctSymbolsFromWeekly :many
+SELECT DISTINCT symbol 
+FROM candles_weekly 
+ORDER BY symbol;

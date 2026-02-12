@@ -551,6 +551,32 @@ func (q *Queries) GetCandlesWeeklyBySymbolAndRange(ctx context.Context, arg GetC
 	return items, nil
 }
 
+const getDistinctSymbolsFromWeekly = `-- name: GetDistinctSymbolsFromWeekly :many
+SELECT DISTINCT symbol 
+FROM candles_weekly 
+ORDER BY symbol
+`
+
+func (q *Queries) GetDistinctSymbolsFromWeekly(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, getDistinctSymbolsFromWeekly)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var symbol string
+		if err := rows.Scan(&symbol); err != nil {
+			return nil, err
+		}
+		items = append(items, symbol)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const insertCandleD1 = `-- name: InsertCandleD1 :one
 INSERT INTO candles_d1 (timestamp_utc, open, high, low, close, volume)
 VALUES ($1, $2, $3, $4, $5, $6)

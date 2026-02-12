@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"math"
 	"time"
+
+	"set-and-trend/backend/internal/constants"
 )
 
 // ================================================================================
@@ -25,24 +27,24 @@ const (
 type ZoneStrength string
 
 const (
-	ZoneStrengthStrong  ZoneStrength = "STRONG"   // Fresh zone, never tested
-	ZoneStrengthMedium  ZoneStrength = "MEDIUM"   // Tested once, held
-	ZoneStrengthWeak    ZoneStrength = "WEAK"     // Tested multiple times
-	ZoneStrengthBroken  ZoneStrength = "BROKEN"   // Price closed through
+	ZoneStrengthStrong ZoneStrength = "STRONG" // Fresh zone, never tested
+	ZoneStrengthMedium ZoneStrength = "MEDIUM" // Tested once, held
+	ZoneStrengthWeak   ZoneStrength = "WEAK"   // Tested multiple times
+	ZoneStrengthBroken ZoneStrength = "BROKEN" // Price closed through
 )
 
 // SupplyDemandZone represents an institutional order block
 type SupplyDemandZone struct {
 	Type          ZoneType
 	Strength      ZoneStrength
-	ProximalPrice float64   // Closer edge to price (entry zone)
-	DistalPrice   float64   // Further edge from price (stop zone)
-	OriginIndex   int       // Candle that created the zone
+	ProximalPrice float64 // Closer edge to price (entry zone)
+	DistalPrice   float64 // Further edge from price (stop zone)
+	OriginIndex   int     // Candle that created the zone
 	OriginTime    time.Time
-	TestCount     int       // How many times price has tested this zone
-	LastTestIndex int       // Last candle that tested the zone
-	IsFresh       bool      // Never been tested
-	Confidence    float64   // 0.0-1.0 quality score
+	TestCount     int     // How many times price has tested this zone
+	LastTestIndex int     // Last candle that tested the zone
+	IsFresh       bool    // Never been tested
+	Confidence    float64 // 0.0-1.0 quality score
 }
 
 // ZoneDetectionConfig holds parameters for zone detection
@@ -52,16 +54,20 @@ type ZoneDetectionConfig struct {
 	MaxZoneWidthPercent float64 // Zone can't be too wide (e.g., 0.3%)
 	LookbackBars        int     // How far back to look for zones
 	ZoneFreshnessBars   int     // Zones older than this are stale
+	PipSize             float64 // Pip size for the symbol
 }
 
-// DefaultZoneConfig returns sensible defaults
-func DefaultZoneConfig() ZoneDetectionConfig {
+// DefaultZoneConfig returns symbol-aware config with scaled thresholds
+func DefaultZoneConfig(symbol string) ZoneDetectionConfig {
+	sym := constants.MustGet(symbol)
+
 	return ZoneDetectionConfig{
-		MinImpulsePercent:   0.003, // 0.3% minimum impulse
-		MinBodyToRangeRatio: 0.55,  // Body must be 55% of range
-		MaxZoneWidthPercent: 0.004, // Zone max 0.4% wide
+		MinImpulsePercent:   0.003 * sym.ATRMultiplier, // Scale by volatility
+		MinBodyToRangeRatio: 0.55,
+		MaxZoneWidthPercent: 0.004 * sym.ATRMultiplier,
 		LookbackBars:        50,
 		ZoneFreshnessBars:   20,
+		PipSize:             sym.PipSize,
 	}
 }
 
@@ -271,8 +277,8 @@ func GetActiveZones(candles []Candle, zones []SupplyDemandZone, maxAge int) []Su
 }
 
 // IsPriceAtZone checks if current price is within a zone
-func IsPriceAtZone(price float64, zone SupplyDemandZone, tolerancePips float64) bool {
-	tolerance := tolerancePips * 0.0001 // Convert to price
+func IsPriceAtZone(price float64, zone SupplyDemandZone, tolerancePips float64, pipSize float64) bool {
+	tolerance := tolerancePips * pipSize // Now uses correct pip size
 
 	if zone.Type == ZoneSupply {
 		// Price approaching supply from below
@@ -311,24 +317,24 @@ func GetNearestZone(price float64, zones []SupplyDemandZone) *SupplyDemandZone {
 }
 
 // CalculateZoneScore returns confluence score (0.0-1.0) for zone alignment
-func CalculateZoneScore(candles []Candle, direction string) float64 {
-	return CalculateZoneScoreDebug(candles, direction, false)
+func CalculateZoneScore(candles []Candle, direction string, symbol string) float64 {
+	return CalculateZoneScoreDebug(candles, direction, symbol, false)
 }
 
 // CalculateZoneScoreDebug returns confluence score with optional debug output
 // For H&S/patterns: gives credit if a relevant zone exists that supports the trade direction
-func CalculateZoneScoreDebug(candles []Candle, direction string, debug bool) float64 {
+func CalculateZoneScoreDebug(candles []Candle, direction string, symbol string, debug bool) float64 {
 	if len(candles) < 10 {
 		return 0.0
 	}
 
-	config := DefaultZoneConfig()
+	config := DefaultZoneConfig(symbol)
 	zones := DetectSupplyDemandZones(candles, config)
-	
+
 	if debug {
 		fmt.Printf("      [S/D] Total zones detected: %d\n", len(zones))
 	}
-	
+
 	activeZones := GetActiveZones(candles, zones, config.ZoneFreshnessBars)
 
 	if debug {
@@ -353,12 +359,12 @@ func CalculateZoneScoreDebug(candles []Candle, direction string, debug bool) flo
 		if debug {
 			fmt.Printf("      [S/D] Checking zone type=%s, dir=%s\n", zone.Type, direction)
 		}
-		// For SHORT signals: 
+		// For SHORT signals:
 		// - Best: price just rejected FROM supply zone (price came from above, now below zone)
 		// - Good: supply zone exists above current price (will cap rallies)
 		// - Okay: price recently passed through supply (broken supply = continuation)
 		if direction == DirectionShort && zone.Type == ZoneSupply {
-			atZone := IsPriceAtZone(currentPrice, zone, 30)
+			atZone := IsPriceAtZone(currentPrice, zone, 30, config.PipSize)
 			if atZone {
 				// Full score if at zone - about to reject
 				zoneScore := zone.Confidence
@@ -380,7 +386,7 @@ func CalculateZoneScoreDebug(candles []Candle, direction string, debug bool) flo
 					proximityScore := zone.Confidence * 0.6 * (1.0 - distancePercent/0.05) // Boosted from 0.5
 					score = math.Max(score, proximityScore)
 					if debug {
-						fmt.Printf("      [S/D] Supply zone above (caps rally): distance=%.2f%%, score=%.2f\n", 
+						fmt.Printf("      [S/D] Supply zone above (caps rally): distance=%.2f%%, score=%.2f\n",
 							distancePercent*100, proximityScore)
 					}
 				}
@@ -390,14 +396,15 @@ func CalculateZoneScoreDebug(candles []Candle, direction string, debug bool) flo
 				distance := currentPrice - zone.DistalPrice
 				distancePercent := distance / currentPrice
 				if debug {
-					fmt.Printf("      [S/D] Checking passed supply: distal=%.5f, dist=%.5f, pct=%.2f%%\n", 
+					fmt.Printf("      [S/D] Checking passed supply: distal=%.5f, dist=%.5f, pct=%.2f%%\n",
 						zone.DistalPrice, distance, distancePercent*100)
 				}
-				if distancePercent < 0.01 { // Very close (within 1%) - just broke through
-					proximityScore := zone.Confidence * 0.3 * (1.0 - distancePercent/0.01)
+				const ProximityThreshold = 0.01           // 1% proximity threshold
+				if distancePercent < ProximityThreshold { // Very close (within 1%) - just broke through
+					proximityScore := zone.Confidence * 0.3 * (1.0 - distancePercent/ProximityThreshold)
 					score = math.Max(score, proximityScore)
 					if debug {
-						fmt.Printf("      [S/D] Just passed supply zone (bearish): distance=%.2f%%, score=%.2f\n", 
+						fmt.Printf("      [S/D] Just passed supply zone (bearish): distance=%.2f%%, score=%.2f\n",
 							distancePercent*100, proximityScore)
 					}
 				}
@@ -408,7 +415,7 @@ func CalculateZoneScoreDebug(candles []Candle, direction string, debug bool) flo
 		// - Best: price just bounced FROM demand zone
 		// - Good: demand zone exists below current price (will provide support)
 		if direction == DirectionLong && zone.Type == ZoneDemand {
-			atZone := IsPriceAtZone(currentPrice, zone, 30)
+			atZone := IsPriceAtZone(currentPrice, zone, 30, config.PipSize)
 			if atZone {
 				zoneScore := zone.Confidence
 				if zone.IsFresh {
@@ -429,7 +436,7 @@ func CalculateZoneScoreDebug(candles []Candle, direction string, debug bool) flo
 					proximityScore := zone.Confidence * 0.5 * (1.0 - distancePercent/0.02)
 					score = math.Max(score, proximityScore)
 					if debug {
-						fmt.Printf("      [S/D] Demand zone below (support): distance=%.2f%%, score=%.2f\n", 
+						fmt.Printf("      [S/D] Demand zone below (support): distance=%.2f%%, score=%.2f\n",
 							distancePercent*100, proximityScore)
 					}
 				}

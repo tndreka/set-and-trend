@@ -1,8 +1,5 @@
 -- Rollback H&S Pattern Detection Schema
 
-DROP TABLE IF EXISTS walkforward_validation;
-DROP TABLE IF EXISTS backtest_runs;
-DROP TABLE IF EXISTS backtest_trades;
 DROP TABLE IF EXISTS signals;
 DROP TABLE IF EXISTS pattern_detections;
 

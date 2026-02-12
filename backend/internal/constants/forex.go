@@ -12,6 +12,10 @@ const (
 	MaxStopLossPips      = 500
 	MinimumRR            = 1.5
 	MaxEntrySlippagePips = 20.0
+
+	// DefaultFXPipSize is the standard pip size for major FX pairs (non-JPY)
+	// Used ONLY as fallback when symbol is unavailable - prefer MustGet(symbol).PipSize
+	DefaultFXPipSize = 0.0001
 )
 
 // SymbolConfig defines trading parameters per symbol

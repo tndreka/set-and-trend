@@ -332,55 +332,6 @@ type Account struct {
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 }
 
-type BacktestRun struct {
-	ID                  uuid.UUID          `json:"id"`
-	StrategyName        string             `json:"strategy_name"`
-	Symbol              string             `json:"symbol"`
-	Timeframe           RuleTimeframe      `json:"timeframe"`
-	ExecutionTimeframe  RuleTimeframe      `json:"execution_timeframe"`
-	StartDate           pgtype.Date        `json:"start_date"`
-	EndDate             pgtype.Date        `json:"end_date"`
-	TotalPatterns       int32              `json:"total_patterns"`
-	TradedPatterns      int32              `json:"traded_patterns"`
-	FilteredPatterns    int32              `json:"filtered_patterns"`
-	TotalTrades         int32              `json:"total_trades"`
-	WinningTrades       int32              `json:"winning_trades"`
-	LosingTrades        int32              `json:"losing_trades"`
-	BreakevenTrades     int32              `json:"breakeven_trades"`
-	WinRate             decimal.Decimal    `json:"win_rate"`
-	AvgWin              decimal.Decimal    `json:"avg_win"`
-	AvgLoss             decimal.Decimal    `json:"avg_loss"`
-	AvgRr               decimal.Decimal    `json:"avg_rr"`
-	Expectancy          decimal.Decimal    `json:"expectancy"`
-	ProfitFactor        decimal.Decimal    `json:"profit_factor"`
-	MaxDrawdown         decimal.Decimal    `json:"max_drawdown"`
-	SharpeRatio         decimal.Decimal    `json:"sharpe_ratio"`
-	TotalPnl            decimal.Decimal    `json:"total_pnl"`
-	ConfidenceThreshold decimal.Decimal    `json:"confidence_threshold"`
-	MinRr               decimal.Decimal    `json:"min_rr"`
-	CreatedAt           pgtype.Timestamptz `json:"created_at"`
-}
-
-type BacktestTrade struct {
-	ID                 uuid.UUID          `json:"id"`
-	BacktestRunID      pgtype.UUID        `json:"backtest_run_id"`
-	PatternDetectionID pgtype.UUID        `json:"pattern_detection_id"`
-	SignalID           pgtype.UUID        `json:"signal_id"`
-	Symbol             string             `json:"symbol"`
-	Timeframe          RuleTimeframe      `json:"timeframe"`
-	ExecutionTimeframe RuleTimeframe      `json:"execution_timeframe"`
-	EntryTime          pgtype.Timestamptz `json:"entry_time"`
-	ExitTime           pgtype.Timestamptz `json:"exit_time"`
-	EntryPrice         decimal.Decimal    `json:"entry_price"`
-	ExitPrice          decimal.Decimal    `json:"exit_price"`
-	Pnl                decimal.Decimal    `json:"pnl"`
-	PnlR               decimal.Decimal    `json:"pnl_r"`
-	RrRatio            decimal.Decimal    `json:"rr_ratio"`
-	TradeResult        string             `json:"trade_result"`
-	Reason             pgtype.Text        `json:"reason"`
-	CreatedAt          pgtype.Timestamptz `json:"created_at"`
-}
-
 type CandlesD1 struct {
 	ID           uuid.UUID          `json:"id"`
 	TimestampUtc pgtype.Timestamptz `json:"timestamp_utc"`
@@ -605,23 +556,4 @@ type User struct {
 	PasswordResetExpires   pgtype.Timestamptz `json:"password_reset_expires"`
 	LastLogin              pgtype.Timestamptz `json:"last_login"`
 	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
-}
-
-type WalkforwardValidation struct {
-	ID                    uuid.UUID          `json:"id"`
-	StrategyName          string             `json:"strategy_name"`
-	Symbol                string             `json:"symbol"`
-	Timeframe             RuleTimeframe      `json:"timeframe"`
-	ExecutionTimeframe    RuleTimeframe      `json:"execution_timeframe"`
-	InSampleStart         pgtype.Date        `json:"in_sample_start"`
-	InSampleEnd           pgtype.Date        `json:"in_sample_end"`
-	InSampleExpectancy    decimal.Decimal    `json:"in_sample_expectancy"`
-	InSampleTrades        int32              `json:"in_sample_trades"`
-	OutSampleStart        pgtype.Date        `json:"out_sample_start"`
-	OutSampleEnd          pgtype.Date        `json:"out_sample_end"`
-	OutSampleExpectancy   decimal.Decimal    `json:"out_sample_expectancy"`
-	OutSampleTrades       int32              `json:"out_sample_trades"`
-	WalkforwardEfficiency decimal.Decimal    `json:"walkforward_efficiency"`
-	Status                string             `json:"status"`
-	CreatedAt             pgtype.Timestamptz `json:"created_at"`
 }

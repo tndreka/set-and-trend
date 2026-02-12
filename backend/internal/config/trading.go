@@ -7,8 +7,6 @@ package config
 import (
 	"errors"
 	"fmt"
-
-	"set-and-trend/backend/internal/execution"
 )
 
 // TradingConfig holds all trading system configuration.
@@ -18,17 +16,8 @@ type TradingConfig struct {
 	Symbol    string `json:"symbol"`
 	Timeframe string `json:"timeframe"` // Primary timeframe for trading
 
-	// Capital management
-	Capital execution.CapitalConfig `json:"capital"`
-
-	// Trade frequency control
-	Frequency execution.FrequencyConfig `json:"frequency"`
-
 	// Pattern detection
 	Pattern PatternConfig `json:"pattern"`
-
-	// Backtesting
-	Backtest BacktestConfig `json:"backtest"`
 
 	// Logging
 	Logging LoggingConfig `json:"logging"`
@@ -60,22 +49,6 @@ type PatternConfig struct {
 	CooldownBars int `json:"cooldown_bars"` // Minimum bars between trades (default: 10)
 }
 
-// BacktestConfig holds backtesting parameters.
-type BacktestConfig struct {
-	// Exit configuration
-	MaxBarsToExit int `json:"max_bars_to_exit"` // Maximum bars to hold trade (default: 20)
-
-	// Execution costs (all in pips)
-	SpreadPips     float64 `json:"spread_pips"`      // Typical spread (default: 0.2 for EURUSD)
-	SlippagePips   float64 `json:"slippage_pips"`    // SL slippage (default: 0.3)
-	TPSlippagePips float64 `json:"tp_slippage_pips"` // TP slippage (default: 0.2)
-	CommissionPips float64 `json:"commission_pips"`  // Commission if applicable (default: 0.0)
-
-	// Simulation mode
-	UseRealTimeSimulation bool `json:"use_realtime_simulation"` // Use streaming feed
-	SimulationSpeedMs     int  `json:"simulation_speed_ms"`     // Ms per bar in auto mode
-}
-
 // LoggingConfig holds logging configuration.
 type LoggingConfig struct {
 	Enabled       bool   `json:"enabled"`
@@ -91,9 +64,6 @@ func DefaultTradingConfig() TradingConfig {
 		Symbol:    "EURUSD",
 		Timeframe: "H4",
 
-		Capital:   execution.DefaultCapitalConfig(),
-		Frequency: execution.DefaultFrequencyConfig(),
-
 		Pattern: PatternConfig{
 			WindowSize:           30,
 			Lookback:             3,
@@ -106,16 +76,6 @@ func DefaultTradingConfig() TradingConfig {
 			EntryBufferPips:      10,
 			StopLossBufferPips:   20,
 			CooldownBars:         10,
-		},
-
-		Backtest: BacktestConfig{
-			MaxBarsToExit:         20,
-			SpreadPips:            0.2,
-			SlippagePips:          0.3,
-			TPSlippagePips:        0.2,
-			CommissionPips:        0.0,
-			UseRealTimeSimulation: false,
-			SimulationSpeedMs:     500,
 		},
 
 		Logging: LoggingConfig{
@@ -137,24 +97,9 @@ func (c TradingConfig) Validate() error {
 		return errors.New("timeframe is required")
 	}
 
-	// Validate capital config
-	if err := c.Capital.Validate(); err != nil {
-		return fmt.Errorf("capital config: %w", err)
-	}
-
-	// Validate frequency config
-	if err := c.Frequency.Validate(); err != nil {
-		return fmt.Errorf("frequency config: %w", err)
-	}
-
 	// Validate pattern config
 	if err := c.Pattern.Validate(); err != nil {
 		return fmt.Errorf("pattern config: %w", err)
-	}
-
-	// Validate backtest config
-	if err := c.Backtest.Validate(); err != nil {
-		return fmt.Errorf("backtest config: %w", err)
 	}
 
 	return nil
@@ -198,26 +143,6 @@ func (p PatternConfig) Validate() error {
 	return nil
 }
 
-// Validate checks backtest configuration.
-func (b BacktestConfig) Validate() error {
-	if b.MaxBarsToExit < 1 {
-		return errors.New("max bars to exit must be >= 1")
-	}
-	if b.SpreadPips < 0 {
-		return errors.New("spread pips cannot be negative")
-	}
-	if b.SlippagePips < 0 {
-		return errors.New("slippage pips cannot be negative")
-	}
-	if b.TPSlippagePips < 0 {
-		return errors.New("TP slippage pips cannot be negative")
-	}
-	if b.CommissionPips < 0 {
-		return errors.New("commission pips cannot be negative")
-	}
-	return nil
-}
-
 // ProductionConfig returns a strict configuration for live trading.
 // More conservative than defaults.
 func ProductionConfig() TradingConfig {
@@ -231,27 +156,6 @@ func ProductionConfig() TradingConfig {
 
 	// Longer cooldown
 	config.Pattern.CooldownBars = 15
-
-	// Fewer trades per month
-	config.Frequency.MaxTradesPerMonth = 10
-	config.Frequency.HighQualityThreshold = 0.75
-	config.Frequency.FinalQualityThreshold = 0.85
-
-	// Lower risk per trade
-	config.Capital.RiskPerTrade = 0.005 // 0.5% instead of 1%
-
-	return config
-}
-
-// BacktestOptimizationConfig returns a config suitable for parameter optimization.
-func BacktestOptimizationConfig() TradingConfig {
-	config := DefaultTradingConfig()
-
-	// Disable logging during optimization for speed
-	config.Logging.Enabled = false
-
-	// Faster simulation
-	config.Backtest.SimulationSpeedMs = 0
 
 	return config
 }

@@ -2,14 +2,19 @@ package patterns
 
 import (
 	"math"
+
+	"set-and-trend/backend/internal/constants"
 )
 
 // DetectDoubleTop finds double top patterns (bearish reversal)
 // Two peaks at similar price levels with a trough between them
-func DetectDoubleTop(candles []Candle, lookback int) *DetectedStructure {
+func DetectDoubleTop(candles []Candle, lookback int, symbol string) *DetectedStructure {
 	if len(candles) < lookback {
 		return nil
 	}
+
+	// Get symbol config for pip-based tolerance
+	sym := constants.MustGet(symbol)
 
 	// Find swing highs in recent candles
 	highs := findSwingHighsInRange(candles, lookback, 5)
@@ -26,9 +31,10 @@ func DetectDoubleTop(candles []Candle, lookback int) *DetectedStructure {
 	// 	top1, top2 = top2, top1
 	// }
 
-	// Check tops are within 0.5% price tolerance (similar height)
-	priceTolerance := 0.005
-	if math.Abs(top1.Price-top2.Price)/top1.Price > priceTolerance {
+	// Check tops are within 50 pips price tolerance (similar height)
+	priceTolerancePips := 50.0
+	priceTolerance := sym.PipsToPrice(priceTolerancePips)
+	if math.Abs(top1.Price-top2.Price) > priceTolerance {
 		return nil
 	}
 
@@ -43,10 +49,11 @@ func DetectDoubleTop(candles []Candle, lookback int) *DetectedStructure {
 		return nil
 	}
 
-	// Validate pattern: trough should be at least 1% below tops
+	// Validate pattern: trough should be at least 100 pips below tops
 	avgTopPrice := (top1.Price + top2.Price) / 2
-	minDepth := 0.01 // 1% minimum depth
-	if (avgTopPrice-troughPrice)/avgTopPrice < minDepth {
+	minDepthPips := 100.0
+	minDepth := sym.PipsToPrice(minDepthPips)
+	if avgTopPrice-troughPrice < minDepth {
 		return nil
 	}
 
@@ -55,27 +62,30 @@ func DetectDoubleTop(candles []Candle, lookback int) *DetectedStructure {
 
 	// Pattern is valid
 	return &DetectedStructure{
-		PatternType:         "DOUBLE_TOP",
-		LeftShoulderPrice:   top2.Price,
-		HeadPrice:           avgTopPrice, // Use average of both tops
-		RightShoulderPrice:  top1.Price,
-		NecklinePrice:       neckline,
-		LeftShoulderIdx:     top2.Index,
-		HeadIdx:             (top1.Index + top2.Index) / 2,
-		RightShoulderIdx:    top1.Index,
-		NecklineIdx:         troughIdx,
-		ShoulderSymmetry:    1.0,
-		HeadProminence:      0.03,
-		OverallConfidence:   0.85,
+		PatternType:        "DOUBLE_TOP",
+		LeftShoulderPrice:  top2.Price,
+		HeadPrice:          avgTopPrice, // Use average of both tops
+		RightShoulderPrice: top1.Price,
+		NecklinePrice:      neckline,
+		LeftShoulderIdx:    top2.Index,
+		HeadIdx:            (top1.Index + top2.Index) / 2,
+		RightShoulderIdx:   top1.Index,
+		NecklineIdx:        troughIdx,
+		ShoulderSymmetry:   1.0,
+		HeadProminence:     0.03,
+		OverallConfidence:  0.85,
 	}
 }
 
 // DetectDoubleBottom finds double bottom patterns (bullish reversal)
 // Two troughs at similar price levels with a peak between them
-func DetectDoubleBottom(candles []Candle, lookback int) *DetectedStructure {
+func DetectDoubleBottom(candles []Candle, lookback int, symbol string) *DetectedStructure {
 	if len(candles) < lookback {
 		return nil
 	}
+
+	// Get symbol config for pip-based tolerance
+	sym := constants.MustGet(symbol)
 
 	// Find swing lows in recent candles
 	lows := findSwingLowsInRange(candles, lookback, 5)
@@ -92,9 +102,10 @@ func DetectDoubleBottom(candles []Candle, lookback int) *DetectedStructure {
 	// 	bottom1, bottom2 = bottom2, bottom1
 	// }
 
-	// Check bottoms are within 0.5% price tolerance (similar depth)
-	priceTolerance := 0.005
-	if math.Abs(bottom1.Price-bottom2.Price)/bottom1.Price > priceTolerance {
+	// Check bottoms are within 50 pips price tolerance (similar depth)
+	priceTolerancePips := 50.0
+	priceTolerance := sym.PipsToPrice(priceTolerancePips)
+	if math.Abs(bottom1.Price-bottom2.Price) > priceTolerance {
 		return nil
 	}
 
@@ -109,10 +120,11 @@ func DetectDoubleBottom(candles []Candle, lookback int) *DetectedStructure {
 		return nil
 	}
 
-	// Validate pattern: peak should be at least 1% above bottoms
+	// Validate pattern: peak should be at least 100 pips above bottoms
 	avgBottomPrice := (bottom1.Price + bottom2.Price) / 2
-	minHeight := 0.01 // 1% minimum height
-	if (peakPrice-avgBottomPrice)/avgBottomPrice < minHeight {
+	minHeightPips := 100.0
+	minHeight := sym.PipsToPrice(minHeightPips)
+	if peakPrice-avgBottomPrice < minHeight {
 		return nil
 	}
 
@@ -121,18 +133,18 @@ func DetectDoubleBottom(candles []Candle, lookback int) *DetectedStructure {
 
 	// Pattern is valid
 	return &DetectedStructure{
-		PatternType:         "DOUBLE_BOTTOM",
-		LeftShoulderPrice:   bottom2.Price,
-		HeadPrice:           avgBottomPrice, // Use average of both bottoms
-		RightShoulderPrice:  bottom1.Price,
-		NecklinePrice:       neckline,
-		LeftShoulderIdx:     bottom2.Index,
-		HeadIdx:             (bottom1.Index + bottom2.Index) / 2,
-		RightShoulderIdx:    bottom1.Index,
-		NecklineIdx:         peakIdx,
-		ShoulderSymmetry:    1.0,
-		HeadProminence:      0.03,
-		OverallConfidence:   0.85,
+		PatternType:        "DOUBLE_BOTTOM",
+		LeftShoulderPrice:  bottom2.Price,
+		HeadPrice:          avgBottomPrice, // Use average of both bottoms
+		RightShoulderPrice: bottom1.Price,
+		NecklinePrice:      neckline,
+		LeftShoulderIdx:    bottom2.Index,
+		HeadIdx:            (bottom1.Index + bottom2.Index) / 2,
+		RightShoulderIdx:   bottom1.Index,
+		NecklineIdx:        peakIdx,
+		ShoulderSymmetry:   1.0,
+		HeadProminence:     0.03,
+		OverallConfidence:  0.85,
 	}
 }
 
@@ -145,7 +157,7 @@ type doublePatternSwing struct {
 // findSwingHighsInRange finds swing highs within a range
 func findSwingHighsInRange(candles []Candle, lookback, windowSize int) []doublePatternSwing {
 	var highs []doublePatternSwing
-	
+
 	startIdx := len(candles) - lookback
 	if startIdx < windowSize {
 		startIdx = windowSize
@@ -185,7 +197,7 @@ func findSwingHighsInRange(candles []Candle, lookback, windowSize int) []doubleP
 // findSwingLowsInRange finds swing lows within a range
 func findSwingLowsInRange(candles []Candle, lookback, windowSize int) []doublePatternSwing {
 	var lows []doublePatternSwing
-	
+
 	startIdx := len(candles) - lookback
 	if startIdx < windowSize {
 		startIdx = windowSize
@@ -227,7 +239,7 @@ func findLowestBetween(candles []Candle, startIdx, endIdx int) (int, float64) {
 	if startIdx > endIdx {
 		startIdx, endIdx = endIdx, startIdx
 	}
-	
+
 	if startIdx < 0 || endIdx >= len(candles) {
 		return -1, 0
 	}
@@ -250,7 +262,7 @@ func findHighestBetween(candles []Candle, startIdx, endIdx int) (int, float64) {
 	if startIdx > endIdx {
 		startIdx, endIdx = endIdx, startIdx
 	}
-	
+
 	if startIdx < 0 || endIdx >= len(candles) {
 		return -1, 0
 	}
