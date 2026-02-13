@@ -57,29 +57,51 @@ func (p *Portfolio) Execute(signals []*engine.BacktestSignal) {
 }
 
 func (p *Portfolio) calculateSize(sig *engine.BacktestSignal) float64 {
-	riskAmount := p.equity * 0.02
+	riskAmount := p.equity * 0.01
 	stopDistance := math.Abs(sig.EntryPrice - sig.StopLoss)
 	
 	// ✅ FIXED: Use new Symbol API
 	symbolConfig := constants.MustGetSymbolConfig(sig.Symbol)
 	pipValue := symbolConfig.PipValue
+	pipSize := symbolConfig.PipSize
+	contractSize := symbolConfig.ContractSize
+	minLot := symbolConfig.MinLot
 	
-	lots := riskAmount / (stopDistance / symbolConfig.PipSize * pipValue)
+	// Calculate stop in pips
+	stopPips := stopDistance / pipSize
+	
+	// Calculate lot size based on risk
+	lots := riskAmount / (stopPips * pipValue)
 	
 	// Calculate margin requirement
-	contractSize := symbolConfig.ContractSize
 	margin := lots * sig.EntryPrice * contractSize / p.leverage
 	
+	// 🔍 DEBUG LOGGING
+	fmt.Printf("📊 SIZE [%s]: Equity=$%.0f Risk=$%.0f Stop=%.0fpips Lots=%.4f Margin=$%.0f Contract=%.0f Leverage=%.0f\n",
+		sig.Symbol, p.equity, riskAmount, stopPips, lots, margin, contractSize, p.leverage)
+	
 	if margin > p.equity { 
+		fmt.Printf("⚠️  MARGIN EXCEEDS EQUITY: $%.0f > $%.0f - POSITION REJECTED\n", margin, p.equity)
 		return 0 
 	}
 	
-	return math.Max(lots, symbolConfig.MinLot)
+	finalLots := math.Max(lots, minLot)
+	fmt.Printf("✅ POSITION SIZED: %.4f lots (min: %.2f)\n", finalLots, minLot)
+	
+	return finalLots
 }
 
 func (p *Portfolio) realisticPnL(sig *engine.BacktestSignal, size float64) float64 {
 
 	if size == 0 {
+		fmt.Printf("⚠️  SIZE = 0, returning $0 PnL\n")
+		return 0
+	}
+	
+	// 🔍 DEBUG: Check FutureCandles
+	fmt.Printf("🔍 FUTURE CANDLES: %d candles available\n", len(sig.FutureCandles))
+	if len(sig.FutureCandles) == 0 {
+		fmt.Printf("❌ NO FUTURE CANDLES - Cannot simulate trade!\n")
 		return 0
 	}
 	
@@ -95,8 +117,13 @@ func (p *Portfolio) realisticPnL(sig *engine.BacktestSignal, size float64) float
 	for i, c := range sig.FutureCandles {
 		if math.Abs(c.Close-sig.EntryPrice) < riskDistance*0.1 {
 			entryIdx = i + 1
+			fmt.Printf("📍 ENTRY FOUND at candle %d (close: %.5f, target: %.5f)\n", i, c.Close, sig.EntryPrice)
 			break
 		}
+	}
+	
+	if entryIdx == 0 {
+		fmt.Printf("⚠️  ENTRY NOT FOUND in future candles\n")
 	}
 	
 	// Simulate trade execution
@@ -116,17 +143,23 @@ func (p *Portfolio) realisticPnL(sig *engine.BacktestSignal, size float64) float
 		// Conservative: if both hit in same candle, assume SL hit first
 		if hitTP && hitSL { 
 			pips := riskDistance / pipSize
-			return -pips * size * pipValue 
+			pnl := -pips * size * pipValue
+			fmt.Printf("🔴 SL HIT (both in candle %d): -%.0f pips = $%.2f\n", i, pips, pnl)
+			return pnl
 		}
 		
 		if hitTP { 
 			pips := riskDistance / pipSize * sig.RiskReward
-			return pips * size * pipValue 
+			pnl := pips * size * pipValue
+			fmt.Printf("🟢 TP HIT (candle %d): +%.0f pips = $%.2f\n", i, pips, pnl)
+			return pnl
 		}
 		
 		if hitSL { 
 			pips := riskDistance / pipSize
-			return -pips * size * pipValue 
+			pnl := -pips * size * pipValue
+			fmt.Printf("🔴 SL HIT (candle %d): -%.0f pips = $%.2f\n", i, pips, pnl)
+			return pnl
 		}
 	}
 	
@@ -135,17 +168,23 @@ func (p *Portfolio) realisticPnL(sig *engine.BacktestSignal, size float64) float
 	distance := math.Abs(last - sig.EntryPrice)
 	pips := distance / pipSize
 	
+	pnl := 0.0
 	if sig.Direction == patterns.DirectionLong {
 		if last > sig.EntryPrice {
-			return pips * size * pipValue
+			pnl = pips * size * pipValue
+		} else {
+			pnl = -pips * size * pipValue
 		}
-		return -pips * size * pipValue
 	} else {
 		if last < sig.EntryPrice {
-			return pips * size * pipValue
+			pnl = pips * size * pipValue
+		} else {
+			pnl = -pips * size * pipValue
 		}
-		return -pips * size * pipValue
 	}
+	
+	fmt.Printf("⏳ FLOATING PnL: %.0f pips = $%.2f\n", pips, pnl)
+	return pnl
 }
 
 func (p *Portfolio) Report() {

@@ -662,16 +662,21 @@ func (e *TradingEngine) generateSignal() *patterns.TradeSignal {
 	if activeDetectors > 0 {
 		avgConfluence = totalConfluence / float64(activeDetectors)
 	}
-
+	
+	if e.state.ATR < (15 * e.pipSize) {
+		return nil
+	}
 	// Only generate if confluence > threshold
-	if avgConfluence < 0.65 {
+	if avgConfluence < 0.75 {
 		return nil
 	}
 
+	
 	currentPrice := e.candles[len(e.candles)-1].Close
-
+	
 	// Calculate stop loss and take profit
-	stopDistance := e.state.ATR * 1.5
+	stopDistance := e.state.ATR * 2.5
+
 	if stopDistance == 0 {
 		stopDistance = 20 * e.pipSize // Fallback
 	}
@@ -679,10 +684,10 @@ func (e *TradingEngine) generateSignal() *patterns.TradeSignal {
 	var stopLoss, takeProfit float64
 	if e.state.Direction == patterns.DirectionLong {
 		stopLoss = currentPrice - stopDistance
-		takeProfit = currentPrice + (stopDistance * 2.0) // 2:1 R:R
+		takeProfit = currentPrice + (stopDistance * 3.5) // 3.5:1 R:R
 	} else {
 		stopLoss = currentPrice + stopDistance
-		takeProfit = currentPrice - (stopDistance * 2.0)
+		takeProfit = currentPrice - (stopDistance * 3.5)
 	}
 
 	// Calculate risk-reward
@@ -1042,17 +1047,27 @@ func (f *ChannelFeeder) Close() {
 }
 
 // RunBacktest - PURE FUNCTION for backtesting (NO async/callbacks externally)
+// RunBacktest - PURE FUNCTION for backtesting (NO async/callbacks externally)
 func (e *TradingEngine) RunBacktest(candles []patterns.Candle) []*BacktestSignal {
     var signals []*BacktestSignal
     origCallback := e.onSignal
     
     // Capture ALL signals with bound candles
     e.SetSignalCallback(func(sig *patterns.TradeSignal) {
+        // 🔧 CRITICAL FIX: Only include candles AFTER the signal
+        // This is what portfolio needs to simulate the trade forward in time
+        futureCandles := []patterns.Candle{}
+        currentIdx := e.state.CurrentBar
+        
+        if currentIdx < len(candles) {
+            futureCandles = candles[currentIdx:]
+        }
+        
         signals = append(signals, &BacktestSignal{
-            TradeSignal:  sig,
-            FutureCandles: candles, // ✅ PERFECT binding
-			Timestamp:     e.state.LastTimestamp, // ✅ ADDED
-			ATR:           e.state.ATR,           // ✅ ADDED
+            TradeSignal:   sig,
+            FutureCandles: futureCandles,  // ✅ FIXED: Only future candles, not all history
+            Timestamp:     e.state.LastTimestamp,
+            ATR:           e.state.ATR,
         })
     })
     
