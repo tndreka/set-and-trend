@@ -27,7 +27,7 @@ func Run(pool *pgxpool.Pool, queries *db.Queries) {
 	ctx := context.Background()
 
 	// 1. Initialize Portfolio ($2000, 500 leverage)
-	p := portfolio.New(2000, 500)
+	p := portfolio.New(2000, 3, 0.01)
 
 	// 2. Get Data
 	symbols := getAllSymbols(ctx, pool)
@@ -234,7 +234,7 @@ func Run(pool *pgxpool.Pool, queries *db.Queries) {
 		if len(candles) < 200 {
 			continue
 		}
-
+p := port
 		allSignals := eng.RunBacktest(candles)
 		for _, sig := range allSignals {
 			y, w := sig.Timestamp.ISOWeek()

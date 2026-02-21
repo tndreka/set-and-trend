@@ -39,16 +39,22 @@ func (s *WeeklySelector) Top(n int) []*engine.BacktestSignal {
 		return s.score(s.signals[i]) > s.score(s.signals[j])
 	})
 	
-	num := min(n, len(s.signals))
+	// num := min(n, len(s.signals))
+	num := min(s.max, len(s.signals))
 	s.selected = s.signals[:num]
 	return s.selected
 }
 
 func (s *WeeklySelector) score(sig *engine.BacktestSignal) float64 {
-	score := sig.Confidence * 0.60
-	score += math.Max(0, sig.RiskReward-1.5) * 0.25
-	score += s.timeBonus(sig.Timestamp) * 0.10
-	score += s.volatilityBonus(sig) * 0.05
+	// score := sig.Confidence * 0.60
+	// score += math.Max(0, sig.RiskReward-1.5) * 0.25
+	// score += s.timeBonus(sig.Timestamp) * 0.10
+	// score += s.volatilityBonus(sig) * 0.05
+	score := sig.Confidence * 0.50
+	score += math.Min(sig.RiskReward, 4) * 0.35
+	score += s.volatilityBonus(sig) * 0.10
+	score += s.timeBonus(sig.Timestamp) * 0.05
+
 	return score
 }
 

@@ -69,6 +69,8 @@ type TradingEngine struct {
 	mu     sync.RWMutex
 	ctx    context.Context
 	cancel context.CancelFunc
+	lastSignalTime time.Time
+
 }
 
 // SwingPoint represents a detected swing high/low
@@ -130,7 +132,7 @@ type EngineConfig struct {
 func DefaultEngineConfig() EngineConfig {
 	return EngineConfig{
 		MaxHistoryBars: 500,
-		MaxPositions:   3,
+		MaxPositions:   1,
 		MaxRiskPercent: 2.0,
 		AccountBalance: 10000.0,
 	}
@@ -663,11 +665,11 @@ func (e *TradingEngine) generateSignal() *patterns.TradeSignal {
 		avgConfluence = totalConfluence / float64(activeDetectors)
 	}
 	
-	if e.state.ATR < (15 * e.pipSize) {
+	if e.state.ATR < (25 * e.pipSize) {
 		return nil
 	}
 	// Only generate if confluence > threshold
-	if avgConfluence < 0.75 {
+	if avgConfluence < 0.84 {
 		return nil
 	}
 
@@ -696,6 +698,9 @@ func (e *TradingEngine) generateSignal() *patterns.TradeSignal {
 	riskReward := 0.0
 	if risk > 0 {
 		riskReward = reward / risk
+		if riskReward < 2.5 {
+    		return nil
+		}
 	}
 
 	return &patterns.TradeSignal{
@@ -712,6 +717,11 @@ func (e *TradingEngine) generateSignal() *patterns.TradeSignal {
 
 func (e *TradingEngine) handleSignal(signal *patterns.TradeSignal) {
 	// Check if we can open more positions
+	if time.Since(e.lastSignalTime) < 48*time.Hour {
+    	return
+	}
+	e.lastSignalTime = e.state.LastTimestamp
+
 	openCount := 0
 	for _, p := range e.positions {
 		if !p.IsClosed {
@@ -1065,7 +1075,7 @@ func (e *TradingEngine) RunBacktest(candles []patterns.Candle) []*BacktestSignal
         
         signals = append(signals, &BacktestSignal{
             TradeSignal:   sig,
-            FutureCandles: futureCandles,  // ✅ FIXED: Only future candles, not all history
+            FutureCandles: futureCandles,  
             Timestamp:     e.state.LastTimestamp,
             ATR:           e.state.ATR,
         })
