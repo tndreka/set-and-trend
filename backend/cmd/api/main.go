@@ -42,6 +42,8 @@ func main() {
 	intentRepo := repositories.NewIntentRepository(pool)
 	feedbackRepo := repositories.NewFeedbackRepository(queries)
 	analyticsRepo := repositories.NewAnalyticsRepository(pool)
+	strategyRepo := repositories.NewStrategyRepository(pool)
+	signalRepo := repositories.NewSignalRepository(pool)
 	//service layer
 	tradeService := services.NewTradeService(tradeRepo, accountRepo, candleRepo)
 	executionService := services.NewExecutionService(tradeRepo, executionRepo, intentRepo, pool)
@@ -51,10 +53,11 @@ func main() {
 	accountHandler := handlers.NewAccountHandler(accountRepo, userRepo)
 	candleHandler := handlers.NewCandleHandler(candleRepo)
 	indicatorHandler := handlers.NewIndicatorHandler(indicatorRepo, candleRepo)
-	tradeHandler := handlers.NewTradeHandler(tradeService)
+	tradeHandler := handlers.NewTradeHandler(tradeService, tradeRepo, candleRepo)
 	executionHandler := handlers.NewExecutionHandler(executionService, executionRepo)
 	feedbackHandler := handlers.NewFeedbackHandler(feedbackRepo, tradeRepo)
 	analyticsHandler := handlers.NewAnalyticsHandler(analyticsRepo)
+	strategyHandler := handlers.NewStrategyHandler(strategyRepo, signalRepo)
 	
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
@@ -89,7 +92,9 @@ func main() {
 			protected.POST("/indicators/compute", indicatorHandler.ComputeIndicator)
 			
 			// Trades
+			protected.GET("/trades", tradeHandler.ListTrades)
 			protected.POST("/trades", tradeHandler.CreateTrade)
+			protected.POST("/trades/simple", tradeHandler.CreateSimpleTrade)
 			protected.POST("/trades/:id/execute", executionHandler.ExecuteTrade)
 			protected.POST("/trades/:id/close", executionHandler.CloseTrade)
 			protected.POST("/trades/:id/cancel", executionHandler.CancelTrade)
@@ -102,9 +107,16 @@ func main() {
 			protected.PUT("/trades/:id/feedback", feedbackHandler.UpdateFeedback)
 			protected.DELETE("/trades/:id/feedback", feedbackHandler.DeleteFeedback)
 			
+			// Strategies + signals (multi-strategy lab)
+			protected.GET("/strategies", strategyHandler.ListStrategies)
+			protected.GET("/strategies/:id/signals", strategyHandler.GetStrategySignals)
+			protected.GET("/signals/active", strategyHandler.GetActiveSignals)
+			protected.POST("/signals/:id/notified", strategyHandler.MarkSignalNotified)
+
 			// Analytics
 			protected.GET("/analytics/summary", analyticsHandler.GetSummary)
 			protected.GET("/analytics/by-rule", analyticsHandler.GetByRule)
+			protected.GET("/analytics/by-strategy", analyticsHandler.GetByStrategy)
 			protected.GET("/analytics/by-session", analyticsHandler.GetBySession)
 			protected.GET("/analytics/by-emotion", analyticsHandler.GetByEmotion)
 		}

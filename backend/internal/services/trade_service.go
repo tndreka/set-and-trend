@@ -145,18 +145,118 @@ func (s *TradeService) CreateTrade(ctx context.Context, input CreateTradeInput) 
 	}
 
 	// 7. Convert db.Trade to service Trade
+	return tradeFromDB(dbTrade), nil
+}
+
+func tradeFromDB(t db.Trade) *Trade {
 	return &Trade{
-		ID:           dbTrade.ID,
-		UserID:       dbTrade.UserID,
-		AccountID:    dbTrade.AccountID,
-		CandleID:     dbTrade.CandleID,
-		Symbol:       dbTrade.Symbol,
-		Timeframe:    dbTrade.Timeframe,
-		Direction:    string(dbTrade.Direction),
-		PlannedEntry: dbTrade.PlannedEntry.String(),
-		StopLoss:     dbTrade.StopLoss.String(),
-		TakeProfit:   dbTrade.TakeProfit.String(),
-		RiskPercent:  dbTrade.RiskPercent.String(),
-		CreatedAt:    dbTrade.CreatedAt.Time.Format(time.RFC3339),
-	}, nil
+		ID:           t.ID,
+		UserID:       t.UserID,
+		AccountID:    t.AccountID,
+		CandleID:     t.CandleID,
+		Symbol:       t.Symbol,
+		Timeframe:    t.Timeframe,
+		Direction:    string(t.Direction),
+		PlannedEntry: t.PlannedEntry.String(),
+		StopLoss:     t.StopLoss.String(),
+		TakeProfit:   t.TakeProfit.String(),
+		RiskPercent:  t.RiskPercent.String(),
+		CreatedAt:    t.CreatedAt.Time.Format(time.RFC3339),
+	}
+}
+
+// CreateSimpleTrade is the multi-strategy lab path. The handler has already
+// resolved an H4 candle id, so we skip the weekly-only candle check and
+// honour the caller-supplied timeframe. All other validation (geometry, risk,
+// duplicates, leverage, RR) is identical to CreateTrade.
+func (s *TradeService) CreateSimpleTrade(ctx context.Context, input CreateSimpleTradeInput) (*Trade, error) {
+	direction := strings.ToUpper(input.Direction)
+
+	if !constants.ValidateSymbol(input.Symbol) {
+		return nil, fmt.Errorf("symbol %s not supported", input.Symbol)
+	}
+	if input.Timeframe == "" {
+		input.Timeframe = constants.TimeframeH4
+	}
+	symbolConfig := constants.MustGetSymbolConfig(input.Symbol)
+
+	account, err := s.accountRepo.GetAccountByID(ctx, input.AccountID)
+	if err != nil {
+		return nil, fmt.Errorf("account not found: %w", err)
+	}
+
+	if err := ValidateTradeGeometry(input.PlannedEntry, input.PlannedSL, input.PlannedTP, strings.ToLower(direction)); err != nil {
+		return nil, fmt.Errorf("invalid geometry: %w", err)
+	}
+
+	accountMaxRisk := account.MaxRiskPerTradePct.InexactFloat64()
+	if input.PlannedRiskPct > accountMaxRisk {
+		return nil, fmt.Errorf("planned risk %.2f%% exceeds account max %.2f%%", input.PlannedRiskPct, accountMaxRisk)
+	}
+	if input.PlannedRiskPct <= 0 {
+		return nil, fmt.Errorf("planned risk must be positive")
+	}
+
+	balance := account.Balance.InexactFloat64()
+	riskAmount, err := ComputeRiskAmount(balance, input.PlannedRiskPct)
+	if err != nil {
+		return nil, fmt.Errorf("risk calculation: %w", err)
+	}
+	stopDistance, err := ComputeStopDistance(input.PlannedEntry, input.PlannedSL)
+	if err != nil {
+		return nil, fmt.Errorf("stop distance: %w", err)
+	}
+	stopDistancePips, err := ComputeStopDistancePips(stopDistance, symbolConfig.PipSize)
+	if err != nil {
+		return nil, fmt.Errorf("pip conversion: %w", err)
+	}
+	pipValuePerLot := symbolConfig.PipSize * symbolConfig.ContractSize
+	positionSize, err := ComputePositionSize(riskAmount, stopDistancePips, pipValuePerLot)
+	if err != nil {
+		return nil, fmt.Errorf("position sizing: %w", err)
+	}
+	rr, err := ComputeRR(input.PlannedEntry, input.PlannedSL, input.PlannedTP, strings.ToLower(direction))
+	if err != nil {
+		return nil, fmt.Errorf("RR calculation: %w", err)
+	}
+
+	existingTrades, err := s.tradeRepo.GetTradesByAccountAndCandle(ctx, input.AccountID, input.CandleID)
+	if err != nil {
+		return nil, fmt.Errorf("duplicate check failed: %w", err)
+	}
+	for _, existing := range existingTrades {
+		if string(existing.Direction) == direction {
+			return nil, fmt.Errorf("duplicate trade: account %s already has %s trade on candle %s",
+				input.AccountID, direction, input.CandleID)
+		}
+	}
+
+	if rr < constants.MinimumRR {
+		return nil, fmt.Errorf("trade rejected: RR %.2f below minimum %.2f", rr, constants.MinimumRR)
+	}
+
+	maxPositionSize, err := ComputeMaxPositionSize(balance, int(account.Leverage), symbolConfig.ContractSize)
+	if err != nil {
+		return nil, fmt.Errorf("leverage check: %w", err)
+	}
+	if positionSize > maxPositionSize {
+		return nil, fmt.Errorf("position size %.2f lots exceeds max %.2f lots", positionSize, maxPositionSize)
+	}
+
+	dbTrade, err := s.tradeRepo.CreateTrade(ctx, db.CreateTradeParams{
+		UserID:       account.UserID,
+		AccountID:    input.AccountID,
+		CandleID:     input.CandleID,
+		Symbol:       input.Symbol,
+		Timeframe:    input.Timeframe,
+		Direction:    db.TradeDirection(direction),
+		PlannedEntry: decimal.NewFromFloat(input.PlannedEntry),
+		StopLoss:     decimal.NewFromFloat(input.PlannedSL),
+		TakeProfit:   decimal.NewFromFloat(input.PlannedTP),
+		RiskPercent:  decimal.NewFromFloat(input.PlannedRiskPct),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("persist trade: %w", err)
+	}
+	return tradeFromDB(dbTrade), nil
 }

@@ -2,6 +2,7 @@ package repositories
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -148,6 +149,34 @@ func (r *CandleRepository) GetCandleByID(ctx context.Context, id uuid.UUID) (*Ca
 		Close:        dbCandle.Close.String(),
 		Volume:       volume,
 		CreatedAt:    dbCandle.CreatedAt.Time,
+	}, nil
+}
+
+// GetLatestH4Candle returns the most recent H4 candle (used by CreateSimpleTrade
+// to auto-resolve a candle id when the user logs a trade conversationally).
+func (r *CandleRepository) GetLatestH4Candle(ctx context.Context) (*Candle, error) {
+	rows, err := r.q.GetCandlesH4Last(ctx, 1)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return nil, fmt.Errorf("no H4 candles available")
+	}
+	c := rows[0]
+	var volume *int64
+	if c.Volume.Valid {
+		v := c.Volume.Int64
+		volume = &v
+	}
+	return &Candle{
+		ID:           c.ID,
+		TimestampUTC: c.TimestampUtc.Time,
+		Open:         c.Open.String(),
+		High:         c.High.String(),
+		Low:          c.Low.String(),
+		Close:        c.Close.String(),
+		Volume:       volume,
+		CreatedAt:    c.CreatedAt.Time,
 	}, nil
 }
 

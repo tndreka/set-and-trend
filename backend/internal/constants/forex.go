@@ -8,6 +8,9 @@ import (
 // DEPRECATED: Use domain.GetSymbolConfig() for per-symbol config
 const (
 	TimeframeW1          = "W1"
+	TimeframeD1          = "D1"
+	TimeframeH4          = "H4"
+	TimeframeH1          = "H1"
 	MinStopLossPips      = 5
 	MaxStopLossPips      = 500
 	MinimumRR            = 1.5

@@ -23,16 +23,17 @@ func NewAccountHandler(accountRepo *repositories.AccountRepository, userRepo *re
 }
 
 type CreateAccountRequest struct {
-	UserID                 string  `json:"user_id" binding:"required,uuid"`
-	Type                   string  `json:"type" binding:"required,oneof=demo live"`
-	BrokerName             string  `json:"broker_name" binding:"required,min=1,max=50"`
-	Currency               string  `json:"currency" binding:"required,len=3,uppercase"`
-	Balance                string  `json:"balance" binding:"required"`
-	Leverage               int     `json:"leverage" binding:"required,gt=0,lte=1000"`
-	MaxRiskPerTradePct     float64 `json:"max_risk_per_trade_pct" binding:"required,gte=0,lte=100"`
-	MaxDailyRiskPct        float64 `json:"max_daily_risk_pct" binding:"required,gte=0,lte=100"`
-	Timezone               string  `json:"timezone" binding:"required,max=50"`
-	PreferredSession       string  `json:"preferred_session" binding:"required,oneof=london new_york asian custom"`
+	UserID             string  `json:"user_id" binding:"required,uuid"`
+	Type               string  `json:"type" binding:"required,oneof=demo live"`
+	BrokerName         string  `json:"broker_name" binding:"required,min=1,max=50"`
+	Currency           string  `json:"currency" binding:"required,len=3,uppercase"`
+	Balance            string  `json:"balance" binding:"required"`
+	Leverage           int     `json:"leverage" binding:"required,gt=0,lte=1000"`
+	MaxRiskPerTradePct float64 `json:"max_risk_per_trade_pct" binding:"required,gte=0,lte=100"`
+	MaxDailyRiskPct    float64 `json:"max_daily_risk_pct" binding:"required,gte=0,lte=100"`
+	Timezone           string  `json:"timezone" binding:"required,max=50"`
+	PreferredSession   string  `json:"preferred_session" binding:"required,oneof=london new_york asian custom"`
+	StrategyID         string  `json:"strategy_id" binding:"omitempty,uuid"`
 }
 
 func (h *AccountHandler) CreateAccount(c *gin.Context) {
@@ -65,19 +66,29 @@ func (h *AccountHandler) CreateAccount(c *gin.Context) {
 		return
 	}
 
-	// ✅ Match repository params exactly
+	var strategyID *uuid.UUID
+	if req.StrategyID != "" {
+		sid, err := uuid.Parse(req.StrategyID)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid strategy_id"})
+			return
+		}
+		strategyID = &sid
+	}
+
 	account, err := h.accountRepo.CreateAccount(c.Request.Context(), repositories.AccountCreateParams{
-		ID:                     uuid.New(),
-		UserID:                 userID,
-		Type:                   req.Type,
-		BrokerName:             req.BrokerName,
-		Currency:               req.Currency,
-		Balance:                req.Balance,
-		Leverage:               int32(req.Leverage),
-		MaxRiskPerTradePct:     req.MaxRiskPerTradePct,
-		MaxDailyRiskPct:        req.MaxDailyRiskPct,
-		Timezone:               req.Timezone,
-		PreferredSession:       req.PreferredSession,
+		ID:                 uuid.New(),
+		UserID:             userID,
+		Type:               req.Type,
+		BrokerName:         req.BrokerName,
+		Currency:           req.Currency,
+		Balance:            req.Balance,
+		Leverage:           int32(req.Leverage),
+		MaxRiskPerTradePct: req.MaxRiskPerTradePct,
+		MaxDailyRiskPct:    req.MaxDailyRiskPct,
+		Timezone:           req.Timezone,
+		PreferredSession:   req.PreferredSession,
+		StrategyID:         strategyID,
 	})
 	if err != nil {
 		log.Error().Err(err).Msg("create account failed")

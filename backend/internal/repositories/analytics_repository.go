@@ -52,6 +52,19 @@ type SessionStats struct {
 	TotalPnL    float64 `json:"total_pnl"`
 }
 
+// StrategyStats contains per-strategy aggregate trade statistics. Trades are
+// linked to strategies via accounts.strategy_id (each demo account is mapped
+// to exactly one strategy in the multi-strategy lab).
+type StrategyStats struct {
+	StrategyID   string  `json:"strategy_id"`
+	StrategyCode string  `json:"strategy_code"`
+	StrategyName string  `json:"strategy_name"`
+	TotalTrades  int     `json:"total_trades"`
+	WinCount     int     `json:"win_count"`
+	LossCount    int     `json:"loss_count"`
+	WinRate      float64 `json:"win_rate"`
+}
+
 // EmotionStats contains statistics by emotion
 type EmotionStats struct {
 	Emotion       string  `json:"emotion"`
@@ -291,4 +304,44 @@ func (r *AnalyticsRepository) GetStatsByEmotion(ctx context.Context, userID *str
 	}
 
 	return stats, nil
+}
+
+// GetStatsByStrategy aggregates trades per strategy. Strategies link to trades
+// via accounts.strategy_id; trades without a strategy are excluded.
+func (r *AnalyticsRepository) GetStatsByStrategy(ctx context.Context, userID *string) ([]StrategyStats, error) {
+	query := `
+		SELECT
+			s.id::text,
+			s.code,
+			s.name,
+			COUNT(DISTINCT t.id) AS total_trades,
+			COUNT(DISTINCT t.id) FILTER (WHERE te.execution_type = 'TP_HIT') AS win_count,
+			COUNT(DISTINCT t.id) FILTER (WHERE te.execution_type = 'SL_HIT') AS loss_count,
+			CASE WHEN COUNT(DISTINCT t.id) > 0
+				THEN ROUND((COUNT(DISTINCT t.id) FILTER (WHERE te.execution_type = 'TP_HIT')::numeric / COUNT(DISTINCT t.id)) * 100, 2)
+				ELSE 0 END AS win_rate
+		FROM strategies s
+		LEFT JOIN accounts a ON a.strategy_id = s.id
+		LEFT JOIN trades t ON t.account_id = a.id
+			AND ($1::text IS NULL OR t.user_id::text = $1)
+		LEFT JOIN trade_executions te ON te.trade_id = t.id
+			AND te.execution_type IN ('TP_HIT', 'SL_HIT', 'MANUAL_CLOSE')
+		GROUP BY s.id, s.code, s.name
+		ORDER BY total_trades DESC, s.code
+	`
+	rows, err := r.pool.Query(ctx, query, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	stats := make([]StrategyStats, 0)
+	for rows.Next() {
+		var s StrategyStats
+		if err := rows.Scan(&s.StrategyID, &s.StrategyCode, &s.StrategyName, &s.TotalTrades, &s.WinCount, &s.LossCount, &s.WinRate); err != nil {
+			return nil, err
+		}
+		stats = append(stats, s)
+	}
+	return stats, rows.Err()
 }

@@ -12,14 +12,29 @@ import (
 // ============================================================================
 
 type CreateTradeInput struct {
-	AccountID   uuid.UUID
-	CandleID    uuid.UUID
-	Direction   string  // "LONG" or "SHORT" (handler normalizes to uppercase)
+	AccountID      uuid.UUID
+	CandleID       uuid.UUID
+	Direction      string // "LONG" or "SHORT" (handler normalizes to uppercase)
 	PlannedEntry   float64
 	PlannedSL      float64
 	PlannedTP      float64
 	PlannedRiskPct float64
-        Symbol      string
+	Symbol         string
+}
+
+// CreateSimpleTradeInput is the conversational/Telegram path: handler has already
+// resolved a candle from the latest H4 bar, so the service skips the weekly-only
+// candle existence check.
+type CreateSimpleTradeInput struct {
+	AccountID      uuid.UUID
+	CandleID       uuid.UUID
+	Symbol         string
+	Timeframe      string // "H4", "D1", etc
+	Direction      string
+	PlannedEntry   float64
+	PlannedSL      float64
+	PlannedTP      float64
+	PlannedRiskPct float64
 }
 
 // ============================================================================

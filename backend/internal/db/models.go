@@ -329,6 +329,7 @@ type Account struct {
 	MaxDailyRiskPct    decimal.Decimal    `json:"max_daily_risk_pct"`
 	Timezone           string             `json:"timezone"`
 	PreferredSession   SessionType        `json:"preferred_session"`
+	StrategyID         pgtype.UUID        `json:"strategy_id"`
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 }
 

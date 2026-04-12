@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/shopspring/decimal"
 )
 
@@ -25,11 +26,12 @@ INSERT INTO accounts (
     max_daily_risk_pct,
     timezone,
     preferred_session,
+    strategy_id,
     updated_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW()
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW()
 )
-RETURNING id, user_id, type, broker_name, currency, balance, leverage, max_risk_per_trade_pct, max_daily_risk_pct, timezone, preferred_session, updated_at
+RETURNING id, user_id, type, broker_name, currency, balance, leverage, max_risk_per_trade_pct, max_daily_risk_pct, timezone, preferred_session, strategy_id, updated_at
 `
 
 type CreateAccountParams struct {
@@ -44,6 +46,7 @@ type CreateAccountParams struct {
 	MaxDailyRiskPct    decimal.Decimal `json:"max_daily_risk_pct"`
 	Timezone           string          `json:"timezone"`
 	PreferredSession   SessionType     `json:"preferred_session"`
+	StrategyID         pgtype.UUID     `json:"strategy_id"`
 }
 
 func (q *Queries) CreateAccount(ctx context.Context, arg CreateAccountParams) (Account, error) {
@@ -59,6 +62,7 @@ func (q *Queries) CreateAccount(ctx context.Context, arg CreateAccountParams) (A
 		arg.MaxDailyRiskPct,
 		arg.Timezone,
 		arg.PreferredSession,
+		arg.StrategyID,
 	)
 	var i Account
 	err := row.Scan(
@@ -73,13 +77,14 @@ func (q *Queries) CreateAccount(ctx context.Context, arg CreateAccountParams) (A
 		&i.MaxDailyRiskPct,
 		&i.Timezone,
 		&i.PreferredSession,
+		&i.StrategyID,
 		&i.UpdatedAt,
 	)
 	return i, err
 }
 
 const getAccountByID = `-- name: GetAccountByID :one
-SELECT id, user_id, type, broker_name, currency, balance, leverage, max_risk_per_trade_pct, max_daily_risk_pct, timezone, preferred_session, updated_at FROM accounts WHERE id = $1
+SELECT id, user_id, type, broker_name, currency, balance, leverage, max_risk_per_trade_pct, max_daily_risk_pct, timezone, preferred_session, strategy_id, updated_at FROM accounts WHERE id = $1
 `
 
 func (q *Queries) GetAccountByID(ctx context.Context, id uuid.UUID) (Account, error) {
@@ -97,13 +102,14 @@ func (q *Queries) GetAccountByID(ctx context.Context, id uuid.UUID) (Account, er
 		&i.MaxDailyRiskPct,
 		&i.Timezone,
 		&i.PreferredSession,
+		&i.StrategyID,
 		&i.UpdatedAt,
 	)
 	return i, err
 }
 
 const getAccountsByUserID = `-- name: GetAccountsByUserID :many
-SELECT id, user_id, type, broker_name, currency, balance, leverage, max_risk_per_trade_pct, max_daily_risk_pct, timezone, preferred_session, updated_at FROM accounts WHERE user_id = $1
+SELECT id, user_id, type, broker_name, currency, balance, leverage, max_risk_per_trade_pct, max_daily_risk_pct, timezone, preferred_session, strategy_id, updated_at FROM accounts WHERE user_id = $1
 `
 
 func (q *Queries) GetAccountsByUserID(ctx context.Context, userID uuid.UUID) ([]Account, error) {
@@ -127,6 +133,7 @@ func (q *Queries) GetAccountsByUserID(ctx context.Context, userID uuid.UUID) ([]
 			&i.MaxDailyRiskPct,
 			&i.Timezone,
 			&i.PreferredSession,
+			&i.StrategyID,
 			&i.UpdatedAt,
 		); err != nil {
 			return nil, err

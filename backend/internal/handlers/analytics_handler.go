@@ -84,6 +84,29 @@ func (h *AnalyticsHandler) GetBySession(c *gin.Context) {
 	})
 }
 
+// GetByStrategy returns statistics grouped by strategy
+// GET /api/analytics/by-strategy?user_id=uuid (optional)
+func (h *AnalyticsHandler) GetByStrategy(c *gin.Context) {
+	userID := c.Query("user_id")
+	var userIDPtr *string
+	if userID != "" {
+		userIDPtr = &userID
+	}
+
+	stats, err := h.analyticsRepo.GetStatsByStrategy(c.Request.Context(), userIDPtr)
+	if err != nil {
+		log.Error().Err(err).Msg("get analytics by strategy failed")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get analytics by strategy"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status": "success",
+		"data":   stats,
+		"count":  len(stats),
+	})
+}
+
 // GetByEmotion returns statistics grouped by emotion
 // GET /api/analytics/by-emotion?user_id=uuid (optional)
 func (h *AnalyticsHandler) GetByEmotion(c *gin.Context) {
