@@ -15,7 +15,10 @@ const (
 type RuleCode string
 
 const (
-	W1TrendBullish RuleCode = "W1_TREND_BULLISH"
+	W1TrendBullish    RuleCode = "W1_TREND_BULLISH"
+	H4TrendFollowing  RuleCode = "H4_TREND_FOLLOWING"
+	H4SupplyDemand    RuleCode = "H4_SUPPLY_DEMAND"
+	H4LondonBreakout  RuleCode = "H4_LONDON_BREAKOUT"
 )
 
 // RuleSpec defines an immutable rule specification
@@ -42,7 +45,18 @@ var RuleRegistry = map[RuleCode]RuleSpec{
 		Code:        W1TrendBullish,
 		Name:        "Weekly Trend Bullish",
 		Description: "Weekly bullish trend confirmation: EMA50 > EMA200, Close > EMA50, EMA50 rising",
-		Timeframe:   W1, // ✅ FIXED: Using typed constant
+		Timeframe:   W1,
+		Conditions: []ConditionCode{
+			EMA50GtEMA200,
+			CloseGtEMA50,
+			EMA50SlopePositive,
+		},
+	},
+	H4TrendFollowing: {
+		Code:        H4TrendFollowing,
+		Name:        "H4 Trend Following",
+		Description: "H4 bullish trend: EMA50 > EMA200, Close > EMA50, EMA50 rising. Same conditions as W1_TREND_BULLISH evaluated against H4 indicators.",
+		Timeframe:   H4,
 		Conditions: []ConditionCode{
 			EMA50GtEMA200,
 			CloseGtEMA50,
