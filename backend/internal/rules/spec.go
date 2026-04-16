@@ -19,6 +19,7 @@ const (
 	H4TrendFollowing  RuleCode = "H4_TREND_FOLLOWING"
 	H4SupplyDemand    RuleCode = "H4_SUPPLY_DEMAND"
 	H4LondonBreakout  RuleCode = "H4_LONDON_BREAKOUT"
+	SAFChecklist      RuleCode = "SAF_CHECKLIST"
 )
 
 // RuleSpec defines an immutable rule specification
@@ -95,4 +96,10 @@ type Indicators struct {
 	UpperWick  float64
 	LowerWick  float64
 	MidPrice   float64
+	// HTF trend indicators — populated by the SaF backtest runner.
+	// Zero = not available (live evaluator doesn't fill these yet).
+	D1EMA50    float64
+	D1EMA200   float64
+	W1EMA50    float64
+	W1EMA200   float64
 }

@@ -38,6 +38,11 @@ func buildH4LondonBreakoutSetup(ctx EvalContext) (*Setup, error) {
 		return nil, nil
 	}
 
+	// Diagnostic gate: volatility floor.
+	if !AtrAboveFloor(ctx.Candles, MinAtrPrice(ctx.Symbol)) {
+		return nil, nil
+	}
+
 	// Asian range = 20:00 (prev day) + 00:00 + 04:00 bars on the current day.
 	// These are the 3 bars immediately before the latest one on the H4 grid.
 	n := len(ctx.Candles)
@@ -57,8 +62,10 @@ func buildH4LondonBreakoutSetup(ctx EvalContext) (*Setup, error) {
 		return nil, nil
 	}
 
+	_, ind, _ := ctx.Latest()
+
 	// Long breakout: current bar pushes through range high.
-	if candle.High > rangeHigh {
+	if candle.High > rangeHigh && D1TrendAligned(ind, "LONG") {
 		entry := candle.Close
 		sl := rangeLow
 		tp := entry + 1.5*rangeSize
@@ -78,7 +85,7 @@ func buildH4LondonBreakoutSetup(ctx EvalContext) (*Setup, error) {
 	}
 
 	// Short breakout: current bar breaks below range low.
-	if candle.Low < rangeLow {
+	if candle.Low < rangeLow && D1TrendAligned(ind, "SHORT") {
 		entry := candle.Close
 		sl := rangeHigh
 		tp := entry - 1.5*rangeSize

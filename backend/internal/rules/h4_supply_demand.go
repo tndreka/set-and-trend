@@ -26,10 +26,19 @@ func buildH4SupplyDemandSetup(ctx EvalContext) (*Setup, error) {
 	if len(ctx.Candles) < 50 {
 		return nil, nil
 	}
-	candle, _, ok := ctx.Latest()
+	candle, ind, ok := ctx.Latest()
 	if !ok {
 		return nil, fmt.Errorf("h4_supply_demand: empty eval context")
 	}
+
+	// Diagnostic gates: session + volatility.
+	if !InKillzone(candle) {
+		return nil, nil
+	}
+	if !AtrAboveFloor(ctx.Candles, MinAtrPrice(ctx.Symbol)) {
+		return nil, nil
+	}
+	_ = ind // D1 trend gate added below after direction is known
 
 	patternCandles := toPatternCandles(ctx.Candles)
 	cfg := patterns.DefaultZoneConfig(ctx.Symbol)
@@ -83,6 +92,10 @@ func buildH4SupplyDemandSetup(ctx EvalContext) (*Setup, error) {
 
 	rr := computeRR("LONG", entry, sl, tp)
 	if rr <= 0 {
+		return nil, nil
+	}
+
+	if !D1TrendAligned(ind, "LONG") {
 		return nil, nil
 	}
 

@@ -24,6 +24,14 @@ func buildH4TrendFollowingSetup(ctx EvalContext) (*Setup, error) {
 		return nil, fmt.Errorf("h4_trend_following: empty eval context")
 	}
 
+	// Diagnostic gates: session + volatility + D1 trend.
+	if !InKillzone(candle) {
+		return nil, nil
+	}
+	if !AtrAboveFloor(ctx.Candles, MinAtrPrice(ctx.Symbol)) {
+		return nil, nil
+	}
+
 	res, err := EvaluateRule(H4TrendFollowing, candle, ind)
 	if err != nil {
 		return nil, fmt.Errorf("h4_trend_following: evaluate: %w", err)
@@ -63,6 +71,10 @@ func buildH4TrendFollowingSetup(ctx EvalContext) (*Setup, error) {
 	tp := entry + 2*risk
 	rr := computeRR("LONG", entry, sl, tp)
 
+	if !D1TrendAligned(ind, "LONG") {
+		return nil, nil
+	}
+
 	return &Setup{
 		Direction:  "LONG",
 		Entry:      entry,
@@ -70,7 +82,7 @@ func buildH4TrendFollowingSetup(ctx EvalContext) (*Setup, error) {
 		TakeProfit: tp,
 		RR:         rr,
 		Confidence: res.Confidence,
-		Reason:     "EMA50>EMA200, close above EMA50, EMA50 rising — long on prior swing low",
+		Reason:     "EMA50>EMA200, close above EMA50, EMA50 rising, D1 trend aligned — long on prior swing low",
 	}, nil
 }
 
