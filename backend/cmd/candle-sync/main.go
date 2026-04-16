@@ -1,6 +1,7 @@
-// candle-sync fetches the most recent H4 bars from TwelveData, upserts them
-// into candles_h4, and runs the signal evaluator. Designed to be invoked
-// periodically (every 4 hours, a minute or two past the close) by launchd.
+// candle-sync fetches the most recent H4 bars from Dukascopy (via the
+// `dukascopy-node` CLI), upserts them into candles_h4, and runs the signal
+// evaluator. Designed to be invoked periodically (every 4 hours, a minute or
+// two past the close) by launchd.
 //
 // Usage:
 //
@@ -10,20 +11,14 @@
 //
 // Environment:
 //
-//	TWELVEDATA_API_KEY (required)
+//	DUKASCOPY_NODE_BIN (optional; defaults to `npx --yes dukascopy-node`)
 //	DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD, DB_SSLMODE (same as cmd/api)
 package main
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
-	"fmt"
-	"io"
-	"net/http"
-	"net/url"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -36,27 +31,19 @@ import (
 	"set-and-trend/backend/internal/services"
 )
 
-const (
-	twelveDataBase = "https://api.twelvedata.com/time_series"
-	defaultLimit   = 10 // bars per fetch — enough to backfill a missed cycle or two
-)
+const defaultLimit = 10 // bars per fetch — enough to backfill a missed cycle or two
 
 func main() {
 	var (
 		once        = flag.Bool("once", false, "run one cycle and exit")
 		symbolsFlag = flag.String("symbols", "", "comma-separated symbols (default: all enabled strategies)")
 		fetchSize   = flag.Int("size", defaultLimit, "candles to fetch per cycle")
-		evalOnly    = flag.Bool("eval-only", false, "skip TwelveData fetch and only run the signal evaluator (used for testing)")
+		evalOnly    = flag.Bool("eval-only", false, "skip fetch and only run the signal evaluator (used for testing)")
 	)
 	flag.Parse()
 
 	zerolog.TimeFieldFormat = time.RFC3339
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339})
-
-	apiKey := os.Getenv("TWELVEDATA_API_KEY")
-	if apiKey == "" && !*evalOnly {
-		log.Fatal().Msg("TWELVEDATA_API_KEY not set (use --eval-only to skip fetch)")
-	}
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -75,12 +62,7 @@ func main() {
 	signalRepo := repositories.NewSignalRepository(pool)
 	evaluator := services.NewSignalEvaluator(pool, strategyRepo, signalRepo)
 
-	syncer := &Syncer{
-		pool:      pool,
-		client:    &http.Client{Timeout: 30 * time.Second},
-		apiKey:    apiKey,
-		fetchSize: *fetchSize,
-	}
+	syncer := &Syncer{pool: pool, fetchSize: *fetchSize}
 
 	runCycle := func() {
 		if !*evalOnly {
@@ -119,8 +101,8 @@ func main() {
 	}
 }
 
-// nextH4Tick returns the next H4 boundary plus 60s of grace so the broker
-// has actually published the closing print.
+// nextH4Tick returns the next H4 boundary plus 60s of grace so the broker has
+// actually published the closing print.
 func nextH4Tick(now time.Time) time.Time {
 	hour := now.Hour()
 	nextHour := ((hour / 4) + 1) * 4
@@ -159,111 +141,44 @@ func resolveSymbols(ctx context.Context, sr *repositories.StrategyRepository, ov
 	return out, nil
 }
 
-// Syncer handles the TwelveData fetch + DB upsert per symbol.
+// Syncer runs the Dukascopy fetch + DB upsert per symbol.
 type Syncer struct {
 	pool      *pgxpool.Pool
-	client    *http.Client
-	apiKey    string
 	fetchSize int
 }
 
-type tdResponse struct {
-	Status string    `json:"status"`
-	Code   int       `json:"code"`
-	Msg    string    `json:"message"`
-	Values []tdValue `json:"values"`
-}
-
-type tdValue struct {
-	Datetime string `json:"datetime"`
-	Open     string `json:"open"`
-	High     string `json:"high"`
-	Low      string `json:"low"`
-	Close    string `json:"close"`
-	Volume   string `json:"volume"`
-}
-
-// SyncSymbol fetches the latest H4 bars from TwelveData and upserts them.
+// SyncSymbol fetches the latest H4 bars from Dukascopy and upserts them.
 func (s *Syncer) SyncSymbol(ctx context.Context, symbol string) (int, error) {
-	tdSymbol := toTwelveDataSymbol(symbol)
-	u, _ := url.Parse(twelveDataBase)
-	q := u.Query()
-	q.Set("symbol", tdSymbol)
-	q.Set("interval", "4h")
-	q.Set("apikey", s.apiKey)
-	q.Set("outputsize", strconv.Itoa(s.fetchSize))
-	q.Set("order", "ASC")
-	q.Set("timezone", "UTC")
-	u.RawQuery = q.Encode()
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	bars, err := fetchDukascopy(ctx, symbol, s.fetchSize)
 	if err != nil {
 		return 0, err
 	}
-	resp, err := s.client.Do(req)
-	if err != nil {
-		return 0, err
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return 0, err
-	}
-
-	var parsed tdResponse
-	if err := json.Unmarshal(body, &parsed); err != nil {
-		return 0, fmt.Errorf("twelvedata response: %w (body: %s)", err, truncate(string(body), 200))
-	}
-	if parsed.Status != "ok" {
-		return 0, fmt.Errorf("twelvedata error %d: %s", parsed.Code, parsed.Msg)
-	}
-	if len(parsed.Values) == 0 {
+	if len(bars) == 0 {
 		return 0, nil
 	}
-
 	upserted := 0
-	for _, v := range parsed.Values {
-		ts, err := time.Parse("2006-01-02 15:04:05", v.Datetime)
-		if err != nil {
-			log.Warn().Str("datetime", v.Datetime).Err(err).Msg("skip unparseable bar")
-			continue
-		}
-		var volume *int64
-		if v.Volume != "" {
-			if vol, err := strconv.ParseInt(v.Volume, 10, 64); err == nil {
-				volume = &vol
-			}
-		}
-		if err := s.upsertBar(ctx, symbol, ts.UTC(), v.Open, v.High, v.Low, v.Close, volume); err != nil {
-			return upserted, fmt.Errorf("upsert %s @ %s: %w", symbol, ts, err)
+	for _, b := range bars {
+		ts := time.UnixMilli(b.Timestamp).UTC()
+		if err := s.upsertBar(ctx, symbol, ts, b.Open, b.High, b.Low, b.Close); err != nil {
+			return upserted, err
 		}
 		upserted++
 	}
 	return upserted, nil
 }
 
-func (s *Syncer) upsertBar(ctx context.Context, symbol string, ts time.Time, open, high, low, close string, volume *int64) error {
+func (s *Syncer) upsertBar(ctx context.Context, symbol string, ts time.Time, open, high, low, close float64) error {
 	_, err := s.pool.Exec(ctx, `
 		INSERT INTO candles_h4 (symbol, timestamp_utc, open, high, low, close, volume)
-		VALUES ($1, $2, $3::numeric, $4::numeric, $5::numeric, $6::numeric, $7)
+		VALUES ($1, $2, $3::numeric, $4::numeric, $5::numeric, $6::numeric, NULL)
 		ON CONFLICT (symbol, timestamp_utc) DO UPDATE SET
 			open = EXCLUDED.open,
 			high = EXCLUDED.high,
 			low = EXCLUDED.low,
-			close = EXCLUDED.close,
-			volume = COALESCE(EXCLUDED.volume, candles_h4.volume)`,
-		symbol, ts, open, high, low, close, volume,
+			close = EXCLUDED.close`,
+		symbol, ts, floatStr(open), floatStr(high), floatStr(low), floatStr(close),
 	)
 	return err
-}
-
-// toTwelveDataSymbol converts our internal "EURUSD" form to "EUR/USD" which
-// is what TwelveData expects for forex pairs.
-func toTwelveDataSymbol(symbol string) string {
-	if len(symbol) == 6 {
-		return symbol[:3] + "/" + symbol[3:]
-	}
-	return symbol
 }
 
 func truncate(s string, max int) string {

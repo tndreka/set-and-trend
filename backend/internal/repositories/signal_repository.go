@@ -143,3 +143,37 @@ func (r *SignalRepository) MarkNotified(ctx context.Context, id uuid.UUID) error
 		WHERE id = $1 AND notified = FALSE`, id)
 	return err
 }
+
+// ListUnprocessed returns signals that have not yet been composed by the AI
+// orchestrator. Caller passes an age threshold in seconds so the poller can
+// wait for specialists to write their verdicts before sweeping a signal.
+func (r *SignalRepository) ListUnprocessed(ctx context.Context, olderThanSec int, limit int32) ([]*SetupSignal, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT `+signalColumns+` FROM setup_signals
+		WHERE ai_composed_at IS NULL
+		  AND created_at < NOW() - make_interval(secs => $1)
+		ORDER BY created_at ASC
+		LIMIT $2`, olderThanSec, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]*SetupSignal, 0)
+	for rows.Next() {
+		s, err := scanSignal(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
+// MarkComposed stores the composer's summary and stamps ai_composed_at.
+func (r *SignalRepository) MarkComposed(ctx context.Context, id uuid.UUID, summary string) error {
+	_, err := r.pool.Exec(ctx, `
+		UPDATE setup_signals
+		SET ai_summary = $2, ai_composed_at = NOW()
+		WHERE id = $1 AND ai_composed_at IS NULL`, id, summary)
+	return err
+}

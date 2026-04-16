@@ -44,6 +44,7 @@ func main() {
 	analyticsRepo := repositories.NewAnalyticsRepository(pool)
 	strategyRepo := repositories.NewStrategyRepository(pool)
 	signalRepo := repositories.NewSignalRepository(pool)
+	verdictRepo := repositories.NewVerdictRepository(pool)
 	//service layer
 	tradeService := services.NewTradeService(tradeRepo, accountRepo, candleRepo)
 	executionService := services.NewExecutionService(tradeRepo, executionRepo, intentRepo, pool)
@@ -58,6 +59,7 @@ func main() {
 	feedbackHandler := handlers.NewFeedbackHandler(feedbackRepo, tradeRepo)
 	analyticsHandler := handlers.NewAnalyticsHandler(analyticsRepo)
 	strategyHandler := handlers.NewStrategyHandler(strategyRepo, signalRepo)
+	verdictHandler := handlers.NewVerdictHandler(verdictRepo, signalRepo)
 	
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
@@ -112,6 +114,12 @@ func main() {
 			protected.GET("/strategies/:id/signals", strategyHandler.GetStrategySignals)
 			protected.GET("/signals/active", strategyHandler.GetActiveSignals)
 			protected.POST("/signals/:id/notified", strategyHandler.MarkSignalNotified)
+
+			// AI orchestration layer (composer + specialist agents)
+			protected.GET("/signals/unprocessed", verdictHandler.ListUnprocessedSignals)
+			protected.POST("/signals/:id/composed", verdictHandler.MarkComposed)
+			protected.POST("/signals/:id/verdicts", verdictHandler.CreateVerdict)
+			protected.GET("/signals/:id/verdicts", verdictHandler.ListVerdicts)
 
 			// Analytics
 			protected.GET("/analytics/summary", analyticsHandler.GetSummary)
