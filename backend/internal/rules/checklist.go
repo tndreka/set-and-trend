@@ -16,6 +16,9 @@ var MinChecklistScore = 9
 
 func init() {
 	SetupBuilders[SAFChecklist] = buildSAFChecklistSetup
+	SetupBuilders[SAFW1EmaRejection] = buildW1EmaRejectionSetup
+	SetupBuilders[SAFD1RejectionStructure] = buildD1RejectionStructureSetup
+	SetupBuilders[SAFW1RejectionD1AOI] = buildW1RejectionD1AOISetup
 	if v := os.Getenv("SAF_MIN_SCORE"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n >= 1 && n <= 16 {
 			MinChecklistScore = n
@@ -339,6 +342,109 @@ func findSL(candles []patterns.Candle, c Candle, direction, symbol string) float
 		}
 	}
 	return 0
+}
+
+// buildW1EmaRejectionSetup fires when w1_touching_ema + w1_candle_rejection
+// are both true. Backtested: 54.4% WR, +1.36R, stable across all eras.
+func buildW1EmaRejectionSetup(ctx EvalContext) (*Setup, error) {
+	candle, ind, ok := ctx.Latest()
+	if !ok || len(ctx.Candles) < 250 {
+		return nil, nil
+	}
+	if !InKillzone(candle) {
+		return nil, nil
+	}
+	direction := deriveDirection(ind)
+	if direction == "" {
+		return nil, nil
+	}
+	if ind.W1EMA50 <= 0 || !NearEMA(candle.Close, ind.W1EMA50, 0.005) {
+		return nil, nil
+	}
+	w1Latest, ok := ctx.LatestW1()
+	if !ok || !IsCandleRejection(w1Latest, direction) {
+		return nil, nil
+	}
+	return buildConfluenceSetup(ctx, candle, direction, "w1_touching_ema + w1_candle_rejection")
+}
+
+// buildD1RejectionStructureSetup fires when d1_candle_rejection +
+// d1_structure_rejection are both true. Backtested: 44.1% WR, +1.07R.
+func buildD1RejectionStructureSetup(ctx EvalContext) (*Setup, error) {
+	candle, ind, ok := ctx.Latest()
+	if !ok || len(ctx.Candles) < 250 {
+		return nil, nil
+	}
+	if !InKillzone(candle) {
+		return nil, nil
+	}
+	direction := deriveDirection(ind)
+	if direction == "" {
+		return nil, nil
+	}
+	d1Latest, ok := ctx.LatestD1()
+	if !ok || !IsCandleRejection(d1Latest, direction) {
+		return nil, nil
+	}
+	d1Candles := toPatternCandles(ctx.D1Candles)
+	if !checkStructureRejection(d1Candles, d1Latest, direction, 15) {
+		return nil, nil
+	}
+	return buildConfluenceSetup(ctx, candle, direction, "d1_candle_rejection + d1_structure_rejection")
+}
+
+// buildW1RejectionD1AOISetup fires when w1_candle_rejection + d1_aoi are
+// both true. Backtested: 36.6% WR, +0.68R.
+func buildW1RejectionD1AOISetup(ctx EvalContext) (*Setup, error) {
+	candle, ind, ok := ctx.Latest()
+	if !ok || len(ctx.Candles) < 250 {
+		return nil, nil
+	}
+	if !InKillzone(candle) {
+		return nil, nil
+	}
+	direction := deriveDirection(ind)
+	if direction == "" {
+		return nil, nil
+	}
+	w1Latest, ok := ctx.LatestW1()
+	if !ok || !IsCandleRejection(w1Latest, direction) {
+		return nil, nil
+	}
+	d1Candles := toPatternCandles(ctx.D1Candles)
+	if len(d1Candles) < 50 || !checkAOI(d1Candles, ctx.Symbol, direction) {
+		return nil, nil
+	}
+	return buildConfluenceSetup(ctx, candle, direction, "w1_candle_rejection + d1_aoi")
+}
+
+// buildConfluenceSetup is the shared geometry builder for the top-3 strategies.
+// ATR SL + RR >= 2.5 gate.
+func buildConfluenceSetup(ctx EvalContext, candle Candle, direction, confluence string) (*Setup, error) {
+	h4Candles := toPatternCandles(ctx.Candles)
+	entry := candle.Close
+	sl := findSL(h4Candles, candle, direction, ctx.Symbol)
+	if sl == 0 {
+		return nil, nil
+	}
+	risk := math.Abs(entry - sl)
+	if risk <= 0 {
+		return nil, nil
+	}
+	tp := findTP(h4Candles, entry, direction, ctx.Symbol, risk)
+	rr := computeRR(direction, entry, sl, tp)
+	if rr < 2.5 {
+		return nil, nil
+	}
+	return &Setup{
+		Direction:  direction,
+		Entry:      entry,
+		StopLoss:   sl,
+		TakeProfit: tp,
+		RR:         rr,
+		Confidence: 0.8,
+		Reason:     fmt.Sprintf("Top-3 confluence: %s", confluence),
+	}, nil
 }
 
 func findTP(candles []patterns.Candle, entry float64, direction, symbol string, risk float64) float64 {

@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"set-and-trend/backend/internal/rules"
+	"set-and-trend/backend/internal/synthesis"
 )
 
 // SaF (Set-and-Forget) backtest runner: walks the H4 history per symbol and
@@ -232,152 +233,14 @@ func loadAllH4Candles(ctx context.Context, pool *pgxpool.Pool, symbol string) ([
 	return out, rows.Err()
 }
 
-// multiTFData holds precomputed multi-timeframe candles and indicators.
-type multiTFData struct {
-	h4Indicators []rules.Indicators
-	d1Candles    []rules.Candle
-	d1EMA50      []float64
-	d1EMA200     []float64
-	w1Candles    []rules.Candle
-	w1EMA50      []float64
-	w1EMA200     []float64
-	h4ToD1       map[int]int
-	d1ToW1       map[int]int
-}
+// multiTFData is a local alias for the shared synthesis package type.
+type multiTFData = synthesis.MultiTFData
 
-// buildFullIndicatorSeries computes EMA50, EMA200, and EMA50Prev for every bar
-// in one pass using the standard recursive EMA formula. Bars before each EMA's
-// warmup carry zero values (the strategy builders already reject on zero EMAs).
-// Also synthesizes D1/W1 bars from H4 and returns them for multi-TF strategies.
+// buildFullIndicatorSeries delegates to the shared synthesis package.
 func buildFullIndicatorSeries(candles []rules.Candle) multiTFData {
-	n := len(candles)
-	out := make([]rules.Indicators, n)
-	if n == 0 {
-		return multiTFData{h4Indicators: out}
-	}
-	ema50 := emaSeries(candles, 50)
-	ema200 := emaSeries(candles, 200)
-
-	d1Candles, h4ToD1 := synthesizeD1(candles)
-	d1ema50 := emaSeries(d1Candles, 50)
-	d1ema200 := emaSeries(d1Candles, 200)
-
-	w1Candles, d1ToW1 := synthesizeW1(d1Candles)
-	w1ema50 := emaSeries(w1Candles, 50)
-	w1ema200 := emaSeries(w1Candles, 200)
-
-	for i := 0; i < n; i++ {
-		var prev *float64
-		if i > 0 {
-			v := ema50[i-1]
-			prev = &v
-		}
-		out[i] = rules.Indicators{
-			EMA50:     ema50[i],
-			EMA200:    ema200[i],
-			EMA50Prev: prev,
-		}
-		if d1Idx, ok := h4ToD1[i]; ok && d1Idx < len(d1ema50) {
-			out[i].D1EMA50 = d1ema50[d1Idx]
-			out[i].D1EMA200 = d1ema200[d1Idx]
-		} else if i > 0 {
-			out[i].D1EMA50 = out[i-1].D1EMA50
-			out[i].D1EMA200 = out[i-1].D1EMA200
-		}
-		if d1Idx, ok := h4ToD1[i]; ok {
-			if w1Idx, ok2 := d1ToW1[d1Idx]; ok2 && w1Idx < len(w1ema50) {
-				out[i].W1EMA50 = w1ema50[w1Idx]
-				out[i].W1EMA200 = w1ema200[w1Idx]
-			}
-		}
-		if out[i].W1EMA50 == 0 && i > 0 {
-			out[i].W1EMA50 = out[i-1].W1EMA50
-			out[i].W1EMA200 = out[i-1].W1EMA200
-		}
-	}
-	return multiTFData{
-		h4Indicators: out,
-		d1Candles:    d1Candles,
-		d1EMA50:      d1ema50,
-		d1EMA200:     d1ema200,
-		w1Candles:    w1Candles,
-		w1EMA50:      w1ema50,
-		w1EMA200:     w1ema200,
-		h4ToD1:       h4ToD1,
-		d1ToW1:       d1ToW1,
-	}
+	return synthesis.BuildFullIndicatorSeries(candles)
 }
 
-// synthesizeD1 aggregates H4 bars into daily OHLC bars. Returns the D1 candle
-// slice and a map[h4Index] → d1Index so each H4 bar can look up its daily EMAs.
-func synthesizeD1(h4 []rules.Candle) ([]rules.Candle, map[int]int) {
-	type dayAcc struct {
-		open, high, low, close float64
-		ts                     time.Time
-		firstH4Idx             int
-	}
-	days := make([]dayAcc, 0, len(h4)/6+1)
-	h4ToD1 := make(map[int]int, len(h4))
-
-	var cur *dayAcc
-	for i, c := range h4 {
-		dayKey := c.TimestampUTC.Truncate(24 * time.Hour)
-		if cur == nil || !cur.ts.Equal(dayKey) {
-			if cur != nil {
-				days = append(days, *cur)
-			}
-			cur = &dayAcc{
-				open: c.Open, high: c.High, low: c.Low, close: c.Close,
-				ts: dayKey, firstH4Idx: i,
-			}
-		} else {
-			if c.High > cur.high {
-				cur.high = c.High
-			}
-			if c.Low < cur.low {
-				cur.low = c.Low
-			}
-			cur.close = c.Close
-		}
-		h4ToD1[i] = len(days) // current day index (will be finalized on flush)
-	}
-	if cur != nil {
-		days = append(days, *cur)
-	}
-
-	out := make([]rules.Candle, len(days))
-	for i, d := range days {
-		out[i] = rules.Candle{
-			Open: d.open, High: d.high, Low: d.low, Close: d.close,
-			TimestampUTC: d.ts,
-		}
-	}
-	return out, h4ToD1
-}
-
-// emaSeries returns the full EMA series. Bars before `period` are seeded with
-// a simple moving average, then the recursive EMA formula takes over.
-func emaSeries(candles []rules.Candle, period int) []float64 {
-	n := len(candles)
-	out := make([]float64, n)
-	if n < period {
-		return out
-	}
-	sum := 0.0
-	for i := 0; i < period; i++ {
-		sum += candles[i].Close
-	}
-	sma := sum / float64(period)
-	for i := 0; i < period; i++ {
-		out[i] = 0 // warmup — rules check for >0 before use
-	}
-	out[period-1] = sma
-	k := 2.0 / float64(period+1)
-	for i := period; i < n; i++ {
-		out[i] = candles[i].Close*k + out[i-1]*(1-k)
-	}
-	return out
-}
 
 // walkForward iterates bars i=safWarmupBars..N-1, invokes each strategy's
 // builder on the slice [0..i], and for every produced setup scans bars i+1..
@@ -386,32 +249,32 @@ func walkForward(symbol string, candles []rules.Candle, mtf multiTFData, strats 
 	trades := make([]safTrade, 0, 64)
 
 	// Precompute D1/W1 indicator slices (parallel to their candle arrays).
-	d1Indicators := make([]rules.Indicators, len(mtf.d1Candles))
-	for i := range mtf.d1Candles {
+	d1Indicators := make([]rules.Indicators, len(mtf.D1Candles))
+	for i := range mtf.D1Candles {
 		d1Indicators[i] = rules.Indicators{
-			EMA50:  mtf.d1EMA50[i],
-			EMA200: mtf.d1EMA200[i],
+			EMA50:  mtf.D1EMA50[i],
+			EMA200: mtf.D1EMA200[i],
 		}
 	}
-	w1Indicators := make([]rules.Indicators, len(mtf.w1Candles))
-	for i := range mtf.w1Candles {
+	w1Indicators := make([]rules.Indicators, len(mtf.W1Candles))
+	for i := range mtf.W1Candles {
 		w1Indicators[i] = rules.Indicators{
-			EMA50:  mtf.w1EMA50[i],
-			EMA200: mtf.w1EMA200[i],
+			EMA50:  mtf.W1EMA50[i],
+			EMA200: mtf.W1EMA200[i],
 		}
 	}
 
 	for i := safWarmupBars; i < len(candles); i++ {
 		// Truncate D1 candles to the current H4 walk position.
 		d1End := 0
-		if idx, ok := mtf.h4ToD1[i]; ok && idx < len(mtf.d1Candles) {
+		if idx, ok := mtf.H4ToD1[i]; ok && idx < len(mtf.D1Candles) {
 			d1End = idx + 1
 		}
 
 		// Truncate W1 candles via D1→W1 map.
 		w1End := 0
 		if d1End > 0 {
-			if wIdx, ok := mtf.d1ToW1[d1End-1]; ok && wIdx < len(mtf.w1Candles) {
+			if wIdx, ok := mtf.D1ToW1[d1End-1]; ok && wIdx < len(mtf.W1Candles) {
 				w1End = wIdx + 1
 			}
 		}
@@ -419,10 +282,10 @@ func walkForward(symbol string, candles []rules.Candle, mtf multiTFData, strats 
 		evalCtx := rules.EvalContext{
 			Symbol:       symbol,
 			Candles:      candles[:i+1],
-			Indicators:   mtf.h4Indicators[:i+1],
-			D1Candles:    mtf.d1Candles[:d1End],
+			Indicators:   mtf.H4Indicators[:i+1],
+			D1Candles:    mtf.D1Candles[:d1End],
 			D1Indicators: d1Indicators[:d1End],
-			W1Candles:    mtf.w1Candles[:w1End],
+			W1Candles:    mtf.W1Candles[:w1End],
 			W1Indicators: w1Indicators[:w1End],
 		}
 
@@ -665,54 +528,6 @@ func printScoreSweep(trades []safTrade) {
 	fmt.Println("============================================================")
 }
 
-// synthesizeW1 aggregates D1 candles into weekly bars (ISO week grouping).
-// Returns the W1 candle slice and a map[d1Index] → w1Index.
-func synthesizeW1(d1 []rules.Candle) ([]rules.Candle, map[int]int) {
-	type weekAcc struct {
-		open, high, low, close float64
-		ts                     time.Time
-	}
-	weeks := make([]weekAcc, 0, len(d1)/5+1)
-	d1ToW1 := make(map[int]int, len(d1))
-
-	var cur *weekAcc
-	prevKey := ""
-	for i, c := range d1 {
-		y, w := c.TimestampUTC.ISOWeek()
-		key := fmt.Sprintf("%d-%02d", y, w)
-		if key != prevKey {
-			if cur != nil {
-				weeks = append(weeks, *cur)
-			}
-			cur = &weekAcc{
-				open: c.Open, high: c.High, low: c.Low, close: c.Close,
-				ts: c.TimestampUTC,
-			}
-			prevKey = key
-		} else {
-			if c.High > cur.high {
-				cur.high = c.High
-			}
-			if c.Low < cur.low {
-				cur.low = c.Low
-			}
-			cur.close = c.Close
-		}
-		d1ToW1[i] = len(weeks)
-	}
-	if cur != nil {
-		weeks = append(weeks, *cur)
-	}
-
-	out := make([]rules.Candle, len(weeks))
-	for i, w := range weeks {
-		out[i] = rules.Candle{
-			Open: w.open, High: w.high, Low: w.low, Close: w.close,
-			TimestampUTC: w.ts,
-		}
-	}
-	return out, d1ToW1
-}
 
 func dirOf(p string) string {
 	for i := len(p) - 1; i >= 0; i-- {

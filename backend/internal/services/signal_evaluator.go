@@ -10,9 +10,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog/log"
 
-	"set-and-trend/backend/internal/patterns"
 	"set-and-trend/backend/internal/repositories"
 	"set-and-trend/backend/internal/rules"
+	"set-and-trend/backend/internal/synthesis"
 )
 
 // SignalEvaluator runs every enabled strategy against the latest H4 bar for
@@ -37,10 +37,10 @@ func NewSignalEvaluator(
 	}
 }
 
-// historyBars is the number of recent H4 candles loaded per evaluation. 250
-// is comfortably above EMA200's warmup and gives the swing/zone helpers
-// enough context.
-const historyBars = 250
+// historyBars is the number of recent H4 candles loaded per evaluation. 7200
+// gives ~1200 D1 bars and ~240 W1 bars — enough for EMA200 warmup on all
+// timeframes including W1, plus lookback for patterns and zones.
+const historyBars = 7200
 
 // EvaluateAll loads the most recent `historyBars` H4 candles for each enabled
 // strategy's symbol, evaluates the rule, and writes a setup_signals row on
@@ -82,11 +82,31 @@ func (e *SignalEvaluator) evaluateOne(ctx context.Context, s *repositories.Strat
 		return 0, nil
 	}
 
-	indicators := buildIndicatorSeries(candles)
+	mtf := synthesis.BuildFullIndicatorSeries(candles)
+
+	d1Indicators := make([]rules.Indicators, len(mtf.D1Candles))
+	for i := range mtf.D1Candles {
+		d1Indicators[i] = rules.Indicators{
+			EMA50:  mtf.D1EMA50[i],
+			EMA200: mtf.D1EMA200[i],
+		}
+	}
+	w1Indicators := make([]rules.Indicators, len(mtf.W1Candles))
+	for i := range mtf.W1Candles {
+		w1Indicators[i] = rules.Indicators{
+			EMA50:  mtf.W1EMA50[i],
+			EMA200: mtf.W1EMA200[i],
+		}
+	}
+
 	evalCtx := rules.EvalContext{
-		Symbol:     s.Symbol,
-		Candles:    candles,
-		Indicators: indicators,
+		Symbol:       s.Symbol,
+		Candles:      candles,
+		Indicators:   mtf.H4Indicators,
+		D1Candles:    mtf.D1Candles,
+		D1Indicators: d1Indicators,
+		W1Candles:    mtf.W1Candles,
+		W1Indicators: w1Indicators,
 	}
 
 	setup, err := builder(evalCtx)
@@ -207,37 +227,3 @@ func (e *SignalEvaluator) loadH4Candles(ctx context.Context, symbol string, limi
 	return candles, latestID, nil
 }
 
-// buildIndicatorSeries computes a parallel Indicators slice for the candle
-// history. Only the last entry is populated with real EMA values; earlier
-// entries are zero-valued. The current rule set only reads indicators at
-// the latest bar (via EvalContext.Latest), so this stays cheap.
-func buildIndicatorSeries(candles []rules.Candle) []rules.Indicators {
-	out := make([]rules.Indicators, len(candles))
-	if len(candles) < 2 {
-		return out
-	}
-
-	pcandles := make([]patterns.Candle, len(candles))
-	for i, c := range candles {
-		pcandles[i] = patterns.Candle{
-			Index:     i,
-			Timestamp: c.TimestampUTC,
-			Open:      c.Open,
-			High:      c.High,
-			Low:       c.Low,
-			Close:     c.Close,
-		}
-	}
-
-	ema50Now := patterns.CalculateEMA(pcandles, 50)
-	ema200Now := patterns.CalculateEMA(pcandles, 200)
-	ema50Prev := patterns.CalculateEMA(pcandles[:len(pcandles)-1], 50)
-
-	last := len(candles) - 1
-	out[last] = rules.Indicators{
-		EMA50:     ema50Now,
-		EMA200:    ema200Now,
-		EMA50Prev: &ema50Prev,
-	}
-	return out
-}

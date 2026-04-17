@@ -19,7 +19,10 @@ const (
 	H4TrendFollowing  RuleCode = "H4_TREND_FOLLOWING"
 	H4SupplyDemand    RuleCode = "H4_SUPPLY_DEMAND"
 	H4LondonBreakout  RuleCode = "H4_LONDON_BREAKOUT"
-	SAFChecklist      RuleCode = "SAF_CHECKLIST"
+	SAFChecklist            RuleCode = "SAF_CHECKLIST"
+	SAFW1EmaRejection       RuleCode = "SAF_W1_EMA_REJECTION"
+	SAFD1RejectionStructure RuleCode = "SAF_D1_REJECTION_STRUCTURE"
+	SAFW1RejectionD1AOI     RuleCode = "SAF_W1_REJECTION_D1_AOI"
 )
 
 // RuleSpec defines an immutable rule specification
@@ -96,8 +99,8 @@ type Indicators struct {
 	UpperWick  float64
 	LowerWick  float64
 	MidPrice   float64
-	// HTF trend indicators — populated by the SaF backtest runner.
-	// Zero = not available (live evaluator doesn't fill these yet).
+	// HTF trend indicators — populated by synthesis.BuildFullIndicatorSeries.
+	// Zero = not yet warmed up (bars before EMA period).
 	D1EMA50    float64
 	D1EMA200   float64
 	W1EMA50    float64
