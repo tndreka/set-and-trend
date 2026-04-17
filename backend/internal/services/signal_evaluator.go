@@ -42,18 +42,41 @@ func NewSignalEvaluator(
 // timeframes including W1, plus lookback for patterns and zones.
 const historyBars = 7200
 
-// EvaluateAll loads the most recent `historyBars` H4 candles for each enabled
-// strategy's symbol, evaluates the rule, and writes a setup_signals row on
-// PASS. Returns the number of new signals created.
+// symbolData caches per-symbol candle data and synthesis results so multiple
+// strategies sharing a symbol don't repeat the expensive DB load + synthesis.
+type symbolData struct {
+	candles  []rules.Candle
+	latestID uuid.UUID
+	evalCtx  rules.EvalContext
+}
+
+// EvaluateAll loads the most recent `historyBars` H4 candles for each unique
+// symbol, computes multi-TF synthesis once per symbol, then evaluates every
+// strategy against the cached context. Returns the number of new signals.
 func (e *SignalEvaluator) EvaluateAll(ctx context.Context) (int, error) {
 	strategies, err := e.strategyRepo.ListStrategies(ctx, true)
 	if err != nil {
 		return 0, fmt.Errorf("list enabled strategies: %w", err)
 	}
 
+	cache := make(map[string]*symbolData)
+
 	created := 0
 	for _, s := range strategies {
-		n, err := e.evaluateOne(ctx, s)
+		sd, ok := cache[s.Symbol]
+		if !ok {
+			sd, err = e.buildSymbolData(ctx, s.Symbol)
+			if err != nil {
+				log.Error().Err(err).Str("symbol", s.Symbol).Msg("build symbol data failed")
+				continue
+			}
+			cache[s.Symbol] = sd
+		}
+		if sd == nil {
+			continue
+		}
+
+		n, err := e.evaluateStrategy(ctx, s, sd)
 		if err != nil {
 			log.Error().Err(err).Str("strategy", s.Code).Msg("evaluate strategy failed")
 			continue
@@ -63,23 +86,15 @@ func (e *SignalEvaluator) EvaluateAll(ctx context.Context) (int, error) {
 	return created, nil
 }
 
-func (e *SignalEvaluator) evaluateOne(ctx context.Context, s *repositories.Strategy) (int, error) {
-	builder, ok := rules.SetupBuilders[rules.RuleCode(s.Code)]
-	if !ok {
-		// Strategy is in the DB but no builder is registered in code. This
-		// is a config drift, not a fatal error — log and skip.
-		log.Warn().Str("strategy", s.Code).Msg("no setup builder registered")
-		return 0, nil
-	}
-
-	candles, latestID, err := e.loadH4Candles(ctx, s.Symbol, historyBars)
+// buildSymbolData loads candles and runs multi-TF synthesis once per symbol.
+// Returns nil (not an error) if there is not enough history yet.
+func (e *SignalEvaluator) buildSymbolData(ctx context.Context, symbol string) (*symbolData, error) {
+	candles, latestID, err := e.loadH4Candles(ctx, symbol, historyBars)
 	if err != nil {
-		return 0, fmt.Errorf("load candles for %s: %w", s.Symbol, err)
+		return nil, fmt.Errorf("load candles for %s: %w", symbol, err)
 	}
 	if len(candles) < 30 {
-		// Not enough history yet — this happens when the candle-sync command
-		// has only just started populating candles_h4 for a new symbol.
-		return 0, nil
+		return nil, nil
 	}
 
 	mtf := synthesis.BuildFullIndicatorSeries(candles)
@@ -99,17 +114,31 @@ func (e *SignalEvaluator) evaluateOne(ctx context.Context, s *repositories.Strat
 		}
 	}
 
-	evalCtx := rules.EvalContext{
-		Symbol:       s.Symbol,
-		Candles:      candles,
-		Indicators:   mtf.H4Indicators,
-		D1Candles:    mtf.D1Candles,
-		D1Indicators: d1Indicators,
-		W1Candles:    mtf.W1Candles,
-		W1Indicators: w1Indicators,
+	// No truncation needed: all bars are historical at evaluation time, so
+	// the full D1/W1 slices are safe to pass (no future leakage).
+	return &symbolData{
+		candles:  candles,
+		latestID: latestID,
+		evalCtx: rules.EvalContext{
+			Symbol:       symbol,
+			Candles:      candles,
+			Indicators:   mtf.H4Indicators,
+			D1Candles:    mtf.D1Candles,
+			D1Indicators: d1Indicators,
+			W1Candles:    mtf.W1Candles,
+			W1Indicators: w1Indicators,
+		},
+	}, nil
+}
+
+func (e *SignalEvaluator) evaluateStrategy(ctx context.Context, s *repositories.Strategy, sd *symbolData) (int, error) {
+	builder, ok := rules.SetupBuilders[rules.RuleCode(s.Code)]
+	if !ok {
+		log.Warn().Str("strategy", s.Code).Msg("no setup builder registered")
+		return 0, nil
 	}
 
-	setup, err := builder(evalCtx)
+	setup, err := builder(sd.evalCtx)
 	if err != nil {
 		return 0, fmt.Errorf("builder %s: %w", s.Code, err)
 	}
@@ -119,14 +148,14 @@ func (e *SignalEvaluator) evaluateOne(ctx context.Context, s *repositories.Strat
 
 	details, _ := json.Marshal(map[string]any{
 		"reason":     setup.Reason,
-		"latest_bar": candles[len(candles)-1].TimestampUTC.Format(time.RFC3339),
+		"latest_bar": sd.candles[len(sd.candles)-1].TimestampUTC.Format(time.RFC3339),
 	})
 
 	_, err = e.signalRepo.CreateSignal(ctx, repositories.CreateSignalParams{
 		StrategyID: s.ID,
 		Symbol:     s.Symbol,
 		Timeframe:  s.Timeframe,
-		CandleID:   latestID,
+		CandleID:   sd.latestID,
 		Direction:  setup.Direction,
 		Entry:      setup.Entry,
 		StopLoss:   setup.StopLoss,
@@ -136,8 +165,6 @@ func (e *SignalEvaluator) evaluateOne(ctx context.Context, s *repositories.Strat
 		Details:    details,
 	})
 	if err != nil {
-		// The (strategy_id, candle_id) UNIQUE means a re-run on the same bar
-		// just no-ops on the second insert. Treat that as success-with-zero.
 		if isUniqueViolation(err) {
 			return 0, nil
 		}
