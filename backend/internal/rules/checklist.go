@@ -12,12 +12,12 @@ import (
 
 // MinChecklistScore is the default minimum score (out of 20) to emit a setup.
 // Tunable per-backtest via the SAF_MIN_SCORE environment variable.
-var MinChecklistScore = 12
+var MinChecklistScore = 9
 
 func init() {
 	SetupBuilders[SAFChecklist] = buildSAFChecklistSetup
 	if v := os.Getenv("SAF_MIN_SCORE"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n >= 1 && n <= 20 {
+		if n, err := strconv.Atoi(v); err == nil && n >= 1 && n <= 16 {
 			MinChecklistScore = n
 		}
 	}
@@ -55,7 +55,7 @@ func buildSAFChecklistSetup(ctx EvalContext) (*Setup, error) {
 		return nil, nil
 	}
 
-	items := make(map[string]bool, 20)
+	items := make(map[string]bool, 16)
 	score := 0
 
 	check := func(name string, pass bool) {
@@ -66,20 +66,14 @@ func buildSAFChecklistSetup(ctx EvalContext) (*Setup, error) {
 	}
 
 	// ---- Weekly (W1) — real W1 candles ----
+	// Removed w1_aoi (-3.8% lift, anti-signal) and w1_structure_rejection (-3.0% lift)
 	w1Candles := toPatternCandles(ctx.W1Candles)
 	check("w1_in_favor", checkInFavor(ind.W1EMA50, ind.W1EMA200, direction))
-	if len(w1Candles) >= 20 {
-		check("w1_aoi", checkAOI(w1Candles, symbol, direction))
-	} else {
-		check("w1_aoi", false)
-	}
 	check("w1_touching_ema", ind.W1EMA50 > 0 && NearEMA(candle.Close, ind.W1EMA50, 0.005))
 	if w1Latest, ok := ctx.LatestW1(); ok {
 		check("w1_candle_rejection", IsCandleRejection(w1Latest, direction))
-		check("w1_structure_rejection", checkStructureRejection(w1Candles, w1Latest, direction, 20))
 	} else {
 		check("w1_candle_rejection", false)
-		check("w1_structure_rejection", false)
 	}
 	if len(w1Candles) >= 30 {
 		check("w1_pattern", checkPattern(w1Candles, symbol, direction, 30))
@@ -110,15 +104,15 @@ func buildSAFChecklistSetup(ctx EvalContext) (*Setup, error) {
 	}
 
 	// ---- 4H ----
+	// Removed h4_structure_rejection (0 trades, never fires)
 	check("h4_in_favor", checkInFavor(ind.EMA50, ind.EMA200, direction))
 	check("h4_ema_touch", ind.EMA50 > 0 && NearEMA(candle.Close, ind.EMA50, 0.008))
 	check("h4_candle_rejection", IsCandleRejection(candle, direction))
-	check("h4_structure_rejection", checkStructureRejection(h4Candles, candle, direction, 10))
 	check("h4_pattern", checkPattern(h4Candles, symbol, direction, 30))
 
 	// ---- Bonus ----
+	// Removed shift_of_structure (-9.9% lift, anti-signal)
 	check("psych_level", NearPsychLevel(candle.Close, isJPY))
-	check("shift_of_structure", checkSOS(h4Candles, symbol, direction))
 	if len(ctx.Candles) >= 2 {
 		prev := ctx.Candles[len(ctx.Candles)-2]
 		check("engulfing", IsEngulfing(prev, candle, direction))
@@ -143,7 +137,13 @@ func buildSAFChecklistSetup(ctx EvalContext) (*Setup, error) {
 
 	tp := findTP(h4Candles, entry, direction, symbol, risk)
 	rr := computeRR(direction, entry, sl, tp)
-	if rr < 1.5 {
+	minRR := 2.0
+	if v := os.Getenv("SAF_MIN_RR"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil && f >= 1.0 && f <= 5.0 {
+			minRR = f
+		}
+	}
+	if rr < minRR {
 		return nil, nil
 	}
 
@@ -160,8 +160,8 @@ func buildSAFChecklistSetup(ctx EvalContext) (*Setup, error) {
 		StopLoss:       sl,
 		TakeProfit:     tp,
 		RR:             rr,
-		Confidence:     float64(score) / 20.0,
-		Reason:         fmt.Sprintf("SAF checklist %d/20: %s", score, strings.Join(itemNames, ",")),
+		Confidence:     float64(score) / 16.0,
+		Reason:         fmt.Sprintf("SAF checklist %d/16: %s", score, strings.Join(itemNames, ",")),
 		ChecklistScore: score,
 		ChecklistItems: items,
 	}, nil
@@ -298,18 +298,42 @@ func checkSOS(candles []patterns.Candle, symbol, direction string) bool {
 	return patterns.HasRecentBearishBOS(candles, lookback, symbol)
 }
 
+func atr14(candles []patterns.Candle) float64 {
+	n := len(candles)
+	if n < 15 {
+		return 0
+	}
+	sum := 0.0
+	for i := n - 14; i < n; i++ {
+		c := candles[i]
+		prev := candles[i-1]
+		tr := c.High - c.Low
+		if d := math.Abs(c.High - prev.Close); d > tr {
+			tr = d
+		}
+		if d := math.Abs(c.Low - prev.Close); d > tr {
+			tr = d
+		}
+		sum += tr
+	}
+	return sum / 14.0
+}
+
 func findSL(candles []patterns.Candle, c Candle, direction, symbol string) float64 {
+	minDist := atr14(candles) * 0.5
 	if direction == "LONG" {
 		swings := patterns.FindSwingLows(candles, 5)
 		for i := len(swings) - 1; i >= 0; i-- {
-			if swings[i].Price < c.Close {
+			dist := c.Close - swings[i].Price
+			if dist >= minDist {
 				return swings[i].Price
 			}
 		}
 	} else {
 		swings := patterns.FindSwingHighs(candles, 5)
 		for i := len(swings) - 1; i >= 0; i-- {
-			if swings[i].Price > c.Close {
+			dist := swings[i].Price - c.Close
+			if dist >= minDist {
 				return swings[i].Price
 			}
 		}

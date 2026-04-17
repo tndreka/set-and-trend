@@ -636,7 +636,7 @@ func printScoreSweep(trades []safTrade) {
 		}
 	}
 
-	for minScore := 1; minScore <= 20; minScore++ {
+	for minScore := 1; minScore <= 16; minScore++ {
 		var filtered []safTrade
 		for _, t := range sorted {
 			if t.checklistScore >= minScore {
@@ -725,10 +725,10 @@ func dirOf(p string) string {
 
 // Canonical order for the 20 checklist items.
 var checklistItemOrder = []string{
-	"w1_in_favor", "w1_aoi", "w1_touching_ema", "w1_candle_rejection", "w1_structure_rejection", "w1_pattern",
+	"w1_in_favor", "w1_touching_ema", "w1_candle_rejection", "w1_pattern",
 	"d1_in_favor", "d1_aoi", "d1_touching_ema", "d1_candle_rejection", "d1_structure_rejection", "d1_pattern",
-	"h4_in_favor", "h4_ema_touch", "h4_candle_rejection", "h4_structure_rejection", "h4_pattern",
-	"psych_level", "shift_of_structure", "engulfing",
+	"h4_in_favor", "h4_ema_touch", "h4_candle_rejection", "h4_pattern",
+	"psych_level", "engulfing",
 }
 
 func boolTo01(b bool) string {
