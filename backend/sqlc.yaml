@@ -2,12 +2,18 @@ version: "2"
 
 sql:
   - engine: "postgresql"
-    schema: 
+    schema:
       - "migrations/000001_init_schema.up.sql"
       - "migrations/000006_add_user_auth_fields.up.sql"
       - "migrations/000007_add_trade_feedback.up.sql"
       - "migrations/000008_hns_pattern_detection.up.sql"
+      - "migrations/000011_add_check_constraints.up.sql"
       - "migrations/000012_add_symbol_to_candles.up.sql"
+      - "migrations/000013_restore_journal_schema.up.sql"
+      - "migrations/000014_add_strategies_and_signals.up.sql"
+      # 000015 skipped: seed data (INSERT/UPDATE)
+      - "migrations/000016_ai_layer.up.sql"
+      # 000017, 000018 skipped: seed data (INSERT/UPDATE)
     queries: "internal/db/queries/"
     gen:
       go:

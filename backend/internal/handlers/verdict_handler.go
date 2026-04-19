@@ -23,6 +23,21 @@ func NewVerdictHandler(
 	return &VerdictHandler{verdictRepo: verdictRepo, signalRepo: signalRepo}
 }
 
+// GET /api/signals/:id — fetch a single signal by ID.
+func (h *VerdictHandler) GetSignalByID(c *gin.Context) {
+	signalID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid signal id"})
+		return
+	}
+	signal, err := h.signalRepo.GetByID(c.Request.Context(), signalID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "signal not found"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "success", "data": signal})
+}
+
 type createVerdictRequest struct {
 	AgentID    string          `json:"agent_id" binding:"required"`
 	Verdict    string          `json:"verdict" binding:"required"`

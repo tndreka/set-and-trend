@@ -35,12 +35,10 @@ func (s *TradeService) CreateTrade(ctx context.Context, input CreateTradeInput) 
 	direction := strings.ToUpper(input.Direction)
 	
 	// Validate symbol is supported
-	if !constants.ValidateSymbol(input.Symbol) {
-		return nil, fmt.Errorf("symbol %s not supported. Add to constants.SymbolRegistry", input.Symbol)
+	symbolConfig, err := constants.GetSymbolConfig(input.Symbol)
+	if err != nil {
+		return nil, fmt.Errorf("symbol %s not supported: %w", input.Symbol, err)
 	}
-	
-	// Get symbol configuration
-	symbolConfig := constants.MustGetSymbolConfig(input.Symbol)
 	
 	// 1. Load account
 	account, err := s.accountRepo.GetAccountByID(ctx, input.AccountID)
@@ -88,8 +86,7 @@ func (s *TradeService) CreateTrade(ctx context.Context, input CreateTradeInput) 
 	}
 
 	// Position sizing using symbol-specific contract size
-	pipValuePerLot := symbolConfig.PipSize * symbolConfig.ContractSize // $10 for EURUSD, ~$8-9 for JPY
-	positionSize, err := ComputePositionSize(riskAmount, stopDistancePips, pipValuePerLot)
+	positionSize, err := ComputePositionSize(riskAmount, stopDistancePips, symbolConfig.PipValue)
 	if err != nil {
 		return nil, fmt.Errorf("position sizing: %w", err)
 	}
@@ -178,7 +175,10 @@ func (s *TradeService) CreateSimpleTrade(ctx context.Context, input CreateSimple
 	if input.Timeframe == "" {
 		input.Timeframe = constants.TimeframeH4
 	}
-	symbolConfig := constants.MustGetSymbolConfig(input.Symbol)
+	symbolConfig, err := constants.GetSymbolConfig(input.Symbol)
+	if err != nil {
+		return nil, fmt.Errorf("symbol %s not supported: %w", input.Symbol, err)
+	}
 
 	account, err := s.accountRepo.GetAccountByID(ctx, input.AccountID)
 	if err != nil {
@@ -210,8 +210,7 @@ func (s *TradeService) CreateSimpleTrade(ctx context.Context, input CreateSimple
 	if err != nil {
 		return nil, fmt.Errorf("pip conversion: %w", err)
 	}
-	pipValuePerLot := symbolConfig.PipSize * symbolConfig.ContractSize
-	positionSize, err := ComputePositionSize(riskAmount, stopDistancePips, pipValuePerLot)
+	positionSize, err := ComputePositionSize(riskAmount, stopDistancePips, symbolConfig.PipValue)
 	if err != nil {
 		return nil, fmt.Errorf("position sizing: %w", err)
 	}

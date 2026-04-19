@@ -51,7 +51,7 @@ func DeriveTradeState(
 		case "invalidate":
 			return StateInvalidated, nil
 		default:
-			return "", fmt.Errorf("unknown intent type: %s", intent. IntentType)
+			return "", fmt.Errorf("unknown intent type: %s", intent.IntentType)
 		}
 	}
 	
@@ -159,7 +159,7 @@ func CanTransition(currentState TradeState, eventType string) error {
 		}
 	}
 	
-	return fmt. Errorf(
+	return fmt.Errorf(
 		"invalid transition: cannot %s from %s state",
 		eventType,
 		currentState,
@@ -180,34 +180,34 @@ func GetActualEntryPrice(executions []TradeExecution) (float64, error) {
 	return 0, errors.New("no entry execution found")
 }
 
-// ComputePnL calculates profit/loss using ACTUAL entry price (not planned)
+// ComputePnL calculates profit/loss using ACTUAL entry price (not planned).
+// pipSize is the symbol's pip size (e.g. 0.0001 for EURUSD, 0.01 for USDJPY).
+// pipValuePerLot is pipSize * contractSize (e.g. $10 for EURUSD, ~$6.5 for USDJPY).
 func ComputePnL(
 	bias string,
 	executions []TradeExecution,
 	closePrice float64,
 	positionSize float64,
-	pipValue float64,
+	pipSize float64,
+	pipValuePerLot float64,
 ) (pnlMoney float64, pnlPips float64, err error) {
-	// Get ACTUAL entry price (critical fix)
 	entryPrice, err := GetActualEntryPrice(executions)
 	if err != nil {
-		return 0, 0, fmt.Errorf("get entry price:  %w", err)
+		return 0, 0, fmt.Errorf("get entry price: %w", err)
 	}
-	
-	// Calculate pip difference
+
 	var pipDiff float64
 	if bias == "long" {
-		pipDiff = (closePrice - entryPrice) / pipValue
+		pipDiff = (closePrice - entryPrice) / pipSize
 	} else if bias == "short" {
-		pipDiff = (entryPrice - closePrice) / pipValue
+		pipDiff = (entryPrice - closePrice) / pipSize
 	} else {
 		return 0, 0, fmt.Errorf("invalid bias: %s", bias)
 	}
-	
-	// Calculate money gained/lost
+
 	pnlPips = pipDiff
-	pnlMoney = pipDiff * pipValue * positionSize * 100000 // Standard lot conversion
-	
+	pnlMoney = pipDiff * pipValuePerLot * positionSize
+
 	return pnlMoney, pnlPips, nil
 }
 
@@ -232,14 +232,14 @@ func ComputeRemainingPosition(
 	
 	for _, exec := range sortedExecs {
 		switch exec.ExecutionType {
-		case "entry":
+		case "ENTRY_FILLED":
 			entryFilled = true
-			
-		case "partial_close": 
+
+		case "PARTIAL_EXIT":
 			if !entryFilled {
 				return 0, errors.New("partial close before entry")
 			}
-			if exec. Quantity <= 0 {
+			if exec.Quantity <= 0 {
 				return 0, errors.New("partial close size must be positive")
 			}
 			if exec.Quantity >= remaining {
@@ -250,8 +250,8 @@ func ComputeRemainingPosition(
 				)
 			}
 			remaining -= exec.Quantity
-			
-		case "tp_hit", "sl_hit", "manual_close": 
+
+		case "TP_HIT", "SL_HIT", "MANUAL_CLOSE":
 			if !entryFilled {
 				return 0, errors.New("close event before entry")
 			}
@@ -278,11 +278,11 @@ func ValidateExecutionSize(
 ) error {
 	remaining, err := ComputeRemainingPosition(plannedSize, existingExecutions)
 	if err != nil {
-		return fmt. Errorf("compute remaining:  %w", err)
+		return fmt.Errorf("compute remaining:  %w", err)
 	}
 	
 	switch eventType {
-	case "entry":
+	case "ENTRY_FILLED":
 		if executionSize != plannedSize {
 			return fmt.Errorf(
 				"entry size %.4f must match planned %.4f",
@@ -290,8 +290,8 @@ func ValidateExecutionSize(
 				plannedSize,
 			)
 		}
-		
-	case "partial_close": 
+
+	case "PARTIAL_EXIT":
 		if executionSize <= 0 {
 			return errors.New("partial close size must be positive")
 		}
@@ -302,8 +302,8 @@ func ValidateExecutionSize(
 				remaining,
 			)
 		}
-		
-	case "tp_hit", "sl_hit", "manual_close":
+
+	case "TP_HIT", "SL_HIT", "MANUAL_CLOSE":
 		if executionSize != remaining {
 			return fmt.Errorf(
 				"close size %.4f must match remaining %.4f",

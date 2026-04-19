@@ -329,8 +329,19 @@ type Account struct {
 	MaxDailyRiskPct    decimal.Decimal    `json:"max_daily_risk_pct"`
 	Timezone           string             `json:"timezone"`
 	PreferredSession   SessionType        `json:"preferred_session"`
-	StrategyID         pgtype.UUID        `json:"strategy_id"`
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	StrategyID         pgtype.UUID        `json:"strategy_id"`
+}
+
+type AiVerdict struct {
+	ID         uuid.UUID          `json:"id"`
+	SignalID   uuid.UUID          `json:"signal_id"`
+	AgentID    string             `json:"agent_id"`
+	Verdict    string             `json:"verdict"`
+	Confidence decimal.Decimal    `json:"confidence"`
+	Reason     pgtype.Text        `json:"reason"`
+	RawOutput  []byte             `json:"raw_output"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
 }
 
 type CandlesD1 struct {
@@ -491,6 +502,27 @@ type RuleResult struct {
 	ConfidenceScore decimal.Decimal    `json:"confidence_score"`
 }
 
+type SetupSignal struct {
+	ID           uuid.UUID          `json:"id"`
+	StrategyID   uuid.UUID          `json:"strategy_id"`
+	Symbol       string             `json:"symbol"`
+	Timeframe    RuleTimeframe      `json:"timeframe"`
+	CandleID     uuid.UUID          `json:"candle_id"`
+	Direction    TradeDirection     `json:"direction"`
+	Entry        decimal.Decimal    `json:"entry"`
+	StopLoss     decimal.Decimal    `json:"stop_loss"`
+	TakeProfit   decimal.Decimal    `json:"take_profit"`
+	Rr           decimal.Decimal    `json:"rr"`
+	Confidence   decimal.Decimal    `json:"confidence"`
+	Details      []byte             `json:"details"`
+	Notified     bool               `json:"notified"`
+	NotifiedAt   pgtype.Timestamptz `json:"notified_at"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	AiSummary    pgtype.Text        `json:"ai_summary"`
+	AiComposedAt pgtype.Timestamptz `json:"ai_composed_at"`
+	ShadowMode   bool               `json:"shadow_mode"`
+}
+
 type Signal struct {
 	ID                 uuid.UUID          `json:"id"`
 	PatternDetectionID uuid.UUID          `json:"pattern_detection_id"`
@@ -505,6 +537,22 @@ type Signal struct {
 	Confidence         decimal.Decimal    `json:"confidence"`
 	Status             string             `json:"status"`
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
+type Strategy struct {
+	ID          uuid.UUID          `json:"id"`
+	Code        string             `json:"code"`
+	Name        string             `json:"name"`
+	Description string             `json:"description"`
+	Symbol      string             `json:"symbol"`
+	Timeframe   RuleTimeframe      `json:"timeframe"`
+	Enabled     bool               `json:"enabled"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+type StrategyRule struct {
+	StrategyID uuid.UUID `json:"strategy_id"`
+	RuleID     uuid.UUID `json:"rule_id"`
 }
 
 type Trade struct {
@@ -541,6 +589,14 @@ type TradeFeedback struct {
 	BiggestMistake pgtype.Text        `json:"biggest_mistake"`
 	ScreenshotUrl  pgtype.Text        `json:"screenshot_url"`
 	FeedbackAt     pgtype.Timestamptz `json:"feedback_at"`
+}
+
+type TradeIntent struct {
+	ID         uuid.UUID          `json:"id"`
+	TradeID    uuid.UUID          `json:"trade_id"`
+	IntentType string             `json:"intent_type"`
+	Reason     string             `json:"reason"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
 }
 
 type User struct {

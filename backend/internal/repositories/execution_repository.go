@@ -16,43 +16,43 @@ type ExecutionRepository struct {
 }
 
 func NewExecutionRepository(pool *pgxpool.Pool) *ExecutionRepository {
-	return &ExecutionRepository{pool:  pool}
+	return &ExecutionRepository{pool: pool}
 }
 
 // TradeExecution represents an execution event
 type TradeExecution struct {
-	ID           uuid.UUID  `json:"id"`
-	TradeID      uuid.UUID  `json:"trade_id"`
-	ExecutionType    string     `json:"execution_type"`
-	Price        *string    `json:"price,omitempty"`
-	Quantity *string    `json:"quantity,omitempty"`
-	PnL          *string    `json:"pnl,omitempty"`
-	PnLPips      *string    `json:"pnl_pips,omitempty"`
-	ExecutedAt   time.Time  `json:"executed_at"`
-	Session      *string    `json:"session,omitempty"`
-	Reason       *string    `json:"reason,omitempty"`
-	SlippagePips *string    `json:"slippage_pips,omitempty"`
-	CreatedAt    time.Time  `json:"created_at"`
+	ID            uuid.UUID `json:"id"`
+	TradeID       uuid.UUID `json:"trade_id"`
+	ExecutionType string    `json:"execution_type"`
+	Price         *string   `json:"price,omitempty"`
+	Quantity      *string   `json:"quantity,omitempty"`
+	PnL           *string   `json:"pnl,omitempty"`
+	PnLPips       *string   `json:"pnl_pips,omitempty"`
+	ExecutedAt    time.Time `json:"executed_at"`
+	Session       *string   `json:"session,omitempty"`
+	Reason        *string   `json:"reason,omitempty"`
+	SlippagePips  *string   `json:"slippage_pips,omitempty"`
+	CreatedAt     time.Time `json:"created_at"`
 }
 
 // CreateExecutionParams contains parameters for creating an execution event
 type CreateExecutionParams struct {
-	TradeID      uuid. UUID
-	ExecutionType    string
-	Price        *float64
-	Quantity *float64
-	PnL          *float64
-	PnLPips      *float64
-	Session      *string
-	Reason       *string
-	SlippagePips *float64
+	TradeID       uuid.UUID
+	ExecutionType string
+	Price         *float64
+	Quantity      *float64
+	PnL           *float64
+	PnLPips       *float64
+	Session       *string
+	Reason        *string
+	SlippagePips  *float64
 }
 
 // CreateExecution inserts a new execution event
 func (r *ExecutionRepository) CreateExecution(ctx context.Context, params CreateExecutionParams) (*TradeExecution, error) {
 	// Convert floats to decimals for storage
 	var priceStr, sizeStr *string
-	
+
 	if params.Price != nil {
 		s := decimal.NewFromFloat(*params.Price).String()
 		priceStr = &s
@@ -61,9 +61,9 @@ func (r *ExecutionRepository) CreateExecution(ctx context.Context, params Create
 		s := decimal.NewFromFloat(*params.Quantity).String()
 		sizeStr = &s
 	}
-	
+
 	var exec TradeExecution
-	
+
 	err := r.pool.QueryRow(ctx, `
 		INSERT INTO trade_executions (
     		id, trade_id, execution_type, price, quantity
@@ -71,7 +71,7 @@ func (r *ExecutionRepository) CreateExecution(ctx context.Context, params Create
 		VALUES ($1, $2, $3, $4, $5)
 		RETURNING id, trade_id, execution_type, price, quantity, 
 			executed_at
-	`, uuid.New(), params.TradeID, params.ExecutionType, 
+	`, uuid.New(), params.TradeID, params.ExecutionType,
 		priceStr, sizeStr).Scan(
 		&exec.ID,
 		&exec.TradeID,
@@ -80,11 +80,11 @@ func (r *ExecutionRepository) CreateExecution(ctx context.Context, params Create
 		&exec.Quantity,
 		&exec.ExecutedAt,
 	)
-	
+
 	if err != nil {
 		return nil, fmt.Errorf("create execution: %w", err)
 	}
-	
+
 	return &exec, nil
 }
 
@@ -100,8 +100,8 @@ func (r *ExecutionRepository) GetExecutionsByTradeID(ctx context.Context, tradeI
 	if err != nil {
 		return nil, fmt.Errorf("query executions: %w", err)
 	}
-	defer rows. Close()
-	
+	defer rows.Close()
+
 	var executions []TradeExecution
 	for rows.Next() {
 		var exec TradeExecution
@@ -118,29 +118,30 @@ func (r *ExecutionRepository) GetExecutionsByTradeID(ctx context.Context, tradeI
 		}
 		executions = append(executions, exec)
 	}
-	
+
 	if err := rows.Err(); err != nil {
-		return nil, fmt. Errorf("rows error: %w", err)
+		return nil, fmt.Errorf("rows error: %w", err)
 	}
-	
+
 	return executions, nil
 }
+
 // CreateExecutionTx inserts execution within a transaction
 func (r *ExecutionRepository) CreateExecutionTx(ctx context.Context, tx pgx.Tx, params CreateExecutionParams) (*TradeExecution, error) {
 	// Convert floats to decimals for storage
 	var priceStr, sizeStr *string
-	
+
 	if params.Price != nil {
 		s := decimal.NewFromFloat(*params.Price).String()
 		priceStr = &s
 	}
-	if params. Quantity != nil {
+	if params.Quantity != nil {
 		s := decimal.NewFromFloat(*params.Quantity).String()
 		sizeStr = &s
 	}
-	
+
 	var exec TradeExecution
-	
+
 	err := tx.QueryRow(ctx, `
 		INSERT INTO trade_executions (
 			id, trade_id, execution_type, price, quantity
@@ -148,7 +149,7 @@ func (r *ExecutionRepository) CreateExecutionTx(ctx context.Context, tx pgx.Tx, 
 		VALUES ($1, $2, $3, $4, $5)
 		RETURNING id, trade_id, execution_type, price, quantity, 
 			executed_at
-	`, uuid.New(), params.TradeID, params.ExecutionType, 
+	`, uuid.New(), params.TradeID, params.ExecutionType,
 		priceStr, sizeStr).Scan(
 		&exec.ID,
 		&exec.TradeID,
@@ -157,16 +158,16 @@ func (r *ExecutionRepository) CreateExecutionTx(ctx context.Context, tx pgx.Tx, 
 		&exec.Quantity,
 		&exec.ExecutedAt,
 	)
-	
+
 	if err != nil {
-		return nil, fmt. Errorf("create execution (tx): %w", err)
+		return nil, fmt.Errorf("create execution (tx): %w", err)
 	}
-	
+
 	return &exec, nil
 }
 
 // GetExecutionsByTradeIDTx retrieves executions within a transaction
-func (r *ExecutionRepository) GetExecutionsByTradeIDTx(ctx context. Context, tx pgx.Tx, tradeID uuid.UUID) ([]TradeExecution, error) {
+func (r *ExecutionRepository) GetExecutionsByTradeIDTx(ctx context.Context, tx pgx.Tx, tradeID uuid.UUID) ([]TradeExecution, error) {
 	rows, err := tx.Query(ctx, `
 		SELECT id, trade_id, execution_type, price, quantity,
 			executed_at
@@ -175,10 +176,10 @@ func (r *ExecutionRepository) GetExecutionsByTradeIDTx(ctx context. Context, tx 
 		ORDER BY executed_at ASC
 	`, tradeID)
 	if err != nil {
-		return nil, fmt. Errorf("query executions (tx): %w", err)
+		return nil, fmt.Errorf("query executions (tx): %w", err)
 	}
 	defer rows.Close()
-	
+
 	var executions []TradeExecution
 	for rows.Next() {
 		var exec TradeExecution
@@ -191,14 +192,14 @@ func (r *ExecutionRepository) GetExecutionsByTradeIDTx(ctx context. Context, tx 
 			&exec.ExecutedAt,
 		)
 		if err != nil {
-			return nil, fmt. Errorf("scan execution (tx): %w", err)
+			return nil, fmt.Errorf("scan execution (tx): %w", err)
 		}
 		executions = append(executions, exec)
 	}
-	
-	if err := rows. Err(); err != nil {
+
+	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("rows error (tx): %w", err)
 	}
-	
+
 	return executions, nil
 }

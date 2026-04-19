@@ -12,6 +12,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog/log"
 
+	"set-and-trend/backend/internal/constants"
+	"set-and-trend/backend/internal/db"
 	"set-and-trend/backend/internal/domain"
 	"set-and-trend/backend/internal/repositories"
 )
@@ -21,6 +23,7 @@ type ExecutionService struct {
 	tradeRepo     *repositories.TradeRepository
 	executionRepo *repositories.ExecutionRepository
 	intentRepo    *repositories.IntentRepository
+	accountRepo   *repositories.AccountRepository
 }
 
 type ExecuteTradeInput struct {
@@ -47,14 +50,52 @@ func NewExecutionService(
 	tradeRepo *repositories.TradeRepository,
 	executionRepo *repositories.ExecutionRepository,
 	intentRepo *repositories.IntentRepository,
+	accountRepo *repositories.AccountRepository,
 	pool *pgxpool.Pool,
 ) *ExecutionService {
 	return &ExecutionService{
 		tradeRepo:     tradeRepo,
 		executionRepo: executionRepo,
 		intentRepo:    intentRepo,
+		accountRepo:   accountRepo,
 		pool:          pool,
 	}
+}
+
+// computePositionSizeFromTrade recomputes position size from the trade's stored risk parameters.
+func (s *ExecutionService) computePositionSizeFromTrade(ctx context.Context, trade db.Trade) float64 {
+	account, err := s.accountRepo.GetAccountByID(ctx, trade.AccountID)
+	if err != nil {
+		log.Warn().Err(err).Msg("could not load account for sizing, defaulting to 1.0")
+		return 1.0
+	}
+	symCfg, err := constants.GetSymbolConfig(trade.Symbol)
+	if err != nil {
+		log.Warn().Err(err).Str("symbol", trade.Symbol).Msg("unknown symbol for sizing, defaulting to 1.0")
+		return 1.0
+	}
+	balance := account.Balance.InexactFloat64()
+	riskPct := trade.RiskPercent.InexactFloat64()
+	entry := trade.PlannedEntry.InexactFloat64()
+	sl := trade.StopLoss.InexactFloat64()
+
+	riskAmount, err := ComputeRiskAmount(balance, riskPct)
+	if err != nil {
+		return 1.0
+	}
+	stopDist, err := ComputeStopDistance(entry, sl)
+	if err != nil {
+		return 1.0
+	}
+	stopPips, err := ComputeStopDistancePips(stopDist, symCfg.PipSize)
+	if err != nil {
+		return 1.0
+	}
+	size, err := ComputePositionSize(riskAmount, stopPips, symCfg.PipValue)
+	if err != nil {
+		return 1.0
+	}
+	return size
 }
 
 // RecordExecution records a market execution with SERIALIZABLE isolation
@@ -120,12 +161,17 @@ func (s *ExecutionService) RecordExecution(
 
 	var pnl, pnlPips *float64
 	if domain.IsClosingEvent(domain.ExecutionEventType(eventType)) {
+		symCfg, err := constants.GetSymbolConfig(trade.Symbol)
+		if err != nil {
+			return nil, fmt.Errorf("unknown symbol %s for PnL: %w", trade.Symbol, err)
+		}
 		pnlMoney, pnlPipsVal, err := ComputePnL(
-			strings.ToLower(string(trade.Direction)), // LONG -> long
+			strings.ToLower(string(trade.Direction)),
 			tradeExecs,
 			price,
 			positionSize,
-			0.0001, // TODO: derive pip value from symbol
+			symCfg.PipSize,
+			symCfg.PipValue,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("compute pnl: %w", err)
@@ -231,9 +277,7 @@ func (s *ExecutionService) ExecuteTrade(ctx context.Context, input ExecuteTradeI
 		return fmt.Errorf("get trade: %w", err)
 	}
 
-	_ = trade // intentional – needed later when sizing is implemented
-
-	plannedSize := 1.0 // TODO: calculate from account + risk_percent + stop_loss
+	positionSize := s.computePositionSizeFromTrade(ctx, trade)
 
 	reason := ""
 	if input.Reason != nil {
@@ -245,7 +289,7 @@ func (s *ExecutionService) ExecuteTrade(ctx context.Context, input ExecuteTradeI
 		input.TradeID,
 		string(domain.EventEntry),
 		input.ActualEntry,
-		plannedSize,
+		positionSize,
 		reason,
 	)
 	return err
@@ -263,9 +307,7 @@ func (s *ExecutionService) CloseTrade(ctx context.Context, input CloseTradeInput
 		return fmt.Errorf("get trade: %w", err)
 	}
 
-	_ = trade // will be used once sizing is stored
-
-	plannedSize := 1.0 // TODO: calculate from stored calculated_position_size
+	plannedSize := s.computePositionSizeFromTrade(ctx, trade)
 
 	tradeExecs := mapToTradeExecutions(executions)
 	remainingSize, err := ComputeRemainingPosition(plannedSize, tradeExecs)

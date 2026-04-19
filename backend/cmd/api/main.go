@@ -47,7 +47,7 @@ func main() {
 	verdictRepo := repositories.NewVerdictRepository(pool)
 	//service layer
 	tradeService := services.NewTradeService(tradeRepo, accountRepo, candleRepo)
-	executionService := services.NewExecutionService(tradeRepo, executionRepo, intentRepo, pool)
+	executionService := services.NewExecutionService(tradeRepo, executionRepo, intentRepo, accountRepo, pool)
 	authService := auth.NewAuthService(queries)
 	//handler layer
 	userHandler := handlers.NewUserHandler(authService)
@@ -74,9 +74,10 @@ func main() {
 
 	api := r.Group("/api")
 	{
-		// PUBLIC ROUTES (No auth required)
-		api.POST("/auth/signup", userHandler.SignUp)
-		api.POST("/auth/login", userHandler.Login)
+		// PUBLIC ROUTES (No auth required) — rate limited
+		authLimiter := middleware.RateLimitMiddleware(0.17, 10) // ~10 req/min, burst 10
+		api.POST("/auth/signup", authLimiter, userHandler.SignUp)
+		api.POST("/auth/login", authLimiter, userHandler.Login)
 		
 		// PROTECTED ROUTES (Auth required)
 		protected := api.Group("/")
@@ -117,6 +118,7 @@ func main() {
 
 			// AI orchestration layer (composer + specialist agents)
 			protected.GET("/signals/unprocessed", verdictHandler.ListUnprocessedSignals)
+			protected.GET("/signals/:id", verdictHandler.GetSignalByID)
 			protected.POST("/signals/:id/composed", verdictHandler.MarkComposed)
 			protected.POST("/signals/:id/verdicts", verdictHandler.CreateVerdict)
 			protected.GET("/signals/:id/verdicts", verdictHandler.ListVerdicts)

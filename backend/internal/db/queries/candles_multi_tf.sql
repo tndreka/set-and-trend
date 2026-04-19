@@ -15,7 +15,7 @@ WHERE timestamp_utc = $1;
 -- name: InsertCandleD1 :one
 INSERT INTO candles_d1 (timestamp_utc, open, high, low, close, volume)
 VALUES ($1, $2, $3, $4, $5, $6)
-ON CONFLICT (timestamp_utc) DO UPDATE SET
+ON CONFLICT (symbol, timestamp_utc) DO UPDATE SET
     open = EXCLUDED.open,
     high = EXCLUDED.high,
     low = EXCLUDED.low,
@@ -40,7 +40,7 @@ WHERE timestamp_utc = $1;
 -- name: InsertCandleH4 :one
 INSERT INTO candles_h4 (timestamp_utc, open, high, low, close, volume)
 VALUES ($1, $2, $3, $4, $5, $6)
-ON CONFLICT (timestamp_utc) DO UPDATE SET
+ON CONFLICT (symbol, timestamp_utc) DO UPDATE SET
     open = EXCLUDED.open,
     high = EXCLUDED.high,
     low = EXCLUDED.low,
@@ -65,7 +65,7 @@ WHERE timestamp_utc = $1;
 -- name: InsertCandleH1 :one
 INSERT INTO candles_h1 (timestamp_utc, open, high, low, close, volume)
 VALUES ($1, $2, $3, $4, $5, $6)
-ON CONFLICT (timestamp_utc) DO UPDATE SET
+ON CONFLICT (symbol, timestamp_utc) DO UPDATE SET
     open = EXCLUDED.open,
     high = EXCLUDED.high,
     low = EXCLUDED.low,

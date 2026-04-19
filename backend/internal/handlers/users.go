@@ -70,21 +70,26 @@ func (h *UserHandler) Login(c *gin.Context) {
 		return
 	}
 	
-	token, err := h.authService.Login(
+	result, err := h.authService.Login(
 		c.Request.Context(),
 		req.UsernameOrEmail,
 		req.Password,
 	)
-	
+
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
 		return
 	}
-	
+
 	c.JSON(http.StatusOK, gin.H{
 		"status": "success",
 		"data": gin.H{
-			"token": token,
+			"token": result.Token,
+			"user": gin.H{
+				"id":       result.UserID,
+				"username": result.Username,
+				"email":    result.Email,
+			},
 		},
 	})
 }

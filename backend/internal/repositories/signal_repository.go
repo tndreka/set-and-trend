@@ -72,6 +72,11 @@ func scanSignal(row interface {
 	return &s, nil
 }
 
+func (r *SignalRepository) GetByID(ctx context.Context, id uuid.UUID) (*SetupSignal, error) {
+	row := r.pool.QueryRow(ctx, `SELECT `+signalColumns+` FROM setup_signals WHERE id = $1`, id)
+	return scanSignal(row)
+}
+
 // CreateSignal inserts a new setup_signals row. The (strategy_id, candle_id)
 // unique constraint deduplicates repeated evaluator runs against the same bar.
 func (r *SignalRepository) CreateSignal(ctx context.Context, p CreateSignalParams) (*SetupSignal, error) {

@@ -75,18 +75,22 @@ func (s *AuthService) SignUp(ctx context.Context, username, email, password, nam
 	return &user, nil
 }
 
-// Login authenticates a user and returns a JWT token
-func (s *AuthService) Login(ctx context.Context, usernameOrEmail, password string) (string, error) {
+type LoginResult struct {
+	Token    string
+	UserID   uuid.UUID
+	Username string
+	Email    string
+}
+
+func (s *AuthService) Login(ctx context.Context, usernameOrEmail, password string) (*LoginResult, error) {
 	var user db.GetUserByUsernameRow
 	var err error
 
-	// Try to find user by username first
 	user, err = s.queries.GetUserByUsername(ctx, usernameOrEmail)
 	if err != nil {
-		// If not found by username, try email
 		userByEmail, emailErr := s.queries.GetUserByEmail(ctx, usernameOrEmail)
 		if emailErr != nil {
-			return "", fmt.Errorf("invalid credentials")
+			return nil, fmt.Errorf("invalid credentials")
 		}
 		user.ID = userByEmail.ID
 		user.Username = userByEmail.Username
@@ -94,25 +98,26 @@ func (s *AuthService) Login(ctx context.Context, usernameOrEmail, password strin
 		user.PasswordHash = userByEmail.PasswordHash
 	}
 
-	// Check password
 	if !CheckPassword(password, user.PasswordHash) {
-		return "", fmt.Errorf("invalid credentials")
+		return nil, fmt.Errorf("invalid credentials")
 	}
 
-	// Update last login
 	err = s.queries.UpdateUserLastLogin(ctx, user.ID)
 	if err != nil {
-		// Don't fail login if we can't update last_login
 		fmt.Printf("Warning: failed to update last login for user %s: %v\n", user.Username, err)
 	}
 
-	// Generate JWT token
 	token, err := GenerateToken(user.ID, user.Username, user.Email)
 	if err != nil {
-		return "", fmt.Errorf("failed to generate token: %w", err)
+		return nil, fmt.Errorf("failed to generate token: %w", err)
 	}
 
-	return token, nil
+	return &LoginResult{
+		Token:    token,
+		UserID:   user.ID,
+		Username: user.Username,
+		Email:    user.Email,
+	}, nil
 }
 
 // Helper function to convert string to pgtype.Text

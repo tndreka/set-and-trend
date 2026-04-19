@@ -1,0 +1,71 @@
+{
+  "iter": 2,
+  "iter_name": "2026-data-update",
+  "timestamp": "2026-04-18T15:03:54.905342Z",
+  "symbols": [
+    "AUDUSD",
+    "EURUSD",
+    "GBPUSD",
+    "NZDUSD",
+    "USDCAD",
+    "USDCHF",
+    "USDJPY"
+  ],
+  "per_strategy": {
+    "SAF_CHECKLIST": {
+      "strategy": "SAF_CHECKLIST",
+      "trades": 776,
+      "wins": 246,
+      "losses": 431,
+      "timeouts": 99,
+      "win_rate": 0.3170103092783505,
+      "expectancy_r": 0.1893055974171229,
+      "total_pnl_r": 146.9011435956874,
+      "max_drawdown_r": 34.14775638735054
+    },
+    "SAF_D1_REJECTION_STRUCTURE": {
+      "strategy": "SAF_D1_REJECTION_STRUCTURE",
+      "trades": 93,
+      "wins": 41,
+      "losses": 50,
+      "timeouts": 2,
+      "win_rate": 0.44086021505376344,
+      "expectancy_r": 1.0714628609595112,
+      "total_pnl_r": 99.64604606923453,
+      "max_drawdown_r": 6.795956383461913
+    },
+    "SAF_W1_EMA_REJECTION": {
+      "strategy": "SAF_W1_EMA_REJECTION",
+      "trades": 57,
+      "wins": 31,
+      "losses": 26,
+      "timeouts": 0,
+      "win_rate": 0.543859649122807,
+      "expectancy_r": 1.355891800397611,
+      "total_pnl_r": 77.28583262266383,
+      "max_drawdown_r": 7
+    },
+    "SAF_W1_REJECTION_D1_AOI": {
+      "strategy": "SAF_W1_REJECTION_D1_AOI",
+      "trades": 182,
+      "wins": 67,
+      "losses": 112,
+      "timeouts": 3,
+      "win_rate": 0.36813186813186816,
+      "expectancy_r": 0.6871426946960596,
+      "total_pnl_r": 125.05997043468284,
+      "max_drawdown_r": 7
+    }
+  },
+  "aggregate": {
+    "strategy": "AGGREGATE",
+    "trades": 1108,
+    "wins": 385,
+    "losses": 619,
+    "timeouts": 104,
+    "win_rate": 0.34747292418772563,
+    "expectancy_r": 0.4051380800742499,
+    "total_pnl_r": 448.8929927222689,
+    "max_drawdown_r": 25.116703371944368
+  }
+}
