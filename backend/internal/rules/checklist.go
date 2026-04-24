@@ -14,6 +14,11 @@ import (
 // Tunable per-backtest via the SAF_MIN_SCORE environment variable.
 var MinChecklistScore = 9
 
+// RequireTopPair applies Filter #5: for SAF>=8 setups, require at least one
+// validated "top pair" of confluence. Validated 2026-04-24 on 22y backtest:
+// WR 32.1%→36.1%, exp +0.175R→+0.294R. Disable via SAF_REQUIRE_TOP_PAIR=false.
+var RequireTopPair = true
+
 func init() {
 	SetupBuilders[SAFChecklist] = buildSAFChecklistSetup
 	SetupBuilders[SAFW1EmaRejection] = buildW1EmaRejectionSetup
@@ -24,6 +29,21 @@ func init() {
 			MinChecklistScore = n
 		}
 	}
+	if v := os.Getenv("SAF_REQUIRE_TOP_PAIR"); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			RequireTopPair = b
+		}
+	}
+}
+
+// hasTopPair implements Filter #5: at least one of the 5 validated winner pairs
+// must fire. See memory/project_set_and_trend.md for z-scores and lift.
+func hasTopPair(items map[string]bool) bool {
+	return (items["w1_touching_ema"] && items["w1_pattern"]) ||
+		(items["w1_touching_ema"] && items["w1_candle_rejection"]) ||
+		(items["d1_aoi"] && items["h4_pattern"]) ||
+		(items["w1_candle_rejection"] && items["d1_aoi"]) ||
+		(items["d1_aoi"] && items["d1_candle_rejection"])
 }
 
 // ChecklistResult holds the breakdown of which items passed.
@@ -118,6 +138,11 @@ func buildSAFChecklistSetup(ctx EvalContext) (*Setup, error) {
 	// Removed engulfing — anti-signal: -11.9% delta at score>=9 (losses 32.6%, wins 20.7%)
 
 	if score < MinChecklistScore {
+		return nil, nil
+	}
+
+	// Filter #5: require at least one top-pair for SAF>=8 setups.
+	if RequireTopPair && score >= 8 && !hasTopPair(items) {
 		return nil, nil
 	}
 
