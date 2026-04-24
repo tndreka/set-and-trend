@@ -1,0 +1,60 @@
+{
+  "iter": 1,
+  "iter_name": "session-atr-d1trend",
+  "timestamp": "2026-04-16T09:13:15.715844Z",
+  "symbols": [
+    "AUDUSD",
+    "EURUSD",
+    "GBPUSD",
+    "NZDUSD",
+    "USDCAD",
+    "USDCHF",
+    "USDJPY"
+  ],
+  "per_strategy": {
+    "H4_LONDON_BREAKOUT": {
+      "strategy": "H4_LONDON_BREAKOUT",
+      "trades": 16050,
+      "wins": 6333,
+      "losses": 9568,
+      "timeouts": 149,
+      "win_rate": 0.39457943925233646,
+      "expectancy_r": 0.0028024038763986097,
+      "total_pnl_r": 44.97858221619769,
+      "max_drawdown_r": 240.43070121105902
+    },
+    "H4_SUPPLY_DEMAND": {
+      "strategy": "H4_SUPPLY_DEMAND",
+      "trades": 1621,
+      "wins": 887,
+      "losses": 709,
+      "timeouts": 25,
+      "win_rate": 0.5471930906847625,
+      "expectancy_r": -0.004674213815569522,
+      "total_pnl_r": -7.576900595038195,
+      "max_drawdown_r": 67.99508248590934
+    },
+    "H4_TREND_FOLLOWING": {
+      "strategy": "H4_TREND_FOLLOWING",
+      "trades": 26713,
+      "wins": 5252,
+      "losses": 12967,
+      "timeouts": 8494,
+      "win_rate": 0.19660839291730617,
+      "expectancy_r": 0.016245611934836486,
+      "total_pnl_r": 433.969031615287,
+      "max_drawdown_r": 717.003661958725
+    }
+  },
+  "aggregate": {
+    "strategy": "AGGREGATE",
+    "trades": 44384,
+    "wins": 12472,
+    "losses": 23244,
+    "timeouts": 8668,
+    "win_rate": 0.2810021629416006,
+    "expectancy_r": 0.010620284634923588,
+    "total_pnl_r": 471.3707132364486,
+    "max_drawdown_r": 834.6367496688285
+  }
+}

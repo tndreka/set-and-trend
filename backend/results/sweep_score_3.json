@@ -1,0 +1,38 @@
+{
+  "iter": 3,
+  "iter_name": "sweep-3",
+  "timestamp": "2026-04-16T13:48:43.620831Z",
+  "symbols": [
+    "AUDUSD",
+    "EURUSD",
+    "GBPUSD",
+    "NZDUSD",
+    "USDCAD",
+    "USDCHF",
+    "USDJPY"
+  ],
+  "per_strategy": {
+    "SAF_CHECKLIST": {
+      "strategy": "SAF_CHECKLIST",
+      "trades": 110253,
+      "wins": 23198,
+      "losses": 62438,
+      "timeouts": 24617,
+      "win_rate": 0.21040697305288744,
+      "expectancy_r": -0.010143516203388011,
+      "total_pnl_r": -1118.3530919721384,
+      "max_drawdown_r": 2708.220279766106
+    }
+  },
+  "aggregate": {
+    "strategy": "AGGREGATE",
+    "trades": 110253,
+    "wins": 23198,
+    "losses": 62438,
+    "timeouts": 24617,
+    "win_rate": 0.21040697305288744,
+    "expectancy_r": -0.010143516203388011,
+    "total_pnl_r": -1118.3530919721384,
+    "max_drawdown_r": 2708.220279766106
+  }
+}

@@ -1,7 +1,7 @@
 {
-  "iter": 0,
-  "iter_name": "baseline",
-  "timestamp": "2026-04-24T13:42:21.433665Z",
+  "iter": 1,
+  "iter_name": "lowscore-5",
+  "timestamp": "2026-04-24T14:32:08.568493Z",
   "symbols": [
     "AUDCHF",
     "AUDUSD",
@@ -26,14 +26,14 @@
   "per_strategy": {
     "SAF_CHECKLIST": {
       "strategy": "SAF_CHECKLIST",
-      "trades": 699,
-      "wins": 281,
-      "losses": 339,
-      "timeouts": 79,
-      "win_rate": 0.402002861230329,
-      "expectancy_r": 0.4327491712627671,
-      "total_pnl_r": 302.4916707126742,
-      "max_drawdown_r": 14.865761237564442
+      "trades": 127979,
+      "wins": 32126,
+      "losses": 73328,
+      "timeouts": 22525,
+      "win_rate": 0.2510255588807539,
+      "expectancy_r": 0.01830339490608918,
+      "total_pnl_r": 2342.4501766863873,
+      "max_drawdown_r": 1349.654354849699
     },
     "SAF_D1_REJECTION_STRUCTURE": {
       "strategy": "SAF_D1_REJECTION_STRUCTURE",
@@ -71,13 +71,13 @@
   },
   "aggregate": {
     "strategy": "AGGREGATE",
-    "trades": 1652,
-    "wins": 669,
-    "losses": 894,
-    "timeouts": 89,
-    "win_rate": 0.4049636803874092,
-    "expectancy_r": 0.6808890799179917,
-    "total_pnl_r": 1124.8287600245224,
-    "max_drawdown_r": 18
+    "trades": 128932,
+    "wins": 32514,
+    "losses": 73883,
+    "timeouts": 22535,
+    "win_rate": 0.2521794434275432,
+    "expectancy_r": 0.024546173688442325,
+    "total_pnl_r": 3164.787265998246,
+    "max_drawdown_r": 1243.2094392414103
   }
 }

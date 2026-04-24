@@ -1,0 +1,26 @@
+{
+  "iter": 3,
+  "iter_name": "sweep-15",
+  "timestamp": "2026-04-16T14:47:36.999901Z",
+  "symbols": [
+    "AUDUSD",
+    "EURUSD",
+    "GBPUSD",
+    "NZDUSD",
+    "USDCAD",
+    "USDCHF",
+    "USDJPY"
+  ],
+  "per_strategy": {},
+  "aggregate": {
+    "strategy": "AGGREGATE",
+    "trades": 0,
+    "wins": 0,
+    "losses": 0,
+    "timeouts": 0,
+    "win_rate": 0,
+    "expectancy_r": 0,
+    "total_pnl_r": 0,
+    "max_drawdown_r": 0
+  }
+}
