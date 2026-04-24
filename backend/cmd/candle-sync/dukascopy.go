@@ -24,12 +24,22 @@ type dukaBar struct {
 	Volume    float64 `json:"volume,omitempty"`
 }
 
+// barsPerDay maps dukascopy-node timeframe strings to the approximate number
+// of bars per calendar day, used to compute the date range for fetching.
+var barsPerDay = map[string]int{
+	"h1":  24,
+	"h4":  6,
+	"d1":  1,
+	"mn1": 0, // weekly/monthly use week-based calculation
+}
+
 // fetchDukascopy shells out to `dukascopy-node` (via npx by default), parses
 // the JSON file it drops into a temp dir, and returns bars sorted ascending.
 //
-// The CLI only accepts whole-day ranges (yyyy-mm-dd); we pad `from` back by
-// one day so a mid-day call still captures the most recent closed H4 bars.
-func fetchDukascopy(ctx context.Context, symbol string, size int) ([]dukaBar, error) {
+// The CLI only accepts whole-day ranges (yyyy-mm-dd); we pad `from` back so
+// that enough bars are captured even across weekends. `timeframe` is the
+// dukascopy-node timeframe string: "h1", "h4", "d1", or "mn1".
+func fetchDukascopy(ctx context.Context, symbol string, size int, timeframe string) ([]dukaBar, error) {
 	tmp, err := os.MkdirTemp("", "duka-*")
 	if err != nil {
 		return nil, err
@@ -37,8 +47,19 @@ func fetchDukascopy(ctx context.Context, symbol string, size int) ([]dukaBar, er
 	defer os.RemoveAll(tmp)
 
 	now := time.Now().UTC()
-	// H4 bars needed → round up days (6 bars/day), minimum 2 days for weekend.
-	days := (size / 6) + 2
+	var days int
+	switch timeframe {
+	case "d1":
+		days = size + 4 // +4 for weekends
+	case "mn1":
+		days = size*7 + 4 // weekly bars
+	default:
+		bpd := barsPerDay[timeframe]
+		if bpd == 0 {
+			bpd = 6 // default to h4
+		}
+		days = (size / bpd) + 2
+	}
 	from := now.AddDate(0, 0, -days).Format("2006-01-02")
 	to := now.AddDate(0, 0, 1).Format("2006-01-02")
 
@@ -48,13 +69,13 @@ func fetchDukascopy(ctx context.Context, symbol string, size int) ([]dukaBar, er
 		cmd = exec.CommandContext(ctx, bin,
 			"-i", strings.ToLower(symbol),
 			"-from", from, "-to", to,
-			"-t", "h4", "-f", "json", "-s",
+			"-t", timeframe, "-f", "json", "-s",
 			"-dir", tmp)
 	} else {
 		cmd = exec.CommandContext(ctx, "npx", "--yes", "dukascopy-node",
 			"-i", strings.ToLower(symbol),
 			"-from", from, "-to", to,
-			"-t", "h4", "-f", "json", "-s",
+			"-t", timeframe, "-f", "json", "-s",
 			"-dir", tmp)
 	}
 

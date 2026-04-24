@@ -499,7 +499,7 @@ func printScoreSweep(trades []safTrade) {
 		}
 	}
 
-	for minScore := 1; minScore <= 16; minScore++ {
+	for minScore := 1; minScore <= 14; minScore++ {
 		var filtered []safTrade
 		for _, t := range sorted {
 			if t.checklistScore >= minScore {
@@ -543,7 +543,6 @@ var checklistItemOrder = []string{
 	"w1_in_favor", "w1_touching_ema", "w1_candle_rejection", "w1_pattern",
 	"d1_in_favor", "d1_aoi", "d1_touching_ema", "d1_candle_rejection", "d1_structure_rejection", "d1_pattern",
 	"h4_in_favor", "h4_ema_touch", "h4_candle_rejection", "h4_pattern",
-	"psych_level", "engulfing",
 }
 
 func boolTo01(b bool) string {
@@ -564,7 +563,7 @@ func writeTradeCSV(trades []safTrade, path string) {
 	w := csv.NewWriter(f)
 	defer w.Flush()
 
-	header := []string{"symbol", "date", "direction", "score", "result", "rMult", "entry", "sl", "tp", "rr"}
+	header := []string{"strategy", "symbol", "date", "direction", "score", "result", "rMult", "entry", "sl", "tp", "rr"}
 	header = append(header, checklistItemOrder...)
 	w.Write(header)
 
@@ -573,6 +572,7 @@ func writeTradeCSV(trades []safTrade, path string) {
 
 	for _, t := range sorted {
 		row := []string{
+			t.strategy,
 			t.symbol,
 			t.opened.Format("2006-01-02"),
 			t.direction,

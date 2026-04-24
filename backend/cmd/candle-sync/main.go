@@ -149,7 +149,7 @@ type Syncer struct {
 
 // SyncSymbol fetches the latest H4 bars from Dukascopy and upserts them.
 func (s *Syncer) SyncSymbol(ctx context.Context, symbol string) (int, error) {
-	bars, err := fetchDukascopy(ctx, symbol, s.fetchSize)
+	bars, err := fetchDukascopy(ctx, symbol, s.fetchSize, "h4")
 	if err != nil {
 		return 0, err
 	}

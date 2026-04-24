@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog/log"
 
+	"set-and-trend/backend/internal/patterns"
 	"set-and-trend/backend/internal/repositories"
 	"set-and-trend/backend/internal/rules"
 	"set-and-trend/backend/internal/synthesis"
@@ -146,10 +148,7 @@ func (e *SignalEvaluator) evaluateStrategy(ctx context.Context, s *repositories.
 		return 0, nil
 	}
 
-	details, _ := json.Marshal(map[string]any{
-		"reason":     setup.Reason,
-		"latest_bar": sd.candles[len(sd.candles)-1].TimestampUTC.Format(time.RFC3339),
-	})
+	details, _ := json.Marshal(e.buildRichDetails(setup, sd, s.Code))
 
 	_, err = e.signalRepo.CreateSignal(ctx, repositories.CreateSignalParams{
 		StrategyID: s.ID,
@@ -178,6 +177,178 @@ func (e *SignalEvaluator) evaluateStrategy(ctx context.Context, s *repositories.
 		Float64("rr", setup.RR).
 		Msg("signal created")
 	return 1, nil
+}
+
+// buildRichDetails creates a detailed JSON payload for the signal, including
+// the full checklist breakdown, EMA levels, key zones, and swing structure.
+// This data drives chart drawings and the Telegram analysis text.
+func (e *SignalEvaluator) buildRichDetails(setup *rules.Setup, sd *symbolData, strategyCode string) map[string]any {
+	ec := sd.evalCtx
+	_, ind, _ := ec.Latest()
+	latestBar := sd.candles[len(sd.candles)-1]
+
+	details := map[string]any{
+		"reason":        setup.Reason,
+		"strategy_code": strategyCode,
+		"latest_bar":    latestBar.TimestampUTC.Format(time.RFC3339),
+	}
+
+	// EMA levels for chart drawing
+	emas := map[string]any{
+		"h4_ema50":  round5(ind.EMA50),
+		"h4_ema200": round5(ind.EMA200),
+	}
+	if ind.D1EMA50 > 0 {
+		emas["d1_ema50"] = round5(ind.D1EMA50)
+		emas["d1_ema200"] = round5(ind.D1EMA200)
+	}
+	if ind.W1EMA50 > 0 {
+		emas["w1_ema50"] = round5(ind.W1EMA50)
+		emas["w1_ema200"] = round5(ind.W1EMA200)
+	}
+	details["emas"] = emas
+
+	// Checklist items (only for SAF_CHECKLIST strategy)
+	if setup.ChecklistItems != nil {
+		details["checklist_score"] = setup.ChecklistScore
+		details["checklist_max"] = 14
+		details["checklist_items"] = setup.ChecklistItems
+	}
+
+	// Confluence factors — which key factors triggered
+	details["confluence"] = buildConfluenceFactors(ec, setup, ind)
+
+	// Supply/demand zones near entry
+	h4Candles := ruleCandlesToPatternCandles(ec.Candles)
+	cfg := patterns.DefaultZoneConfig(ec.Symbol)
+	zones := patterns.DetectSupplyDemandZones(h4Candles, cfg)
+	active := patterns.GetActiveZones(h4Candles, zones, cfg.ZoneFreshnessBars)
+	zoneData := make([]map[string]any, 0)
+	for _, z := range active {
+		dist := math.Abs(latestBar.Close - z.ProximalPrice)
+		atr := computeATR14(h4Candles)
+		if atr > 0 && dist < atr*5 {
+			zoneData = append(zoneData, map[string]any{
+				"type":     string(z.Type),
+				"proximal": round5(z.ProximalPrice),
+				"distal":   round5(z.DistalPrice),
+			})
+		}
+	}
+	if len(zoneData) > 0 {
+		details["zones"] = zoneData
+	}
+
+	// Recent swing highs/lows for structure
+	swingHighs := patterns.FindSwingHighs(h4Candles, 5)
+	swingLows := patterns.FindSwingLows(h4Candles, 5)
+	if n := len(swingHighs); n > 0 {
+		last3 := swingHighs
+		if n > 3 {
+			last3 = swingHighs[n-3:]
+		}
+		sh := make([]float64, len(last3))
+		for i, s := range last3 {
+			sh[i] = round5(s.Price)
+		}
+		details["swing_highs"] = sh
+	}
+	if n := len(swingLows); n > 0 {
+		last3 := swingLows
+		if n > 3 {
+			last3 = swingLows[n-3:]
+		}
+		sl := make([]float64, len(last3))
+		for i, s := range last3 {
+			sl[i] = round5(s.Price)
+		}
+		details["swing_lows"] = sl
+	}
+
+	return details
+}
+
+func buildConfluenceFactors(ec rules.EvalContext, setup *rules.Setup, ind rules.Indicators) []string {
+	factors := make([]string, 0, 8)
+	dir := setup.Direction
+
+	// W1 trend
+	if ind.W1EMA50 > 0 && ind.W1EMA200 > 0 {
+		if (dir == "LONG" && ind.W1EMA50 > ind.W1EMA200) || (dir == "SHORT" && ind.W1EMA50 < ind.W1EMA200) {
+			factors = append(factors, "W1 trend aligned (EMA50 vs EMA200)")
+		}
+	}
+	// W1 EMA touch
+	if ind.W1EMA50 > 0 {
+		c, _, _ := ec.Latest()
+		if math.Abs(c.Close-ind.W1EMA50)/c.Close < 0.005 {
+			factors = append(factors, "W1 EMA50 touch/rejection")
+		}
+	}
+	// W1 candle rejection
+	if w1, ok := ec.LatestW1(); ok && rules.IsCandleRejection(w1, dir) {
+		factors = append(factors, "W1 candle rejection wick")
+	}
+	// D1 trend
+	if ind.D1EMA50 > 0 && ind.D1EMA200 > 0 {
+		if (dir == "LONG" && ind.D1EMA50 > ind.D1EMA200) || (dir == "SHORT" && ind.D1EMA50 < ind.D1EMA200) {
+			factors = append(factors, "D1 trend aligned")
+		}
+	}
+	// D1 candle rejection
+	if d1, ok := ec.LatestD1(); ok && rules.IsCandleRejection(d1, dir) {
+		factors = append(factors, "D1 candle rejection wick")
+	}
+	// H4 trend
+	if ind.EMA50 > 0 && ind.EMA200 > 0 {
+		if (dir == "LONG" && ind.EMA50 > ind.EMA200) || (dir == "SHORT" && ind.EMA50 < ind.EMA200) {
+			factors = append(factors, "H4 trend aligned")
+		}
+	}
+	// H4 candle rejection
+	c, _, _ := ec.Latest()
+	if rules.IsCandleRejection(c, dir) {
+		factors = append(factors, "H4 candle rejection wick")
+	}
+	// Psych level
+	if rules.NearPsychLevel(c.Close, rules.IsJPYPair(ec.Symbol)) {
+		factors = append(factors, "Near psychological level")
+	}
+
+	return factors
+}
+
+func round5(f float64) float64 {
+	return math.Round(f*100000) / 100000
+}
+
+func computeATR14(candles []patterns.Candle) float64 {
+	n := len(candles)
+	if n < 15 {
+		return 0
+	}
+	sum := 0.0
+	for i := n - 14; i < n; i++ {
+		c := candles[i]
+		prev := candles[i-1]
+		tr := c.High - c.Low
+		if d := math.Abs(c.High - prev.Close); d > tr {
+			tr = d
+		}
+		if d := math.Abs(c.Low - prev.Close); d > tr {
+			tr = d
+		}
+		sum += tr
+	}
+	return sum / 14.0
+}
+
+func ruleCandlesToPatternCandles(rc []rules.Candle) []patterns.Candle {
+	out := make([]patterns.Candle, len(rc))
+	for i, c := range rc {
+		out[i] = patterns.Candle{Open: c.Open, High: c.High, Low: c.Low, Close: c.Close}
+	}
+	return out
 }
 
 func isUniqueViolation(err error) bool {

@@ -20,7 +20,7 @@ func init() {
 	SetupBuilders[SAFD1RejectionStructure] = buildD1RejectionStructureSetup
 	SetupBuilders[SAFW1RejectionD1AOI] = buildW1RejectionD1AOISetup
 	if v := os.Getenv("SAF_MIN_SCORE"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n >= 1 && n <= 16 {
+		if n, err := strconv.Atoi(v); err == nil && n >= 1 && n <= 14 {
 			MinChecklistScore = n
 		}
 	}
@@ -50,7 +50,6 @@ func buildSAFChecklistSetup(ctx EvalContext) (*Setup, error) {
 
 	h4Candles := toPatternCandles(ctx.Candles)
 	symbol := ctx.Symbol
-	isJPY := IsJPYPair(symbol)
 
 	// Determine direction from majority of "in favor" votes across timeframes.
 	direction := deriveDirection(ind)
@@ -58,7 +57,7 @@ func buildSAFChecklistSetup(ctx EvalContext) (*Setup, error) {
 		return nil, nil
 	}
 
-	items := make(map[string]bool, 16)
+	items := make(map[string]bool, 14)
 	score := 0
 
 	check := func(name string, pass bool) {
@@ -115,13 +114,8 @@ func buildSAFChecklistSetup(ctx EvalContext) (*Setup, error) {
 
 	// ---- Bonus ----
 	// Removed shift_of_structure (-9.9% lift, anti-signal)
-	check("psych_level", NearPsychLevel(candle.Close, isJPY))
-	if len(ctx.Candles) >= 2 {
-		prev := ctx.Candles[len(ctx.Candles)-2]
-		check("engulfing", IsEngulfing(prev, candle, direction))
-	} else {
-		check("engulfing", false)
-	}
+	// Removed psych_level — anti-signal: -7.2% delta at score>=9 (losses 60.3%, wins 53.1%)
+	// Removed engulfing — anti-signal: -11.9% delta at score>=9 (losses 32.6%, wins 20.7%)
 
 	if score < MinChecklistScore {
 		return nil, nil
@@ -163,8 +157,8 @@ func buildSAFChecklistSetup(ctx EvalContext) (*Setup, error) {
 		StopLoss:       sl,
 		TakeProfit:     tp,
 		RR:             rr,
-		Confidence:     float64(score) / 16.0,
-		Reason:         fmt.Sprintf("SAF checklist %d/16: %s", score, strings.Join(itemNames, ",")),
+		Confidence:     float64(score) / 14.0,
+		Reason:         fmt.Sprintf("SAF checklist %d/14: %s", score, strings.Join(itemNames, ",")),
 		ChecklistScore: score,
 		ChecklistItems: items,
 	}, nil

@@ -17,6 +17,7 @@ backend/live_scanner
 backend/paper_sim
 backend/paper_trade
 backend/simulation
+backend/candle-sync
 backend/api.log
 backend/*.exe
 backend/*.test

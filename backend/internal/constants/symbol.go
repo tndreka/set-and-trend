@@ -31,14 +31,20 @@ var Registry = map[string]Symbol{
 	"USDCAD": {Code: "USDCAD", PipSize: 0.0001, ContractSize: 100000, AssetClass: FXMajor, ATRMultiplier: 1.0},
 
 	// Crosses (1x multiplier)
+	"AUDCHF": {Code: "AUDCHF", PipSize: 0.0001, ContractSize: 100000, AssetClass: FXCross, ATRMultiplier: 1.0},
 	"AUDJPY": {Code: "AUDJPY", PipSize: 0.01, ContractSize: 100000, AssetClass: FXCross, ATRMultiplier: 1.0},
+	"AUDNZD": {Code: "AUDNZD", PipSize: 0.0001, ContractSize: 100000, AssetClass: FXCross, ATRMultiplier: 1.0},
+	"CADJPY": {Code: "CADJPY", PipSize: 0.01, ContractSize: 100000, AssetClass: FXCross, ATRMultiplier: 1.0},
 	"CHFJPY": {Code: "CHFJPY", PipSize: 0.01, ContractSize: 100000, AssetClass: FXCross, ATRMultiplier: 1.0},
 	"EURAUD": {Code: "EURAUD", PipSize: 0.0001, ContractSize: 100000, AssetClass: FXCross, ATRMultiplier: 1.0},
 	"EURCAD": {Code: "EURCAD", PipSize: 0.0001, ContractSize: 100000, AssetClass: FXCross, ATRMultiplier: 1.0},
 	"EURCHF": {Code: "EURCHF", PipSize: 0.0001, ContractSize: 100000, AssetClass: FXCross, ATRMultiplier: 1.0},
 	"EURGBP": {Code: "EURGBP", PipSize: 0.0001, ContractSize: 100000, AssetClass: FXCross, ATRMultiplier: 1.0},
 	"EURJPY": {Code: "EURJPY", PipSize: 0.01, ContractSize: 100000, AssetClass: FXCross, ATRMultiplier: 1.0},
+	"GBPAUD": {Code: "GBPAUD", PipSize: 0.0001, ContractSize: 100000, AssetClass: FXCross, ATRMultiplier: 1.0},
+	"GBPCHF": {Code: "GBPCHF", PipSize: 0.0001, ContractSize: 100000, AssetClass: FXCross, ATRMultiplier: 1.0},
 	"GBPJPY": {Code: "GBPJPY", PipSize: 0.01, ContractSize: 100000, AssetClass: FXCross, ATRMultiplier: 1.0},
+	"NZDJPY": {Code: "NZDJPY", PipSize: 0.01, ContractSize: 100000, AssetClass: FXCross, ATRMultiplier: 1.0},
 
 	// Metals (1.5x multiplier - more volatile)
 	"XAUUSD": {Code: "XAUUSD", PipSize: 0.01, ContractSize: 100, AssetClass: Metal, ATRMultiplier: 1.5},
