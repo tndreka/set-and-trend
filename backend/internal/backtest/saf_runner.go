@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -15,6 +17,50 @@ import (
 	"set-and-trend/backend/internal/rules"
 	"set-and-trend/backend/internal/synthesis"
 )
+
+// breakevenAtR: when > 0, moves SL to entry once price reaches +breakevenAtR * risk.
+// 0 (default) = disabled. Override with SAF_BREAKEVEN_AT_R=1.0.
+var breakevenAtR = 0.0
+
+// totalCostPips: round-trip transaction cost in pips deducted from each trade's
+// rMult. Models broker spread + slippage on entry + slippage on SL.
+// 0 (default) = costless backtest. Override with SAF_COST_PIPS=3.5.
+var totalCostPips = 0.0
+
+func init() {
+	if v := os.Getenv("SAF_BREAKEVEN_AT_R"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil && f > 0 {
+			breakevenAtR = f
+		}
+	}
+	if v := os.Getenv("SAF_COST_PIPS"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil && f >= 0 {
+			totalCostPips = f
+		}
+	}
+}
+
+// pipSize returns the price change of one pip for a symbol.
+// JPY pairs: 0.01. XAUUSD: 0.1. Everything else: 0.0001.
+func pipSize(symbol string) float64 {
+	if len(symbol) >= 6 && (symbol[3:6] == "JPY" || symbol[:3] == "JPY") {
+		return 0.01
+	}
+	if symbol == "XAUUSD" {
+		return 0.1
+	}
+	return 0.0001
+}
+
+// costInR returns the per-trade transaction cost expressed in R multiples,
+// given the trade's risk distance (entry - SL in price units). Returns 0 when
+// totalCostPips == 0 (costless mode).
+func costInR(symbol string, risk float64) float64 {
+	if totalCostPips == 0 || risk <= 0 {
+		return 0
+	}
+	return (totalCostPips * pipSize(symbol)) / risk
+}
 
 // SaF (Set-and-Forget) backtest runner: walks the H4 history per symbol and
 // executes the 3 live strategies (`SetupBuilders`) instead of the legacy
@@ -37,6 +83,7 @@ type SaFStrategyStats struct {
 	Wins         int     `json:"wins"`
 	Losses       int     `json:"losses"`
 	Timeouts     int     `json:"timeouts"`
+	Breakevens   int     `json:"breakevens"`
 	WinRate      float64 `json:"win_rate"`
 	ExpectancyR  float64 `json:"expectancy_r"`  // average R per trade
 	TotalPnlR    float64 `json:"total_pnl_r"`
@@ -314,7 +361,9 @@ func walkForward(symbol string, candles []rules.Candle, mtf multiTFData, strats 
 
 // resolveTrade walks forward from openIdx+1 up to safMaxHoldBars bars until
 // the setup's SL or TP is tagged. Pessimistic on gap bars: if a single bar
-// hits both SL and TP, counts as a loss.
+// hits both SL and TP, counts as a loss. If breakevenAtR > 0, the SL is moved
+// to entry once price reaches +breakevenAtR * initial_risk; a retrace to
+// entry after arming closes the trade at 0R ("breakeven").
 func resolveTrade(strategyCode, symbol string, openIdx int, setup *rules.Setup, candles []rules.Candle) safTrade {
 	t := safTrade{
 		strategy: strategyCode,
@@ -325,19 +374,30 @@ func resolveTrade(strategyCode, symbol string, openIdx int, setup *rules.Setup, 
 	if end > len(candles) {
 		end = len(candles)
 	}
+	risk := math.Abs(setup.Entry - setup.StopLoss)
+	effectiveSL := setup.StopLoss
+	beArmed := false
+	var beTrigger float64
+	if breakevenAtR > 0 && risk > 0 {
+		if setup.Direction == "LONG" {
+			beTrigger = setup.Entry + breakevenAtR*risk
+		} else {
+			beTrigger = setup.Entry - breakevenAtR*risk
+		}
+	}
 	for j := openIdx + 1; j < end; j++ {
 		c := candles[j]
 		hitSL := false
 		hitTP := false
 		if setup.Direction == "LONG" {
-			if c.Low <= setup.StopLoss {
+			if c.Low <= effectiveSL {
 				hitSL = true
 			}
 			if c.High >= setup.TakeProfit {
 				hitTP = true
 			}
 		} else { // SHORT
-			if c.High >= setup.StopLoss {
+			if c.High >= effectiveSL {
 				hitSL = true
 			}
 			if c.Low <= setup.TakeProfit {
@@ -346,22 +406,45 @@ func resolveTrade(strategyCode, symbol string, openIdx int, setup *rules.Setup, 
 		}
 		if hitSL && hitTP {
 			// Pessimistic: treat same-bar as SL hit first.
-			t.result = "loss"
-			t.rMult = -1
+			if beArmed {
+				t.result = "breakeven"
+				t.rMult = 0
+			} else {
+				t.result = "loss"
+				t.rMult = -1
+			}
+			t.rMult -= costInR(symbol, risk)
 			t.closed = c.TimestampUTC
 			return t
 		}
 		if hitSL {
-			t.result = "loss"
-			t.rMult = -1
+			if beArmed {
+				t.result = "breakeven"
+				t.rMult = 0
+			} else {
+				t.result = "loss"
+				t.rMult = -1
+			}
+			t.rMult -= costInR(symbol, risk)
 			t.closed = c.TimestampUTC
 			return t
 		}
 		if hitTP {
 			t.result = "win"
-			t.rMult = setup.RR
+			t.rMult = setup.RR - costInR(symbol, risk)
 			t.closed = c.TimestampUTC
 			return t
+		}
+		// Arm breakeven at end of bar (after hit-checks) so same-bar SL-hit
+		// stays a loss — we can't prove 1R came before the SL intra-bar.
+		if breakevenAtR > 0 && !beArmed {
+			if setup.Direction == "LONG" && c.High >= beTrigger {
+				beArmed = true
+				effectiveSL = setup.Entry
+			} else if setup.Direction == "SHORT" && c.Low <= beTrigger {
+				beArmed = true
+				effectiveSL = setup.Entry
+			}
 		}
 	}
 	// Timeout: close at last bar's close; compute unrealized R.
@@ -379,6 +462,7 @@ func resolveTrade(strategyCode, symbol string, openIdx int, setup *rules.Setup, 
 			t.rMult = (setup.Entry - last.Close) / risk
 		}
 	}
+	t.rMult -= costInR(symbol, risk)
 	return t
 }
 
@@ -403,6 +487,7 @@ func tabulate(trades []safTrade, iter int, iterName string, symbols []string) Sa
 		agg.Wins += s.Wins
 		agg.Losses += s.Losses
 		agg.Timeouts += s.Timeouts
+		agg.Breakevens += s.Breakevens
 	}
 	// Aggregate equity curve: chronological across ALL strategies.
 	sortedAll := append([]safTrade(nil), trades...)
@@ -428,6 +513,8 @@ func fillStats(s *SaFStrategyStats, trades []safTrade) {
 			s.Losses++
 		case "timeout":
 			s.Timeouts++
+		case "breakeven":
+			s.Breakevens++
 		}
 	}
 	s.TotalPnlR, s.MaxDrawdownR = equityMetrics(sorted)
@@ -658,7 +745,7 @@ func printItemAnalysis(trades []safTrade) {
 	fmt.Println("------------------------------------------------------------")
 
 	for _, b := range buckets {
-		wins, losses, timeouts := 0, 0, 0
+		wins, losses, timeouts, bes := 0, 0, 0, 0
 		totalR := 0.0
 		for _, t := range trades {
 			if t.checklistScore >= b.minS && t.checklistScore <= b.maxS {
@@ -670,10 +757,12 @@ func printItemAnalysis(trades []safTrade) {
 					losses++
 				case "timeout":
 					timeouts++
+				case "breakeven":
+					bes++
 				}
 			}
 		}
-		total := wins + losses + timeouts
+		total := wins + losses + timeouts + bes
 		if total == 0 {
 			continue
 		}

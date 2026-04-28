@@ -1,0 +1,88 @@
+{
+  "iter": 3,
+  "iter_name": "filter5_be1r",
+  "timestamp": "2026-04-24T21:29:06.970752Z",
+  "symbols": [
+    "AUDCHF",
+    "AUDUSD",
+    "CADJPY",
+    "CHFJPY",
+    "EURAUD",
+    "EURCAD",
+    "EURCHF",
+    "EURGBP",
+    "EURJPY",
+    "EURUSD",
+    "GBPCHF",
+    "GBPJPY",
+    "GBPUSD",
+    "NZDJPY",
+    "NZDUSD",
+    "USDCAD",
+    "USDCHF",
+    "USDJPY",
+    "XAUUSD"
+  ],
+  "per_strategy": {
+    "SAF_CHECKLIST": {
+      "strategy": "SAF_CHECKLIST",
+      "trades": 126104,
+      "wins": 25329,
+      "losses": 57124,
+      "timeouts": 17120,
+      "breakevens": 26531,
+      "win_rate": 0.20085802195013638,
+      "expectancy_r": 0.01733078787433225,
+      "total_pnl_r": 2185.481674104794,
+      "max_drawdown_r": 1152.725953638144
+    },
+    "SAF_D1_REJECTION_STRUCTURE": {
+      "strategy": "SAF_D1_REJECTION_STRUCTURE",
+      "trades": 241,
+      "wins": 70,
+      "losses": 77,
+      "timeouts": 2,
+      "breakevens": 92,
+      "win_rate": 0.29045643153526973,
+      "expectancy_r": 0.7189046952584801,
+      "total_pnl_r": 173.2560315572937,
+      "max_drawdown_r": 10
+    },
+    "SAF_W1_EMA_REJECTION": {
+      "strategy": "SAF_W1_EMA_REJECTION",
+      "trades": 185,
+      "wins": 58,
+      "losses": 76,
+      "timeouts": 1,
+      "breakevens": 50,
+      "win_rate": 0.31351351351351353,
+      "expectancy_r": 0.6752839447661771,
+      "total_pnl_r": 124.92752978174276,
+      "max_drawdown_r": 8.48314606741571
+    },
+    "SAF_W1_REJECTION_D1_AOI": {
+      "strategy": "SAF_W1_REJECTION_D1_AOI",
+      "trades": 527,
+      "wins": 141,
+      "losses": 212,
+      "timeouts": 2,
+      "breakevens": 172,
+      "win_rate": 0.2675521821631879,
+      "expectancy_r": 0.5341175958969994,
+      "total_pnl_r": 281.47997303771865,
+      "max_drawdown_r": 16.987562189054586
+    }
+  },
+  "aggregate": {
+    "strategy": "AGGREGATE",
+    "trades": 127057,
+    "wins": 25598,
+    "losses": 57489,
+    "timeouts": 17125,
+    "breakevens": 26845,
+    "win_rate": 0.2014686321887027,
+    "expectancy_r": 0.02176302925837654,
+    "total_pnl_r": 2765.145208481548,
+    "max_drawdown_r": 1064.5951988010836
+  }
+}
