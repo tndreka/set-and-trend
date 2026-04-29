@@ -32,6 +32,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"flag"
 	"io"
 	"os"
 	"strconv"
@@ -59,6 +60,9 @@ type symbolPayload struct {
 }
 
 func main() {
+	symbolFlag := flag.String("symbol", "", "if set, stdin is parsed as the MCP response shape ({bars:[...]}) and ingested under this symbol")
+	flag.Parse()
+
 	zerolog.TimeFieldFormat = time.RFC3339
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339})
 
@@ -67,11 +71,20 @@ func main() {
 		log.Fatal().Err(err).Msg("read stdin")
 	}
 	if len(raw) == 0 {
-		log.Fatal().Msg("empty stdin — expected JSON array")
+		log.Fatal().Msg("empty stdin — expected JSON")
 	}
 
 	var payloads []symbolPayload
-	if err := json.Unmarshal(raw, &payloads); err != nil {
+	if *symbolFlag != "" {
+		// Single-symbol mode: stdin is the raw MCP response shape.
+		var mcp struct {
+			Bars []bar `json:"bars"`
+		}
+		if err := json.Unmarshal(raw, &mcp); err != nil {
+			log.Fatal().Err(err).Msg("parse mcp json")
+		}
+		payloads = []symbolPayload{{Symbol: *symbolFlag, Bars: mcp.Bars}}
+	} else if err := json.Unmarshal(raw, &payloads); err != nil {
 		log.Fatal().Err(err).Msg("parse json")
 	}
 	if len(payloads) == 0 {
