@@ -82,48 +82,52 @@ var SymbolRegistry = map[string]SymbolConfig{
 	// 	ContractSize: 100000, MinLot: 0.01, LotStep: 0.01, MarginRate: 1.0,
 	// 	PricePrecision: 3, CurrencyBase: "AUD", CurrencyQuote: "JPY",
 	// },
-	// "CHFJPY": {
-	// 	Symbol: "CHFJPY", PipSize: 0.01, PipValue: 9.0, SpreadPips: 0.5, PipLocation: 2,
-	// 	ContractSize: 100000, MinLot: 0.01, LotStep: 0.01, MarginRate: 1.0,
-	// 	PricePrecision: 3, CurrencyBase: "CHF", CurrencyQuote: "JPY",
-	// },
-	// "EURAUD": {
-	// 	Symbol: "EURAUD", PipSize: 0.0001, PipValue: 10.0, SpreadPips: 0.5, PipLocation: 4,
-	// 	ContractSize: 100000, MinLot: 0.01, LotStep: 0.01, MarginRate: 1.0,
-	// 	PricePrecision: 5, CurrencyBase: "EUR", CurrencyQuote: "AUD",
-	// },
-	// "EURCAD": {
-	// 	Symbol: "EURCAD", PipSize: 0.0001, PipValue: 10.0, SpreadPips: 0.4, PipLocation: 4,
-	// 	ContractSize: 100000, MinLot: 0.01, LotStep: 0.01, MarginRate: 1.0,
-	// 	PricePrecision: 5, CurrencyBase: "EUR", CurrencyQuote: "CAD",
-	// },
-	// "EURCHF": {
-	// 	Symbol: "EURCHF", PipSize: 0.0001, PipValue: 10.0, SpreadPips: 0.4, PipLocation: 4,
-	// 	ContractSize: 100000, MinLot: 0.01, LotStep: 0.01, MarginRate: 1.0,
-	// 	PricePrecision: 5, CurrencyBase: "EUR", CurrencyQuote: "CHF",
-	// },
-	// "EURGBP": {
-	// 	Symbol: "EURGBP", PipSize: 0.0001, PipValue: 12.5, SpreadPips: 0.3, PipLocation: 4,
-	// 	ContractSize: 100000, MinLot: 0.01, LotStep: 0.01, MarginRate: 1.0,
-	// 	PricePrecision: 5, CurrencyBase: "EUR", CurrencyQuote: "GBP",
-	// },
-	// "EURJPY": {
-	// 	Symbol: "EURJPY", PipSize: 0.01, PipValue: 9.0, SpreadPips: 0.4, PipLocation: 2,
-	// 	ContractSize: 100000, MinLot: 0.01, LotStep: 0.01, MarginRate: 1.0,
-	// 	PricePrecision: 3, CurrencyBase: "EUR", CurrencyQuote: "JPY",
-	// },
-	// "GBPJPY": {
-	// 	Symbol: "GBPJPY", PipSize: 0.01, PipValue: 9.0, SpreadPips: 0.8, PipLocation: 2,
-	// 	ContractSize: 100000, MinLot: 0.01, LotStep: 0.01, MarginRate: 1.0,
-	// 	PricePrecision: 3, CurrencyBase: "GBP", CurrencyQuote: "JPY",
-	// },
+	"CHFJPY": {
+		Symbol: "CHFJPY", PipSize: 0.01, PipValue: 9.0, SpreadPips: 0.5, PipLocation: 2,
+		ContractSize: 100000, MinLot: 0.01, LotStep: 0.01, MarginRate: 1.0,
+		PricePrecision: 3, CurrencyBase: "CHF", CurrencyQuote: "JPY",
+	},
+	"EURAUD": {
+		Symbol: "EURAUD", PipSize: 0.0001, PipValue: 10.0, SpreadPips: 0.5, PipLocation: 4,
+		ContractSize: 100000, MinLot: 0.01, LotStep: 0.01, MarginRate: 1.0,
+		PricePrecision: 5, CurrencyBase: "EUR", CurrencyQuote: "AUD",
+	},
+	"EURCAD": {
+		Symbol: "EURCAD", PipSize: 0.0001, PipValue: 10.0, SpreadPips: 0.4, PipLocation: 4,
+		ContractSize: 100000, MinLot: 0.01, LotStep: 0.01, MarginRate: 1.0,
+		PricePrecision: 5, CurrencyBase: "EUR", CurrencyQuote: "CAD",
+	},
+	"EURCHF": {
+		Symbol: "EURCHF", PipSize: 0.0001, PipValue: 10.0, SpreadPips: 0.4, PipLocation: 4,
+		ContractSize: 100000, MinLot: 0.01, LotStep: 0.01, MarginRate: 1.0,
+		PricePrecision: 5, CurrencyBase: "EUR", CurrencyQuote: "CHF",
+	},
+	"EURGBP": {
+		Symbol: "EURGBP", PipSize: 0.0001, PipValue: 12.5, SpreadPips: 0.3, PipLocation: 4,
+		ContractSize: 100000, MinLot: 0.01, LotStep: 0.01, MarginRate: 1.0,
+		PricePrecision: 5, CurrencyBase: "EUR", CurrencyQuote: "GBP",
+	},
+	"EURJPY": {
+		Symbol: "EURJPY", PipSize: 0.01, PipValue: 9.0, SpreadPips: 0.4, PipLocation: 2,
+		ContractSize: 100000, MinLot: 0.01, LotStep: 0.01, MarginRate: 1.0,
+		PricePrecision: 3, CurrencyBase: "EUR", CurrencyQuote: "JPY",
+	},
+	"GBPJPY": {
+		Symbol: "GBPJPY", PipSize: 0.01, PipValue: 9.0, SpreadPips: 0.8, PipLocation: 2,
+		ContractSize: 100000, MinLot: 0.01, LotStep: 0.01, MarginRate: 1.0,
+		PricePrecision: 3, CurrencyBase: "GBP", CurrencyQuote: "JPY",
+	},
 
-	// // Metals
-	// "XAUUSD": {
-	// 	Symbol: "XAUUSD", PipSize: 1.0, PipValue: 10.0, SpreadPips: 2.0, PipLocation: 0,
-	// 	ContractSize: 100, MinLot: 0.01, LotStep: 0.01, MarginRate: 2.0,
-	// 	PricePrecision: 2, CurrencyBase: "XAU", CurrencyQuote: "USD",
-	// },
+	// Metals
+	// NOTE: PipSize=1.0 here is a registry-level convention. The live signal
+	// path uses services.pipSizeForSymbol() and backtest uses pipSize() in
+	// saf_runner, both of which treat XAUUSD as 0.1. Don't read this PipSize
+	// for live lot sizing — the alerter has its own table.
+	"XAUUSD": {
+		Symbol: "XAUUSD", PipSize: 1.0, PipValue: 10.0, SpreadPips: 2.0, PipLocation: 0,
+		ContractSize: 100, MinLot: 0.01, LotStep: 0.01, MarginRate: 2.0,
+		PricePrecision: 2, CurrencyBase: "XAU", CurrencyQuote: "USD",
+	},
 	// "XAGUSD": {
 	// 	Symbol: "XAGUSD", PipSize: 0.1, PipValue: 5.0, SpreadPips: 2.0, PipLocation: 1,
 	// 	ContractSize: 5000, MinLot: 0.01, LotStep: 0.01, MarginRate: 2.0,
@@ -148,11 +152,11 @@ var SymbolRegistry = map[string]SymbolConfig{
 	// },
 
 
-	// "AUDCHF": {
-	// 	Symbol: "AUDCHF", PipSize: 0.0001, PipValue: 11.0, SpreadPips: 0.5, PipLocation: 4,
-	// 	ContractSize: 100000, MinLot: 0.01, LotStep: 0.01, MarginRate: 1.0,
-	// 	PricePrecision: 5, CurrencyBase: "AUD", CurrencyQuote: "CHF",
-	// },
+	"AUDCHF": {
+		Symbol: "AUDCHF", PipSize: 0.0001, PipValue: 11.0, SpreadPips: 0.5, PipLocation: 4,
+		ContractSize: 100000, MinLot: 0.01, LotStep: 0.01, MarginRate: 1.0,
+		PricePrecision: 5, CurrencyBase: "AUD", CurrencyQuote: "CHF",
+	},
 	// "AUDCAD": {
 	// 	Symbol: "AUDCAD", PipSize: 0.0001, PipValue: 7.5, SpreadPips: 0.5, PipLocation: 4,
 	// 	ContractSize: 100000, MinLot: 0.01, LotStep: 0.01, MarginRate: 1.0,
@@ -163,21 +167,21 @@ var SymbolRegistry = map[string]SymbolConfig{
 	// 	ContractSize: 100000, MinLot: 0.01, LotStep: 0.01, MarginRate: 1.0,
 	// 	PricePrecision: 5, CurrencyBase: "AUD", CurrencyQuote: "NZD",
 	// },
-	// "CADJPY": {
-	// 	Symbol: "CADJPY", PipSize: 0.01, PipValue: 9.0, SpreadPips: 0.5, PipLocation: 2,
-	// 	ContractSize: 100000, MinLot: 0.01, LotStep: 0.01, MarginRate: 1.0,
-	// 	PricePrecision: 3, CurrencyBase: "CAD", CurrencyQuote: "JPY",
-	// },
-	// "NZDJPY": {
-	// 	Symbol: "NZDJPY", PipSize: 0.01, PipValue: 9.0, SpreadPips: 0.5, PipLocation: 2,
-	// 	ContractSize: 100000, MinLot: 0.01, LotStep: 0.01, MarginRate: 1.0,
-	// 	PricePrecision: 3, CurrencyBase: "NZD", CurrencyQuote: "JPY",
-	// },
-	// "GBPCHF": {
-	// 	Symbol: "GBPCHF", PipSize: 0.0001, PipValue: 11.0, SpreadPips: 0.7, PipLocation: 4,
-	// 	ContractSize: 100000, MinLot: 0.01, LotStep: 0.01, MarginRate: 1.0,
-	// 	PricePrecision: 5, CurrencyBase: "GBP", CurrencyQuote: "CHF",
-	// },
+	"CADJPY": {
+		Symbol: "CADJPY", PipSize: 0.01, PipValue: 9.0, SpreadPips: 0.5, PipLocation: 2,
+		ContractSize: 100000, MinLot: 0.01, LotStep: 0.01, MarginRate: 1.0,
+		PricePrecision: 3, CurrencyBase: "CAD", CurrencyQuote: "JPY",
+	},
+	"NZDJPY": {
+		Symbol: "NZDJPY", PipSize: 0.01, PipValue: 9.0, SpreadPips: 0.5, PipLocation: 2,
+		ContractSize: 100000, MinLot: 0.01, LotStep: 0.01, MarginRate: 1.0,
+		PricePrecision: 3, CurrencyBase: "NZD", CurrencyQuote: "JPY",
+	},
+	"GBPCHF": {
+		Symbol: "GBPCHF", PipSize: 0.0001, PipValue: 11.0, SpreadPips: 0.7, PipLocation: 4,
+		ContractSize: 100000, MinLot: 0.01, LotStep: 0.01, MarginRate: 1.0,
+		PricePrecision: 5, CurrencyBase: "GBP", CurrencyQuote: "CHF",
+	},
 	// "GBPAUD": {
 	// 	Symbol: "GBPAUD", PipSize: 0.0001, PipValue: 6.5, SpreadPips: 0.7, PipLocation: 4,
 	// 	ContractSize: 100000, MinLot: 0.01, LotStep: 0.01, MarginRate: 1.0,
