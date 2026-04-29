@@ -25,6 +25,7 @@ type SignalEvaluator struct {
 	pool         *pgxpool.Pool
 	strategyRepo *repositories.StrategyRepository
 	signalRepo   *repositories.SignalRepository
+	alerter      *TelegramAlerter // nil-safe; Send is a no-op when nil
 }
 
 func NewSignalEvaluator(
@@ -36,6 +37,7 @@ func NewSignalEvaluator(
 		pool:         pool,
 		strategyRepo: strategyRepo,
 		signalRepo:   signalRepo,
+		alerter:      NewTelegramAlerterFromEnv(),
 	}
 }
 
@@ -176,6 +178,12 @@ func (e *SignalEvaluator) evaluateStrategy(ctx context.Context, s *repositories.
 		Float64("entry", setup.Entry).
 		Float64("rr", setup.RR).
 		Msg("signal created")
+
+	// Push to Telegram. Nil-safe; failures don't block.
+	if a := e.alerter; a != nil {
+		text := a.FormatSetup(s.Symbol, setup)
+		go a.Send(context.Background(), text)
+	}
 	return 1, nil
 }
 
