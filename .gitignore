@@ -47,3 +47,5 @@ backend/scripts/test_single_candle/.env
 *.md
 *.sh
 .sh.backup
+# MQL5 compiled artifacts
+scripts/*.ex5

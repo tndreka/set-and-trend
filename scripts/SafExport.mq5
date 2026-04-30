@@ -24,25 +24,106 @@
 #property version   "1.00"
 #property strict
 
-input string  InpListenerURL = "http://localhost:9991/ingest"; // Go listener endpoint
-input string  InpSymbols     = "AUDCHF,AUDUSD,CADJPY,CHFJPY,EURAUD,EURCAD,EURCHF,EURGBP,EURJPY,EURUSD,GBPCHF,GBPJPY,GBPUSD,NZDJPY,NZDUSD,USDCAD,USDCHF,USDJPY,XAUUSD"; // 19 SAF pairs
+input string  InpListenerURL = "http://192.168.1.2:9991/ingest"; // Go listener endpoint (Wine loopback is blocked; use the host LAN IP)
+input string  InpSymbols     = "AUDCHF,AUDUSD,CADJPY,CHFJPY,EURAUD,EURCAD,EURCHF,EURGBP,EURJPY,EURUSD,GBPCHF,GBPJPY,GBPUSD,NZDJPY,NZDUSD,USDCAD,USDCHF,USDJPY,XAUUSD"; // 19 SAF pairs (DB form)
 input int     InpBarsPerCycle = 10;     // closed H4 bars to send per symbol
 input int     InpGraceSec      = 90;    // delay after H4 close before posting
-input string  InpBrokerSuffix  = "";    // strip from broker symbols (e.g. ".m", "-Pro") — empty = no strip
+input bool    InpDottedTickers = true;  // broker uses XXX.YYY format? (MetaQuotes-Demo: yes)
+input string  InpBrokerSuffix  = "";    // additional suffix (e.g. ".m", "-Pro") applied AFTER dot-injection
 input bool    InpVerbose       = true;
 
 int     g_lastH4Ticket = -1;       // lastH4StartUnix posted (avoids double-post)
-string  g_symbols[];               // parsed symbol list (DB form, no broker suffix)
+string  g_symbols[];               // parsed symbol list (DB form)
+string  g_brokerMap[];             // parallel — broker ticker per db symbol ("" = unresolvable)
 
 //+------------------------------------------------------------------+
 int OnInit()
 {
    StringSplit(InpSymbols, ',', g_symbols);
    for(int i=0; i<ArraySize(g_symbols); i++)
-      g_symbols[i] = StringTrimLeft(StringTrimRight(g_symbols[i]));
+   {
+      StringTrimRight(g_symbols[i]);
+      StringTrimLeft(g_symbols[i]);
+   }
+   BuildBrokerMap();
    PrintFormat("SafExport ready — %d symbols, listener=%s", ArraySize(g_symbols), InpListenerURL);
    EventSetTimer(15);   // poll every 15s; cheap, no broker traffic
    return(INIT_SUCCEEDED);
+}
+
+//+------------------------------------------------------------------+
+//| Resolve every DB symbol to the broker's actual ticker by trying  |
+//| common variants and (as a fallback) scanning SymbolsTotal for a  |
+//| substring match. Result cached in g_brokerMap.                   |
+//+------------------------------------------------------------------+
+void BuildBrokerMap()
+{
+   int n = ArraySize(g_symbols);
+   ArrayResize(g_brokerMap, n);
+   int resolved = 0;
+   for(int i=0; i<n; i++)
+   {
+      string db = g_symbols[i];
+      g_brokerMap[i] = "";
+      if(db == "") continue;
+
+      // Build candidate list, ordered by likelihood:
+      string cands[];
+      int cn = 0;
+      ArrayResize(cands, 8);
+      cands[cn++] = db;                                                                                 // EURUSD
+      if(InpBrokerSuffix != "") cands[cn++] = db + InpBrokerSuffix;                                    // EURUSD.m
+      if(StringLen(db) == 6)
+      {
+         string dotted = StringSubstr(db,0,3) + "." + StringSubstr(db,3,3);                            // EUR.USD
+         cands[cn++] = dotted;
+         if(InpBrokerSuffix != "") cands[cn++] = dotted + InpBrokerSuffix;                             // EUR.USD.m
+      }
+      ArrayResize(cands, cn);
+
+      for(int c=0; c<cn; c++)
+      {
+         if(SymbolSelect(cands[c], true))
+         {
+            g_brokerMap[i] = cands[c];
+            break;
+         }
+      }
+      // Fallback: scan all available broker symbols for one whose first
+      // 6 alphanumeric chars match the DB symbol (handles weird formats
+      // like "EUR_USD", "EURUSD#", etc.).
+      if(g_brokerMap[i] == "")
+      {
+         int total = SymbolsTotal(false);
+         for(int s=0; s<total; s++)
+         {
+            string bs = SymbolName(s, false);
+            string clean = "";
+            for(int k=0; k<StringLen(bs) && StringLen(clean)<6; k++)
+            {
+               ushort ch = StringGetCharacter(bs, k);
+               if((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z')) clean += ShortToString(ch);
+            }
+            if(StringCompare(clean, db, false) == 0)
+            {
+               if(SymbolSelect(bs, true))
+               {
+                  g_brokerMap[i] = bs;
+                  break;
+               }
+            }
+         }
+      }
+
+      if(g_brokerMap[i] == "")
+         PrintFormat("[%s] no broker ticker found (tried %d variants)", db, cn);
+      else
+      {
+         PrintFormat("[%s] -> %s", db, g_brokerMap[i]);
+         resolved++;
+      }
+   }
+   PrintFormat("BrokerMap: resolved %d/%d symbols", resolved, n);
 }
 
 void OnDeinit(const int reason) { EventKillTimer(); }
@@ -72,11 +153,10 @@ void OnTimer()
    {
       string dbSym = g_symbols[i];
       if(dbSym == "") continue;
-      string brokerSym = (InpBrokerSuffix == "" ? dbSym : dbSym + InpBrokerSuffix);
-
-      if(!SymbolSelect(brokerSym, true))
+      string brokerSym = g_brokerMap[i];
+      if(brokerSym == "")
       {
-         PrintFormat("[%s] SymbolSelect failed (broker may use a different ticker — set InpBrokerSuffix)", brokerSym);
+         // Already logged at OnInit; just skip silently per cycle.
          continue;
       }
       if(PostSymbol(dbSym, brokerSym, InpBarsPerCycle))
