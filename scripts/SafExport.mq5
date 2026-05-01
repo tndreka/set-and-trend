@@ -24,7 +24,7 @@
 #property version   "1.00"
 #property strict
 
-input string  InpListenerURL = "http://192.168.1.2:9991/ingest"; // Go listener endpoint (Wine loopback is blocked; use the host LAN IP)
+input string  InpListenerURL = "http://172.20.10.4:9991/ingest"; // Go listener endpoint (host LAN IP — change in MT5 Inputs when network changes)
 input string  InpSymbols     = "AUDCHF,AUDUSD,CADJPY,CHFJPY,EURAUD,EURCAD,EURCHF,EURGBP,EURJPY,EURUSD,GBPCHF,GBPJPY,GBPUSD,NZDJPY,NZDUSD,USDCAD,USDCHF,USDJPY,XAUUSD"; // 19 SAF pairs (DB form)
 input int     InpBarsPerCycle = 10;     // closed H4 bars to send per symbol
 input int     InpGraceSec      = 90;    // delay after H4 close before posting
