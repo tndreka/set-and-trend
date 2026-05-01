@@ -33,6 +33,7 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"io"
 	"os"
 	"strconv"
@@ -57,6 +58,24 @@ type bar struct {
 type symbolPayload struct {
 	Symbol string `json:"symbol"`
 	Bars   []bar  `json:"bars"`
+}
+
+// sanityRange — same per-symbol bands as cmd/mt5-listen and cmd/td-sync.
+// Any bar whose close is outside its band is rejected before the upsert.
+// This is the same guard that prevents cross-symbol contamination from any
+// ingest path; tv-upsert previously lacked it (which let a USDCAD-priced
+// AUDUSD bar through on 2026-05-01).
+var sanityRange = map[string][2]float64{
+	"AUDCHF": {0.45, 1.10}, "AUDUSD": {0.40, 1.20},
+	"CADJPY": {60, 130}, "CHFJPY": {70, 200},
+	"EURAUD": {1.10, 2.10}, "EURCAD": {1.20, 1.80},
+	"EURCHF": {0.90, 1.70}, "EURGBP": {0.65, 0.99},
+	"EURJPY": {90, 200}, "EURUSD": {0.80, 1.70},
+	"GBPCHF": {1.00, 2.50}, "GBPJPY": {115, 260},
+	"GBPUSD": {1.00, 2.20}, "NZDJPY": {40, 100},
+	"NZDUSD": {0.35, 1.00}, "USDCAD": {0.90, 1.65},
+	"USDCHF": {0.65, 1.50}, "USDJPY": {70, 170},
+	"XAUUSD": {200, 6000},
 }
 
 func main() {
@@ -138,8 +157,16 @@ func upsertBars(ctx context.Context, pool *pgxpool.Pool, p symbolPayload) (int, 
 			low = EXCLUDED.low,
 			close = EXCLUDED.close`
 
+	band, hasBand := sanityRange[p.Symbol]
 	count := 0
 	for _, b := range p.Bars {
+		if hasBand && (b.Close < band[0] || b.Close > band[1]) {
+			log.Error().Str("symbol", p.Symbol).Float64("close", b.Close).
+				Floats64("band", []float64{band[0], band[1]}).
+				Int64("time", b.Time).
+				Msg("close outside sanity band — refusing to ingest (corruption guard)")
+			return count, fmt.Errorf("sanity check failed: %s close=%v outside [%v,%v]", p.Symbol, b.Close, band[0], band[1])
+		}
 		ts := time.Unix(b.Time, 0).UTC()
 		var vol any
 		if b.Volume > 0 {
