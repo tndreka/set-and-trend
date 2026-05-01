@@ -124,6 +124,36 @@ void BuildBrokerMap()
       }
    }
    PrintFormat("BrokerMap: resolved %d/%d symbols", resolved, n);
+
+   // Warm-up: force the broker to download H4 history for each resolved
+   // symbol. Without this, CopyRates returns 0 the first time it's called
+   // for a symbol that's never been opened on a chart in this MT5 install.
+   // We retry a few times with short sleeps because the broker delivery is
+   // async — first call schedules, subsequent calls find the data.
+   PrintFormat("Warm-up: requesting H4 history for %d symbols...", resolved);
+   int warmed = 0;
+   for(int i=0; i<n; i++)
+   {
+      string bs = g_brokerMap[i];
+      if(bs == "") continue;
+      MqlRates probe[];
+      ArraySetAsSeries(probe, true);
+      int got = 0;
+      for(int attempt=0; attempt<5; attempt++)
+      {
+         got = CopyRates(bs, PERIOD_H4, 1, 5, probe);
+         if(got > 0) break;
+         Sleep(800);   // give the broker time to deliver
+      }
+      if(got > 0)
+      {
+         warmed++;
+         if(InpVerbose) PrintFormat("[%s] warmed (%d bars cached)", bs, got);
+      }
+      else
+         PrintFormat("[%s] warm-up failed after 5 attempts (err=%d) — likely no broker history for this pair", bs, GetLastError());
+   }
+   PrintFormat("Warm-up: %d/%d symbols ready", warmed, resolved);
 }
 
 void OnDeinit(const int reason) { EventKillTimer(); }
