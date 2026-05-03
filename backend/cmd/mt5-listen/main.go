@@ -86,6 +86,9 @@ type server struct {
 	// post within a tight window. The MQL5 EA sends one POST per symbol per
 	// cycle; without debouncing we'd run EvaluateAll 19 times.
 	lastEvalUnix int64
+	// evalRunning prevents two EvaluateAll goroutines running concurrently
+	// when a single eval exceeds the debounce window (DB pool exhaustion guard).
+	evalRunning atomic.Bool
 }
 
 const evalDebounceSec = 30
@@ -204,7 +207,8 @@ func (s *server) handleIngest(w http.ResponseWriter, r *http.Request) {
 
 // maybeEvaluate runs EvaluateAll at most once per evalDebounceSec to avoid
 // 19 redundant runs when the EA fans out 19 symbol POSTs in a tight window.
-// Uses an atomic compare-and-swap on a unix-second timestamp.
+// Uses an atomic compare-and-swap on a unix-second timestamp, plus a
+// `running` flag so a slow eval (>debounce window) cannot overlap itself.
 func (s *server) maybeEvaluate(ctx context.Context) {
 	now := time.Now().Unix()
 	last := atomic.LoadInt64(&s.lastEvalUnix)
@@ -214,8 +218,15 @@ func (s *server) maybeEvaluate(ctx context.Context) {
 	if !atomic.CompareAndSwapInt64(&s.lastEvalUnix, last, now) {
 		return // another goroutine claimed this window
 	}
+	if !s.evalRunning.CompareAndSwap(false, true) {
+		// Previous eval is still running. Skip this tick; the timestamp
+		// has already advanced so the next caller will retry after debounce.
+		log.Warn().Msg("evaluator still running from previous tick; skipping")
+		return
+	}
 	// Run async so the HTTP response isn't blocked by evaluator latency.
 	go func() {
+		defer s.evalRunning.Store(false)
 		bg, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 		created, err := s.evaluator.EvaluateAll(bg)
