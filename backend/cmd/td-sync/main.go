@@ -254,11 +254,22 @@ func fetchAndUpsert(ctx context.Context, client *http.Client, pool *pgxpool.Pool
 		close_, _ := strconv.ParseFloat(v.Close, 64)
 		vol, _ := strconv.ParseFloat(v.Volume, 64)
 
-		if hasBand && (close_ < band[0] || close_ > band[1]) {
-			log.Error().Str("symbol", symbol).Float64("close", close_).
-				Floats64("band", []float64{band[0], band[1]}).
-				Msg("close outside sanity band — refusing to ingest (corruption guard)")
-			return 0, fmt.Errorf("sanity check failed for %s @ %s", symbol, ts)
+		if hasBand {
+			for _, price := range [4]float64{open, high, low, close_} {
+				if price < band[0] || price > band[1] {
+					log.Error().Str("symbol", symbol).Float64("price", price).
+						Floats64("band", []float64{band[0], band[1]}).
+						Msg("price outside sanity band — refusing to ingest (corruption guard)")
+					return 0, fmt.Errorf("sanity check failed for %s @ %s: price=%v outside [%v,%v]", symbol, ts, price, band[0], band[1])
+				}
+			}
+		}
+		if low > high || open < low || open > high || close_ < low || close_ > high {
+			log.Error().Str("symbol", symbol).
+				Float64("open", open).Float64("high", high).
+				Float64("low", low).Float64("close", close_).
+				Msg("invalid OHLC ordering — refusing to ingest")
+			return 0, fmt.Errorf("invalid OHLC for %s @ %s: o=%v h=%v l=%v c=%v", symbol, ts, open, high, low, close_)
 		}
 
 		if err := upsertBar(ctx, pool, symbol, ts, open, high, low, close_, vol); err != nil {

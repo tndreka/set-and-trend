@@ -160,12 +160,24 @@ func upsertBars(ctx context.Context, pool *pgxpool.Pool, p symbolPayload) (int, 
 	band, hasBand := sanityRange[p.Symbol]
 	count := 0
 	for _, b := range p.Bars {
-		if hasBand && (b.Close < band[0] || b.Close > band[1]) {
-			log.Error().Str("symbol", p.Symbol).Float64("close", b.Close).
-				Floats64("band", []float64{band[0], band[1]}).
+		if hasBand {
+			for _, price := range [4]float64{b.Open, b.High, b.Low, b.Close} {
+				if price < band[0] || price > band[1] {
+					log.Error().Str("symbol", p.Symbol).Float64("price", price).
+						Floats64("band", []float64{band[0], band[1]}).
+						Int64("time", b.Time).
+						Msg("price outside sanity band — refusing to ingest (corruption guard)")
+					return count, fmt.Errorf("sanity check failed: %s price=%v outside [%v,%v]", p.Symbol, price, band[0], band[1])
+				}
+			}
+		}
+		if b.Low > b.High || b.Open < b.Low || b.Open > b.High || b.Close < b.Low || b.Close > b.High {
+			log.Error().Str("symbol", p.Symbol).
+				Float64("open", b.Open).Float64("high", b.High).
+				Float64("low", b.Low).Float64("close", b.Close).
 				Int64("time", b.Time).
-				Msg("close outside sanity band — refusing to ingest (corruption guard)")
-			return count, fmt.Errorf("sanity check failed: %s close=%v outside [%v,%v]", p.Symbol, b.Close, band[0], band[1])
+				Msg("invalid OHLC ordering — refusing to ingest")
+			return count, fmt.Errorf("invalid OHLC for %s: o=%v h=%v l=%v c=%v", p.Symbol, b.Open, b.High, b.Low, b.Close)
 		}
 		ts := time.Unix(b.Time, 0).UTC()
 		var vol any

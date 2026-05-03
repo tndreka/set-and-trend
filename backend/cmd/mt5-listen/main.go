@@ -163,12 +163,26 @@ func (s *server) handleIngest(w http.ResponseWriter, r *http.Request) {
 
 	upserted := 0
 	for _, b := range req.Bars {
-		if hasBand && (b.Close < band[0] || b.Close > band[1]) {
-			log.Error().Str("symbol", req.Symbol).Float64("close", b.Close).
-				Floats64("band", []float64{band[0], band[1]}).
-				Msg("close outside sanity band — refusing whole batch")
+		if hasBand {
+			for _, p := range [4]float64{b.Open, b.High, b.Low, b.Close} {
+				if p < band[0] || p > band[1] {
+					log.Error().Str("symbol", req.Symbol).Float64("price", p).
+						Floats64("band", []float64{band[0], band[1]}).
+						Msg("price outside sanity band — refusing whole batch")
+					writeJSON(w, http.StatusBadRequest, map[string]any{
+						"error": fmt.Sprintf("sanity check failed: price=%v outside [%v,%v]", p, band[0], band[1]),
+					})
+					return
+				}
+			}
+		}
+		if b.Low > b.High || b.Open < b.Low || b.Open > b.High || b.Close < b.Low || b.Close > b.High {
+			log.Error().Str("symbol", req.Symbol).
+				Float64("open", b.Open).Float64("high", b.High).
+				Float64("low", b.Low).Float64("close", b.Close).
+				Msg("invalid OHLC ordering — refusing whole batch")
 			writeJSON(w, http.StatusBadRequest, map[string]any{
-				"error": fmt.Sprintf("sanity check failed: close=%v outside [%v,%v]", b.Close, band[0], band[1]),
+				"error": fmt.Sprintf("invalid OHLC: o=%v h=%v l=%v c=%v", b.Open, b.High, b.Low, b.Close),
 			})
 			return
 		}
