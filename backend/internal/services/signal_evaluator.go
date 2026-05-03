@@ -152,7 +152,7 @@ func (e *SignalEvaluator) evaluateStrategy(ctx context.Context, s *repositories.
 
 	details, _ := json.Marshal(e.buildRichDetails(setup, sd, s.Code))
 
-	_, err = e.signalRepo.CreateSignal(ctx, repositories.CreateSignalParams{
+	signal, err := e.signalRepo.CreateSignal(ctx, repositories.CreateSignalParams{
 		StrategyID: s.ID,
 		Symbol:     s.Symbol,
 		Timeframe:  s.Timeframe,
@@ -180,9 +180,18 @@ func (e *SignalEvaluator) evaluateStrategy(ctx context.Context, s *repositories.
 		Msg("signal created")
 
 	// Push to Telegram. Nil-safe; failures don't block.
-	if a := e.alerter; a != nil {
+	// Mark notified BEFORE spawning so a failed send doesn't cause an
+	// external poller (ListUnnotified) to re-alert the same signal forever.
+	if a := e.alerter; a != nil && signal != nil {
+		if err := e.signalRepo.MarkNotified(ctx, signal.ID); err != nil {
+			log.Error().Err(err).Str("signal_id", signal.ID.String()).Msg("mark notified failed")
+		}
 		text := a.FormatSetup(s.Symbol, setup)
-		go a.Send(context.Background(), text)
+		go func() {
+			sendCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+			a.Send(sendCtx, text)
+		}()
 	}
 	return 1, nil
 }
