@@ -30,6 +30,7 @@ input int     InpBarsPerCycle = 10;     // closed H4 bars to send per symbol
 input int     InpGraceSec      = 90;    // delay after H4 close before posting
 input bool    InpDottedTickers = true;  // broker uses XXX.YYY format? (MetaQuotes-Demo: yes)
 input string  InpBrokerSuffix  = "";    // additional suffix (e.g. ".m", "-Pro") applied AFTER dot-injection
+input string  InpSharedSecret  = "";    // if set, sent as X-MT5-Secret header (must match MT5_LISTEN_SECRET on backend)
 input bool    InpVerbose       = true;
 
 datetime g_lastH4Ticket = 0;       // lastH4StartUnix posted (avoids double-post)
@@ -247,6 +248,8 @@ bool PostSymbol(const string dbSym, const string brokerSym, const int n)
    StringToCharArray(body, post, 0, StringLen(body));
    char result[];
    string headers = "Content-Type: application/json\r\n";
+   if(InpSharedSecret != "")
+      headers += "X-MT5-Secret: " + InpSharedSecret + "\r\n";
    string respHeaders;
 
    ResetLastError();

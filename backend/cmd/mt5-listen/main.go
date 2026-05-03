@@ -81,6 +81,9 @@ type server struct {
 	pool      *pgxpool.Pool
 	evaluator *services.SignalEvaluator
 	noEval    bool
+	// Optional shared secret. If non-empty, /ingest requires the same value
+	// in the X-MT5-Secret header. Sourced from MT5_LISTEN_SECRET.
+	sharedSecret string
 
 	// Debounce evaluator: only run once per N seconds even if many symbols
 	// post within a tight window. The MQL5 EA sends one POST per symbol per
@@ -90,6 +93,8 @@ type server struct {
 	// when a single eval exceeds the debounce window (DB pool exhaustion guard).
 	evalRunning atomic.Bool
 }
+
+const maxIngestBodyBytes = 2 << 20 // 2 MiB — way more than 19 symbols x 10 bars
 
 const evalDebounceSec = 30
 
@@ -118,9 +123,13 @@ func main() {
 	signalRepo := repositories.NewSignalRepository(pool)
 
 	srv := &server{
-		pool:      pool,
-		evaluator: services.NewSignalEvaluator(pool, strategyRepo, signalRepo),
-		noEval:    *noEval,
+		pool:         pool,
+		evaluator:    services.NewSignalEvaluator(pool, strategyRepo, signalRepo),
+		noEval:       *noEval,
+		sharedSecret: os.Getenv("MT5_LISTEN_SECRET"),
+	}
+	if srv.sharedSecret == "" {
+		log.Warn().Msg("MT5_LISTEN_SECRET unset — accepting unauthenticated POSTs from any LAN host")
 	}
 
 	mux := http.NewServeMux()
@@ -131,6 +140,8 @@ func main() {
 		Addr:              *addr,
 		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      15 * time.Second,
 	}
 	log.Info().Str("addr", *addr).Bool("no_eval", *noEval).Msg("mt5-listen ready")
 	if err := httpSrv.ListenAndServe(); err != nil {
@@ -147,6 +158,11 @@ func (s *server) handleIngest(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": "POST only"})
 		return
 	}
+	if s.sharedSecret != "" && r.Header.Get("X-MT5-Secret") != s.sharedSecret {
+		writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "bad or missing X-MT5-Secret"})
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxIngestBodyBytes)
 	defer r.Body.Close()
 
 	var req ingestRequest
