@@ -318,10 +318,6 @@ func buildConfluenceFactors(ec rules.EvalContext, setup *rules.Setup, ind rules.
 	if rules.IsCandleRejection(c, dir) {
 		factors = append(factors, "H4 candle rejection wick")
 	}
-	// Psych level
-	if rules.NearPsychLevel(c.Close, rules.IsJPYPair(ec.Symbol)) {
-		factors = append(factors, "Near psychological level")
-	}
 
 	return factors
 }
