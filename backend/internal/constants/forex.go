@@ -119,12 +119,10 @@ var SymbolRegistry = map[string]SymbolConfig{
 	},
 
 	// Metals
-	// NOTE: PipSize=1.0 here is a registry-level convention. The live signal
-	// path uses services.pipSizeForSymbol() and backtest uses pipSize() in
-	// saf_runner, both of which treat XAUUSD as 0.1. Don't read this PipSize
-	// for live lot sizing — the alerter has its own table.
+	// XAUUSD: standard lot = 100 oz. Pip = 0.1 (industry convention; matches
+	// services.pipSizeForSymbol and backtest.pipSize). PipValue = 0.1 × 100 = $10/lot.
 	"XAUUSD": {
-		Symbol: "XAUUSD", PipSize: 1.0, PipValue: 10.0, SpreadPips: 2.0, PipLocation: 0,
+		Symbol: "XAUUSD", PipSize: 0.1, PipValue: 10.0, SpreadPips: 2.0, PipLocation: 1,
 		ContractSize: 100, MinLot: 0.01, LotStep: 0.01, MarginRate: 2.0,
 		PricePrecision: 2, CurrencyBase: "XAU", CurrencyQuote: "USD",
 	},
