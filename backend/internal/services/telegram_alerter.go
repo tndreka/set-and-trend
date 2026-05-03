@@ -156,7 +156,7 @@ func pipValuePerLotUSD(symbol string) float64 {
 	case "EURGBP", "EURAUD", "EURCAD", "EURCHF", "GBPCHF", "GBPAUD", "AUDCHF":
 		return 10.0
 	case "XAUUSD":
-		return 1.0 // gold: $1 per pip per ounce; lot=100oz → $100, but pipSize=0.1 → effective $10
+		return 10.0 // gold: lot=100oz, pipSize=0.1 → $10 per pip per standard lot
 	}
 	return 10.0
 }
