@@ -35,6 +35,7 @@ input bool    InpVerbose       = true;
 int     g_lastH4Ticket = -1;       // lastH4StartUnix posted (avoids double-post)
 string  g_symbols[];               // parsed symbol list (DB form)
 string  g_brokerMap[];             // parallel — broker ticker per db symbol ("" = unresolvable)
+bool    g_warmupPending = true;    // first OnTimer tick runs warm-up (kept out of OnInit so MT5 stays responsive)
 
 //+------------------------------------------------------------------+
 int OnInit()
@@ -46,7 +47,8 @@ int OnInit()
       StringTrimLeft(g_symbols[i]);
    }
    BuildBrokerMap();
-   PrintFormat("SafExport ready — %d symbols, listener=%s", ArraySize(g_symbols), InpListenerURL);
+   g_warmupPending = true;   // first OnTimer tick runs warm-up; OnInit must return fast so MT5 can deliver timers
+   PrintFormat("SafExport ready — %d symbols, listener=%s (warm-up scheduled)", ArraySize(g_symbols), InpListenerURL);
    EventSetTimer(15);   // poll every 15s; cheap, no broker traffic
    return(INIT_SUCCEEDED);
 }
@@ -91,7 +93,8 @@ void BuildBrokerMap()
       }
       // Fallback: scan all available broker symbols for one whose first
       // 6 alphanumeric chars match the DB symbol (handles weird formats
-      // like "EUR_USD", "EURUSD#", etc.).
+      // like "EUR_USD", "EURUSD#", etc.). selected=false → all symbols
+      // available from the broker, not just those in Market Watch.
       if(g_brokerMap[i] == "")
       {
          int total = SymbolsTotal(false);
@@ -124,12 +127,24 @@ void BuildBrokerMap()
       }
    }
    PrintFormat("BrokerMap: resolved %d/%d symbols", resolved, n);
+}
 
-   // Warm-up: force the broker to download H4 history for each resolved
-   // symbol. Without this, CopyRates returns 0 the first time it's called
-   // for a symbol that's never been opened on a chart in this MT5 install.
-   // We retry a few times with short sleeps because the broker delivery is
-   // async — first call schedules, subsequent calls find the data.
+//+------------------------------------------------------------------+
+//| Warm-up: force the broker to download H4 history for each        |
+//| resolved symbol. Without this, CopyRates returns 0 the first time|
+//| it's called for a symbol never opened on a chart in this MT5     |
+//| install. Retry with short sleeps because broker delivery is async|
+//| — first call schedules, subsequent calls find the data.          |
+//|                                                                   |
+//| Runs once from the first OnTimer tick (NOT OnInit) so MT5 can    |
+//| finish loading the EA before this 76s blocking loop starts.      |
+//+------------------------------------------------------------------+
+void RunWarmup()
+{
+   int n = ArraySize(g_symbols);
+   int resolved = 0;
+   for(int i=0; i<n; i++) if(g_brokerMap[i] != "") resolved++;
+
    PrintFormat("Warm-up: requesting H4 history for %d symbols...", resolved);
    int warmed = 0;
    for(int i=0; i<n; i++)
@@ -163,6 +178,13 @@ void OnDeinit(const int reason) { EventKillTimer(); }
 //+------------------------------------------------------------------+
 void OnTimer()
 {
+   if(g_warmupPending)
+   {
+      g_warmupPending = false;   // one-shot; if RunWarmup itself blocks, we still don't re-enter
+      RunWarmup();
+      return;                     // skip cycle posting on the warm-up tick
+   }
+
    datetime now = TimeCurrent();
    datetime h4Start = now - (now % (4*3600));      // current H4 bar's open time
    datetime lastClosedH4 = h4Start;                 // it's also the last closed bar's open time...
