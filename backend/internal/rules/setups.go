@@ -11,7 +11,7 @@ type Setup struct {
 	RR             float64 // |TP-Entry| / |Entry-SL|
 	Confidence     float64 // 0..1
 	Reason         string  // human-readable explanation, stored in setup_signals.details
-	ChecklistScore int             // raw score out of 20 (checklist strategies only)
+	ChecklistScore int             // raw score out of 14 (checklist strategies only)
 	ChecklistItems map[string]bool // per-item pass/fail (checklist strategies only)
 }
 

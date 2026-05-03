@@ -246,7 +246,8 @@ func upsertBar(ctx context.Context, pool *pgxpool.Pool, symbol string, b bar) er
 			open = EXCLUDED.open,
 			high = EXCLUDED.high,
 			low = EXCLUDED.low,
-			close = EXCLUDED.close`
+			close = EXCLUDED.close,
+			volume = COALESCE(EXCLUDED.volume, candles_h4.volume)`
 	ts := time.Unix(b.Time, 0).UTC()
 	var vol any
 	if b.Volume > 0 {

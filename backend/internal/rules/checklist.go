@@ -10,7 +10,7 @@ import (
 	"set-and-trend/backend/internal/patterns"
 )
 
-// MinChecklistScore is the default minimum score (out of 20) to emit a setup.
+// MinChecklistScore is the default minimum score (out of 14) to emit a setup.
 // Tunable per-backtest via the SAF_MIN_SCORE environment variable.
 var MinChecklistScore = 9
 

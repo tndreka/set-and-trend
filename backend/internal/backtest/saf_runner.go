@@ -625,7 +625,7 @@ func dirOf(p string) string {
 	return "."
 }
 
-// Canonical order for the 20 checklist items.
+// Canonical order for the 14 checklist items.
 var checklistItemOrder = []string{
 	"w1_in_favor", "w1_touching_ema", "w1_candle_rejection", "w1_pattern",
 	"d1_in_favor", "d1_aoi", "d1_touching_ema", "d1_candle_rejection", "d1_structure_rejection", "d1_pattern",
