@@ -349,10 +349,10 @@ func walkForward(symbol string, candles []rules.Candle, mtf multiTFData, strats 
 			t.checklistScore = setup.ChecklistScore
 			t.checklistItems = setup.ChecklistItems
 			t.direction = setup.Direction
-			t.entry = setup.Entry
-			t.sl = setup.StopLoss
-			t.tp = setup.TakeProfit
-			t.rr = setup.RR
+			t.entry = setup.Entry.InexactFloat64()
+			t.sl = setup.StopLoss.InexactFloat64()
+			t.tp = setup.TakeProfit.InexactFloat64()
+			t.rr = setup.RR.InexactFloat64()
 			trades = append(trades, t)
 		}
 	}
@@ -374,15 +374,23 @@ func resolveTrade(strategyCode, symbol string, openIdx int, setup *rules.Setup, 
 	if end > len(candles) {
 		end = len(candles)
 	}
-	risk := math.Abs(setup.Entry - setup.StopLoss)
-	effectiveSL := setup.StopLoss
+	// Bridge to float64 for the simulation loop. Backtest math stays in
+	// float64; only the Setup boundary is decimal. Internal P&L precision
+	// is unaffected (forex H4 prices are well within float64 range).
+	entry := setup.Entry.InexactFloat64()
+	stopLoss := setup.StopLoss.InexactFloat64()
+	takeProfit := setup.TakeProfit.InexactFloat64()
+	rr := setup.RR.InexactFloat64()
+
+	risk := math.Abs(entry - stopLoss)
+	effectiveSL := stopLoss
 	beArmed := false
 	var beTrigger float64
 	if breakevenAtR > 0 && risk > 0 {
 		if setup.Direction == "LONG" {
-			beTrigger = setup.Entry + breakevenAtR*risk
+			beTrigger = entry + breakevenAtR*risk
 		} else {
-			beTrigger = setup.Entry - breakevenAtR*risk
+			beTrigger = entry - breakevenAtR*risk
 		}
 	}
 	for j := openIdx + 1; j < end; j++ {
@@ -393,14 +401,14 @@ func resolveTrade(strategyCode, symbol string, openIdx int, setup *rules.Setup, 
 			if c.Low <= effectiveSL {
 				hitSL = true
 			}
-			if c.High >= setup.TakeProfit {
+			if c.High >= takeProfit {
 				hitTP = true
 			}
 		} else { // SHORT
 			if c.High >= effectiveSL {
 				hitSL = true
 			}
-			if c.Low <= setup.TakeProfit {
+			if c.Low <= takeProfit {
 				hitTP = true
 			}
 		}
@@ -431,7 +439,7 @@ func resolveTrade(strategyCode, symbol string, openIdx int, setup *rules.Setup, 
 		}
 		if hitTP {
 			t.result = "win"
-			t.rMult = setup.RR - costInR(symbol, risk)
+			t.rMult = rr - costInR(symbol, risk)
 			t.closed = c.TimestampUTC
 			return t
 		}
@@ -440,10 +448,10 @@ func resolveTrade(strategyCode, symbol string, openIdx int, setup *rules.Setup, 
 		if breakevenAtR > 0 && !beArmed {
 			if setup.Direction == "LONG" && c.High >= beTrigger {
 				beArmed = true
-				effectiveSL = setup.Entry
+				effectiveSL = entry
 			} else if setup.Direction == "SHORT" && c.Low <= beTrigger {
 				beArmed = true
-				effectiveSL = setup.Entry
+				effectiveSL = entry
 			}
 		}
 	}
@@ -452,14 +460,14 @@ func resolveTrade(strategyCode, symbol string, openIdx int, setup *rules.Setup, 
 	t.result = "timeout"
 	t.closed = last.TimestampUTC
 	if setup.Direction == "LONG" {
-		risk := setup.Entry - setup.StopLoss
+		risk := entry - stopLoss
 		if risk > 0 {
-			t.rMult = (last.Close - setup.Entry) / risk
+			t.rMult = (last.Close - entry) / risk
 		}
 	} else {
-		risk := setup.StopLoss - setup.Entry
+		risk := stopLoss - entry
 		if risk > 0 {
-			t.rMult = (setup.Entry - last.Close) / risk
+			t.rMult = (entry - last.Close) / risk
 		}
 	}
 	t.rMult -= costInR(symbol, risk)

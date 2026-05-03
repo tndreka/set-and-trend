@@ -3,6 +3,8 @@ package rules
 import (
 	"fmt"
 
+	"github.com/shopspring/decimal"
+
 	"set-and-trend/backend/internal/patterns"
 )
 
@@ -77,11 +79,11 @@ func buildH4TrendFollowingSetup(ctx EvalContext) (*Setup, error) {
 
 	return &Setup{
 		Direction:  "LONG",
-		Entry:      entry,
-		StopLoss:   sl,
-		TakeProfit: tp,
-		RR:         rr,
-		Confidence: res.Confidence,
+		Entry:      decimal.NewFromFloat(entry),
+		StopLoss:   decimal.NewFromFloat(sl),
+		TakeProfit: decimal.NewFromFloat(tp),
+		RR:         decimal.NewFromFloat(rr),
+		Confidence: decimal.NewFromFloat(res.Confidence),
 		Reason:     "EMA50>EMA200, close above EMA50, EMA50 rising, D1 trend aligned — long on prior swing low",
 	}, nil
 }

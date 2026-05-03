@@ -8,10 +8,10 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"strconv"
 	"time"
 
 	"github.com/rs/zerolog/log"
+	"github.com/shopspring/decimal"
 
 	"set-and-trend/backend/internal/rules"
 )
@@ -22,7 +22,7 @@ import (
 type TelegramAlerter struct {
 	BotToken       string
 	ChatID         string
-	AccountBalance float64
+	AccountBalance decimal.Decimal
 	Client         *http.Client
 }
 
@@ -35,10 +35,10 @@ func NewTelegramAlerterFromEnv() *TelegramAlerter {
 		log.Warn().Msg("telegram alerter disabled — set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID to enable")
 		return nil
 	}
-	bal := 1000.0
+	bal := decimal.NewFromInt(1000)
 	if v := os.Getenv("SAF_ACCOUNT_BALANCE_USD"); v != "" {
-		if f, err := strconv.ParseFloat(v, 64); err == nil && f > 0 {
-			bal = f
+		if d, err := decimal.NewFromString(v); err == nil && d.IsPositive() {
+			bal = d
 		}
 	}
 	return &TelegramAlerter{
@@ -53,7 +53,7 @@ func NewTelegramAlerterFromEnv() *TelegramAlerter {
 // s=8 → 1.5%, s=9 → 2.5%, s>=10 → 4.0%. Falls back to 1% if score unknown.
 func (a *TelegramAlerter) FormatSetup(symbol string, setup *rules.Setup) string {
 	riskPct := riskForScore(setup.ChecklistScore)
-	riskUSD := a.AccountBalance * riskPct / 100
+	riskUSD := a.AccountBalance.Mul(riskPct).Div(decimal.NewFromInt(100))
 	lots := computeLots(symbol, setup.Entry, setup.StopLoss, riskUSD)
 
 	dirEmoji := "🟢"
@@ -71,14 +71,14 @@ func (a *TelegramAlerter) FormatSetup(symbol string, setup *rules.Setup) string 
 			"`Entry:` %s\n"+
 			"`SL:   ` %s\n"+
 			"`TP:   ` %s\n"+
-			"`RR:   ` %.2f:1\n"+
-			"`Risk: ` %.1f%% ($%.0f) → *%.2f lots*",
+			"`RR:   ` %s:1\n"+
+			"`Risk: ` %s%% ($%s) → *%s lots*",
 		dirEmoji, symbol, setup.Direction, scoreLabel,
 		formatPrice(symbol, setup.Entry),
 		formatPrice(symbol, setup.StopLoss),
 		formatPrice(symbol, setup.TakeProfit),
-		setup.RR,
-		riskPct, riskUSD, lots,
+		setup.RR.StringFixed(2),
+		riskPct.StringFixed(1), riskUSD.StringFixed(0), lots.StringFixed(2),
 	)
 }
 
@@ -114,84 +114,87 @@ func (a *TelegramAlerter) Send(ctx context.Context, text string) {
 
 // riskForScore maps checklist score to risk %. Validated regime "Standard
 // scaled" — see iteration analysis in vault for justification.
-func riskForScore(score int) float64 {
+func riskForScore(score int) decimal.Decimal {
 	switch {
 	case score >= 10:
-		return 4.0
+		return decimal.NewFromFloat(4.0)
 	case score == 9:
-		return 2.5
+		return decimal.NewFromFloat(2.5)
 	case score == 8:
-		return 1.5
+		return decimal.NewFromFloat(1.5)
 	default:
-		return 1.0 // safety fallback for non-checklist strategies
+		return decimal.NewFromInt(1) // safety fallback for non-checklist strategies
 	}
 }
 
 // pipSizeForSymbol returns price-per-pip for a forex/metal symbol.
 // JPY pairs: 0.01. XAUUSD: 0.1. Everything else: 0.0001.
-func pipSizeForSymbol(symbol string) float64 {
+func pipSizeForSymbol(symbol string) decimal.Decimal {
 	if len(symbol) >= 6 && (symbol[3:6] == "JPY") {
-		return 0.01
+		return decimal.NewFromFloat(0.01)
 	}
 	if symbol == "XAUUSD" {
-		return 0.1
+		return decimal.NewFromFloat(0.1)
 	}
-	return 0.0001
+	return decimal.NewFromFloat(0.0001)
 }
 
 // pipValuePerLotUSD returns the USD value of 1 pip on 1.00 standard lot for
 // a given symbol with USD-denominated account. This is approximate — exact
 // values depend on cross rates, but for the listed pairs the error is <2%.
-func pipValuePerLotUSD(symbol string) float64 {
+func pipValuePerLotUSD(symbol string) decimal.Decimal {
 	// USD quote currency: pip value = 10 USD per standard lot.
 	// JPY quote: pip = 0.01 → ~1000 JPY per lot ≈ varies by USDJPY rate.
 	// Approximations chosen to be conservative (slight under-sizing).
 	switch symbol {
 	case "EURUSD", "GBPUSD", "AUDUSD", "NZDUSD":
-		return 10.0
+		return decimal.NewFromInt(10)
 	case "USDJPY", "USDCAD", "USDCHF":
-		return 10.0 / 1.0 // approximate; live conversion would refine
+		return decimal.NewFromInt(10) // approximate; live conversion would refine
 	case "EURJPY", "GBPJPY", "AUDJPY", "CADJPY", "CHFJPY", "NZDJPY":
-		return 9.0
+		return decimal.NewFromInt(9)
 	case "EURGBP", "EURAUD", "EURCAD", "EURCHF", "GBPCHF", "GBPAUD", "AUDCHF":
-		return 10.0
+		return decimal.NewFromInt(10)
 	case "XAUUSD":
-		return 10.0 // gold: lot=100oz, pipSize=0.1 → $10 per pip per standard lot
+		return decimal.NewFromInt(10) // gold: lot=100oz, pipSize=0.1 → $10 per pip per standard lot
 	}
-	return 10.0
+	return decimal.NewFromInt(10)
 }
 
 // computeLots returns standard-lot size given entry, SL, and dollar risk budget.
 // formula: lots = riskUSD / (slPips * pipValuePerLot)
-func computeLots(symbol string, entry, sl, riskUSD float64) float64 {
-	risk := entry - sl
-	if risk < 0 {
-		risk = -risk
+func computeLots(symbol string, entry, sl, riskUSD decimal.Decimal) decimal.Decimal {
+	risk := entry.Sub(sl).Abs()
+	if risk.IsZero() {
+		return decimal.Zero
 	}
-	if risk == 0 {
-		return 0
-	}
-	slPips := risk / pipSizeForSymbol(symbol)
+	pipSize := pipSizeForSymbol(symbol)
 	pipVal := pipValuePerLotUSD(symbol)
-	if pipVal == 0 || slPips == 0 {
-		return 0
+	if pipSize.IsZero() || pipVal.IsZero() {
+		return decimal.Zero
 	}
-	lots := riskUSD / (slPips * pipVal)
-	// Round to broker minimum granularity (0.01).
-	rounded := float64(int(lots*100)) / 100
-	if rounded < 0.01 {
-		return 0.01
+	slPips := risk.Div(pipSize)
+	if slPips.IsZero() {
+		return decimal.Zero
+	}
+	// 4 decimal places of intermediate precision is plenty for lot math.
+	lots := riskUSD.Div(slPips.Mul(pipVal))
+	// Round down to broker minimum granularity (0.01).
+	rounded := lots.Truncate(2)
+	min := decimal.NewFromFloat(0.01)
+	if rounded.LessThan(min) {
+		return min
 	}
 	return rounded
 }
 
 // formatPrice renders a price with the right number of decimals per symbol.
-func formatPrice(symbol string, p float64) string {
+func formatPrice(symbol string, p decimal.Decimal) string {
 	if len(symbol) >= 6 && symbol[3:6] == "JPY" {
-		return fmt.Sprintf("%.3f", p)
+		return p.StringFixed(3)
 	}
 	if symbol == "XAUUSD" {
-		return fmt.Sprintf("%.2f", p)
+		return p.StringFixed(2)
 	}
-	return fmt.Sprintf("%.5f", p)
+	return p.StringFixed(5)
 }

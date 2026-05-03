@@ -1,16 +1,23 @@
 package rules
 
+import "github.com/shopspring/decimal"
+
 // Setup is the trade plan a strategy produces when its rule triggers on a
 // fresh candle. The signal_evaluator persists this into setup_signals so
 // the OpenClaw setup-watcher can push it to Telegram.
+//
+// Per CLAUDE.md: prices/pips/money are decimal.Decimal end-to-end. Builders
+// take in float64 candle data (the ingest path is still float64) and convert
+// at this boundary; downstream consumers (signal_repo, telegram_alerter) work
+// in decimal.
 type Setup struct {
-	Direction      string  // "LONG" or "SHORT"
-	Entry          float64 // intended entry price
-	StopLoss       float64
-	TakeProfit     float64
-	RR             float64 // |TP-Entry| / |Entry-SL|
-	Confidence     float64 // 0..1
-	Reason         string  // human-readable explanation, stored in setup_signals.details
+	Direction      string          // "LONG" or "SHORT"
+	Entry          decimal.Decimal // intended entry price
+	StopLoss       decimal.Decimal
+	TakeProfit     decimal.Decimal
+	RR             decimal.Decimal // |TP-Entry| / |Entry-SL|
+	Confidence     decimal.Decimal // 0..1
+	Reason         string          // human-readable explanation, stored in setup_signals.details
 	ChecklistScore int             // raw score out of 14 (checklist strategies only)
 	ChecklistItems map[string]bool // per-item pass/fail (checklist strategies only)
 }

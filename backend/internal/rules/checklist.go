@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/shopspring/decimal"
+
 	"set-and-trend/backend/internal/patterns"
 )
 
@@ -181,11 +183,11 @@ func buildSAFChecklistSetup(ctx EvalContext) (*Setup, error) {
 
 	return &Setup{
 		Direction:      direction,
-		Entry:          entry,
-		StopLoss:       sl,
-		TakeProfit:     tp,
-		RR:             rr,
-		Confidence:     float64(score) / 14.0,
+		Entry:          decimal.NewFromFloat(entry),
+		StopLoss:       decimal.NewFromFloat(sl),
+		TakeProfit:     decimal.NewFromFloat(tp),
+		RR:             decimal.NewFromFloat(rr),
+		Confidence:     decimal.NewFromFloat(float64(score) / 14.0),
 		Reason:         fmt.Sprintf("SAF checklist %d/14: %s", score, strings.Join(itemNames, ",")),
 		ChecklistScore: score,
 		ChecklistItems: items,
@@ -460,11 +462,11 @@ func buildConfluenceSetup(ctx EvalContext, candle Candle, direction, confluence 
 	}
 	return &Setup{
 		Direction:  direction,
-		Entry:      entry,
-		StopLoss:   sl,
-		TakeProfit: tp,
-		RR:         rr,
-		Confidence: 0.8,
+		Entry:      decimal.NewFromFloat(entry),
+		StopLoss:   decimal.NewFromFloat(sl),
+		TakeProfit: decimal.NewFromFloat(tp),
+		RR:         decimal.NewFromFloat(rr),
+		Confidence: decimal.NewFromFloat(0.8),
 		Reason:     fmt.Sprintf("Top-3 confluence: %s", confluence),
 	}, nil
 }

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/shopspring/decimal"
+
 	"set-and-trend/backend/internal/patterns"
 )
 
@@ -101,11 +103,11 @@ func buildH4SupplyDemandSetup(ctx EvalContext) (*Setup, error) {
 
 	return &Setup{
 		Direction:  "LONG",
-		Entry:      entry,
-		StopLoss:   sl,
-		TakeProfit: tp,
-		RR:         rr,
-		Confidence: demandHit.Confidence,
+		Entry:      decimal.NewFromFloat(entry),
+		StopLoss:   decimal.NewFromFloat(sl),
+		TakeProfit: decimal.NewFromFloat(tp),
+		RR:         decimal.NewFromFloat(rr),
+		Confidence: decimal.NewFromFloat(demandHit.Confidence),
 		Reason:     "Bullish rejection at active H4 demand zone",
 	}, nil
 }

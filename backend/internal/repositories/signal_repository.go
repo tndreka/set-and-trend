@@ -42,11 +42,11 @@ type CreateSignalParams struct {
 	Timeframe  string
 	CandleID   uuid.UUID
 	Direction  string
-	Entry      float64
-	StopLoss   float64
-	TakeProfit float64
-	RR         float64
-	Confidence float64
+	Entry      decimal.Decimal
+	StopLoss   decimal.Decimal
+	TakeProfit decimal.Decimal
+	RR         decimal.Decimal
+	Confidence decimal.Decimal
 	Details    json.RawMessage
 }
 
@@ -86,9 +86,7 @@ func (r *SignalRepository) CreateSignal(ctx context.Context, p CreateSignalParam
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		RETURNING `+signalColumns,
 		p.StrategyID, p.Symbol, p.Timeframe, p.CandleID, p.Direction,
-		decimal.NewFromFloat(p.Entry), decimal.NewFromFloat(p.StopLoss),
-		decimal.NewFromFloat(p.TakeProfit), decimal.NewFromFloat(p.RR),
-		decimal.NewFromFloat(p.Confidence), p.Details,
+		p.Entry, p.StopLoss, p.TakeProfit, p.RR, p.Confidence, p.Details,
 	)
 	return scanSignal(row)
 }

@@ -2,6 +2,8 @@ package rules
 
 import (
 	"fmt"
+
+	"github.com/shopspring/decimal"
 )
 
 func init() {
@@ -75,11 +77,11 @@ func buildH4LondonBreakoutSetup(ctx EvalContext) (*Setup, error) {
 		}
 		return &Setup{
 			Direction:  "LONG",
-			Entry:      entry,
-			StopLoss:   sl,
-			TakeProfit: tp,
-			RR:         computeRR("LONG", entry, sl, tp),
-			Confidence: 0.6,
+			Entry:      decimal.NewFromFloat(entry),
+			StopLoss:   decimal.NewFromFloat(sl),
+			TakeProfit: decimal.NewFromFloat(tp),
+			RR:         decimal.NewFromFloat(computeRR("LONG", entry, sl, tp)),
+			Confidence: decimal.NewFromFloat(0.6),
 			Reason:     "London open broke Asian range high",
 		}, nil
 	}
@@ -95,11 +97,11 @@ func buildH4LondonBreakoutSetup(ctx EvalContext) (*Setup, error) {
 		}
 		return &Setup{
 			Direction:  "SHORT",
-			Entry:      entry,
-			StopLoss:   sl,
-			TakeProfit: tp,
-			RR:         computeRR("SHORT", entry, sl, tp),
-			Confidence: 0.6,
+			Entry:      decimal.NewFromFloat(entry),
+			StopLoss:   decimal.NewFromFloat(sl),
+			TakeProfit: decimal.NewFromFloat(tp),
+			RR:         decimal.NewFromFloat(computeRR("SHORT", entry, sl, tp)),
+			Confidence: decimal.NewFromFloat(0.6),
 			Reason:     "London open broke Asian range low",
 		}, nil
 	}

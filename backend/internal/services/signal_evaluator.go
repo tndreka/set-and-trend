@@ -175,8 +175,8 @@ func (e *SignalEvaluator) evaluateStrategy(ctx context.Context, s *repositories.
 	log.Info().
 		Str("strategy", s.Code).
 		Str("direction", setup.Direction).
-		Float64("entry", setup.Entry).
-		Float64("rr", setup.RR).
+		Str("entry", setup.Entry.String()).
+		Str("rr", setup.RR.String()).
 		Msg("signal created")
 
 	// Push to Telegram. Nil-safe; failures don't block.
