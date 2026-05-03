@@ -25,6 +25,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -46,7 +47,7 @@ const (
 	tdInterval   = "4h"
 	tdEndpoint   = "https://api.twelvedata.com/time_series"
 	httpTimeout  = 15 * time.Second
-	betweenCalls = 200 * time.Millisecond // stay well under 8/min rate limit
+	betweenCalls = 8 * time.Second // TwelveData free tier caps at 8 req/min → 7.5s minimum; 8s gives headroom
 )
 
 // dbToTD maps internal DB symbols to TwelveData ticker format. Most are just
@@ -231,6 +232,11 @@ func fetchAndUpsert(ctx context.Context, client *http.Client, pool *pgxpool.Pool
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return 0, fmt.Errorf("td http %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+
 	var td tdResponse
 	if err := json.NewDecoder(resp.Body).Decode(&td); err != nil {
 		return 0, fmt.Errorf("decode: %w", err)
@@ -248,11 +254,23 @@ func fetchAndUpsert(ctx context.Context, client *http.Client, pool *pgxpool.Pool
 			continue
 		}
 		ts = ts.UTC()
-		open, _ := strconv.ParseFloat(v.Open, 64)
-		high, _ := strconv.ParseFloat(v.High, 64)
-		low, _ := strconv.ParseFloat(v.Low, 64)
-		close_, _ := strconv.ParseFloat(v.Close, 64)
-		vol, _ := strconv.ParseFloat(v.Volume, 64)
+		open, errO := strconv.ParseFloat(v.Open, 64)
+		high, errH := strconv.ParseFloat(v.High, 64)
+		low, errL := strconv.ParseFloat(v.Low, 64)
+		close_, errC := strconv.ParseFloat(v.Close, 64)
+		if errO != nil || errH != nil || errL != nil || errC != nil {
+			return count, fmt.Errorf("td unparseable OHLC for %s @ %s: o=%q h=%q l=%q c=%q",
+				symbol, ts, v.Open, v.High, v.Low, v.Close)
+		}
+		var vol float64
+		if v.Volume != "" {
+			parsed, errV := strconv.ParseFloat(v.Volume, 64)
+			if errV != nil {
+				log.Warn().Err(errV).Str("symbol", symbol).Str("vol", v.Volume).Msg("bad volume; treating as 0")
+			} else {
+				vol = parsed
+			}
+		}
 
 		if hasBand {
 			for _, price := range [4]float64{open, high, low, close_} {
