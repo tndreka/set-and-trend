@@ -142,6 +142,9 @@ func buildSAFChecklistSetup(ctx EvalContext) (*Setup, error) {
 	}
 
 	// Filter #5: require at least one top-pair for SAF>=8 setups.
+	// Note: with the default MinChecklistScore=9 the score>=8 condition is
+	// always true here (line 140 already rejected lower scores). It only
+	// becomes a distinct gate when SAF_MIN_SCORE is lowered to 7 or below.
 	if RequireTopPair && score >= 8 && !hasTopPair(items) {
 		return nil, nil
 	}

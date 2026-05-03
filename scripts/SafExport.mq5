@@ -32,7 +32,7 @@ input bool    InpDottedTickers = true;  // broker uses XXX.YYY format? (MetaQuot
 input string  InpBrokerSuffix  = "";    // additional suffix (e.g. ".m", "-Pro") applied AFTER dot-injection
 input bool    InpVerbose       = true;
 
-int     g_lastH4Ticket = -1;       // lastH4StartUnix posted (avoids double-post)
+datetime g_lastH4Ticket = 0;       // lastH4StartUnix posted (avoids double-post)
 string  g_symbols[];               // parsed symbol list (DB form)
 string  g_brokerMap[];             // parallel — broker ticker per db symbol ("" = unresolvable)
 bool    g_warmupPending = true;    // first OnTimer tick runs warm-up (kept out of OnInit so MT5 stays responsive)
@@ -193,7 +193,7 @@ void OnTimer()
    datetime lastClosedH4Close = h4Start;            // close == start of the next bar
 
    // Only post once per closed H4 bar, after the grace window.
-   if((int)lastClosedH4Start == g_lastH4Ticket)
+   if(lastClosedH4Start == g_lastH4Ticket)
       return;
    if(now < lastClosedH4Close + InpGraceSec)
       return;
@@ -215,7 +215,7 @@ void OnTimer()
          posted++;
    }
    PrintFormat("Cycle done: %d/%d symbols posted", posted, ArraySize(g_symbols));
-   g_lastH4Ticket = (int)lastClosedH4Start;
+   g_lastH4Ticket = lastClosedH4Start;
 }
 
 //+------------------------------------------------------------------+
